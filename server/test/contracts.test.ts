@@ -12,6 +12,8 @@ import {
   EvalRun,
   MemoryItem,
   RunTrace,
+  RunSummary,
+  PrMeta,
   Settings,
   Repo,
   PrDetail,
@@ -157,7 +159,7 @@ describe('AI contracts parse fixtures', () => {
   it('RunTrace (data2.jsx TRACE single-document)', () => {
     const trace = RunTrace.parse({
       config: { agent: 'Security Reviewer', version: 'v7', model: 'gpt-4.1', pr: 482, source: 'local' },
-      stats: { duration_ms: 8200, tokens_in: 14820, tokens_out: 1240, findings: 3, grounding: '3/3 passed' },
+      stats: { duration_ms: 8200, tokens_in: 14820, tokens_out: 1240, findings: 3, grounding: '3/3 passed', cost_usd: 0.06 },
       prompt_assembly: { system: 's', user: 'u' },
       tool_calls: [{ tool: 'read_file', args: "'src/config.ts'", meta: '1,240 bytes', ms: 120 }],
       raw_output: '{}',
@@ -166,6 +168,51 @@ describe('AI contracts parse fixtures', () => {
       log: [{ t: '00.00', kind: 'info', msg: 'started' }],
     });
     expect(trace.tool_calls).toHaveLength(1);
+    expect(trace.stats.cost_usd).toBe(0.06);
+  });
+
+  it('RunSummary carries the per-run cost (null on failed/cancelled)', () => {
+    const done = RunSummary.parse({
+      run_id: 'r1',
+      agent_id: 'a1',
+      agent_name: 'Security Reviewer',
+      provider: 'openrouter',
+      model: 'deepseek/deepseek-v4-flash',
+      status: 'done',
+      error: null,
+      duration_ms: 8200,
+      tokens_in: 9119,
+      tokens_out: 612,
+      findings_count: 2,
+      grounding: '2/2 passed',
+      ran_at: '2026-06-13T18:52:51.000Z',
+      score: 61,
+      blockers: 1,
+      cost_usd: 0.0013,
+    });
+    expect(done.cost_usd).toBe(0.0013);
+    const failed = RunSummary.parse({ ...done, status: 'failed', cost_usd: null });
+    expect(failed.cost_usd).toBeNull();
+  });
+
+  it('PrMeta carries the aggregate run cost (list endpoint)', () => {
+    const pr = PrMeta.parse({
+      number: 482,
+      title: 'Add rate limiting to public API endpoints',
+      author: 'marisa.koch',
+      branch: 'feat/rate-limit-public',
+      base: 'main',
+      head_sha: 'a1b2c3',
+      additions: 247,
+      deletions: 38,
+      files_count: 9,
+      status: 'needs_review',
+      score: 61,
+      cost_usd: 0.014,
+    });
+    expect(pr.cost_usd).toBe(0.014);
+    // null/absent until the PR has a run
+    expect(PrMeta.parse({ ...pr, cost_usd: null }).cost_usd).toBeNull();
   });
 });
 

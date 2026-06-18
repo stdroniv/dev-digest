@@ -220,6 +220,71 @@ export async function seed(db: Db): Promise<{ workspaceId: string; userId: strin
     if (!existing) await db.insert(t.agents).values(a);
   }
 
+  // ---- one completed agent run for PR #482 ----
+  // Gives the Agent runs timeline a settled run, the PR list a non-null COST
+  // aggregate, and the trace sidebar a COST stat — all on deterministic data
+  // (fixed tokens + $0.0123) so the demo and e2e flows have something to assert.
+  const [securityAgent] = await db
+    .select()
+    .from(t.agents)
+    .where(and(eq(t.agents.workspaceId, workspaceId), eq(t.agents.name, 'Security Reviewer')));
+  const [existingRun] = await db
+    .select({ id: t.agentRuns.id })
+    .from(t.agentRuns)
+    .where(eq(t.agentRuns.prId, pr!.id));
+  if (securityAgent && !existingRun) {
+    const tokensIn = 9119;
+    const tokensOut = 612;
+    const costUsd = 0.0123;
+    const [run] = await db
+      .insert(t.agentRuns)
+      .values({
+        workspaceId,
+        agentId: securityAgent.id,
+        prId: pr!.id,
+        provider: DEFAULT_PROVIDER,
+        model: DEFAULT_MODEL,
+        durationMs: 8200,
+        tokensIn,
+        tokensOut,
+        status: 'done',
+        source: 'local',
+        findingsCount: 2,
+        grounding: '2/2 passed',
+        score: 61,
+        blockers: 1,
+        costUsd,
+      })
+      .returning();
+    await db.insert(t.runTraces).values({
+      runId: run!.id,
+      trace: {
+        config: {
+          agent: 'Security Reviewer',
+          version: '1',
+          provider: DEFAULT_PROVIDER,
+          model: DEFAULT_MODEL,
+          pr: 482,
+          source: 'local',
+        },
+        stats: {
+          duration_ms: 8200,
+          tokens_in: tokensIn,
+          tokens_out: tokensOut,
+          findings: 2,
+          grounding: '2/2 passed',
+          cost_usd: costUsd,
+        },
+        prompt_assembly: { system: SECURITY_REVIEWER_PROMPT, user: 'Review PR #482' },
+        tool_calls: [],
+        raw_output: '',
+        memory_pulled: [],
+        specs_read: [],
+        log: [],
+      },
+    });
+  }
+
   return { workspaceId, userId };
 }
 

@@ -1,0 +1,4 @@
+# pnpm 11 auto-creates this to gate blocked build scripts (esbuild, sharp, …).
+# Those native builds are not needed for local dev, so skip the strict pre-run
+# deps check that otherwise aborts `pnpm <script>` (ERR_PNPM_IGNORED_BUILDS).
+verifyDepsBeforeRun: false

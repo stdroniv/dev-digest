@@ -159,7 +159,7 @@ d('A2 reviews + agents (Testcontainers pg)', () => {
 
   it('runs a review: map-reduce + grounding drops the hallucinated finding, keeps the valid one', async () => {
     const app = await appWith(REVIEW_FIXTURE);
-    const { pr } = await setupRepoAndPr(pg.handle.db, workspaceId);
+    const { repo, pr } = await setupRepoAndPr(pg.handle.db, workspaceId);
 
     const agent = (
       await app.inject({
@@ -208,6 +208,20 @@ d('A2 reviews + agents (Testcontainers pg)', () => {
     expect(run!.status).toBe('done');
     expect(run!.findingsCount).toBe(1);
     expect(run!.grounding).toBe('1/2 passed');
+    // Cost is persisted from the reviewer outcome (MockLLM reports $0.001/call).
+    expect(run!.costUsd).toBeCloseTo(0.001, 9);
+
+    // …surfaced on the trace document (sidebar COST stat)…
+    expect(trace.stats.cost_usd).toBeCloseTo(0.001, 9);
+
+    // …on the run history (timeline cost line)…
+    const runs = (await app.inject({ method: 'GET', url: `/pulls/${pr.id}/runs` })).json();
+    expect(runs[0].cost_usd).toBeCloseTo(0.001, 9);
+
+    // …and aggregated onto the PR list COST column (sum across the PR's runs).
+    const pulls = (await app.inject({ method: 'GET', url: `/repos/${repo.id}/pulls` })).json();
+    const listed = pulls.find((p: { id: string }) => p.id === pr.id);
+    expect(listed.cost_usd).toBeCloseTo(0.001, 9);
 
     await app.close();
   });

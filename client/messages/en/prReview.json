@@ -1,4 +1,11 @@
 {
+  "findings": {
+    "countsLabel": "{critical} critical, {warning} warning, {suggestion} suggestion",
+    "summaryCount": "{count} findings",
+    "summaryCountInRun": "{count} findings in this run",
+    "loading": "Loading findings…",
+    "more": "+{count} more"
+  },
   "finding": {
     "accepted": "accepted",
     "dismissed": "dismissed",
@@ -91,6 +98,7 @@
       "author": "Author",
       "size": "Size",
       "score": "Score",
+      "findings": "Findings",
       "status": "Status",
       "cost": "Cost",
       "updated": "Updated"

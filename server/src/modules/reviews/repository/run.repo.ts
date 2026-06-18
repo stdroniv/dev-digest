@@ -1,7 +1,8 @@
-import { and, desc, eq } from 'drizzle-orm';
+import { and, desc, eq, inArray } from 'drizzle-orm';
 import type { Db } from '../../../db/client.js';
 import * as t from '../../../db/schema.js';
-import type { RunSummary, RunTrace } from '@devdigest/shared';
+import type { RunSummary, RunTrace, SeverityCounts } from '@devdigest/shared';
+import { groupSeverities } from '../../pulls/status.js';
 
 // ---- in-flight / history --------------------------------------------------
 
@@ -48,6 +49,25 @@ export async function listRunsForPull(
     .leftJoin(t.agents, eq(t.agents.id, t.agentRuns.agentId))
     .where(and(eq(t.agentRuns.workspaceId, workspaceId), eq(t.agentRuns.prId, prId)))
     .orderBy(desc(t.agentRuns.ranAt));
+
+  // Per-run severity breakdown for the timeline's FINDINGS counters. Computed on
+  // read by joining findings → reviews (reviews.run_id links a run to its review;
+  // agent_runs carries only a total findings_count, not a severity split).
+  const runIds = rows.map((r) => r.run.id);
+  let countsByRun = new Map<string, SeverityCounts>();
+  if (runIds.length > 0) {
+    const findingRows = await db
+      .select({ runId: t.reviews.runId, severity: t.findings.severity })
+      .from(t.findings)
+      .innerJoin(t.reviews, eq(t.findings.reviewId, t.reviews.id))
+      .where(inArray(t.reviews.runId, runIds));
+    countsByRun = groupSeverities(
+      findingRows
+        .filter((f) => f.runId != null)
+        .map((f) => ({ key: f.runId as string, severity: f.severity })),
+    );
+  }
+
   return rows.map(({ run, agentName }) => ({
     run_id: run.id,
     agent_id: run.agentId,
@@ -65,6 +85,7 @@ export async function listRunsForPull(
     score: run.score,
     blockers: run.blockers,
     cost_usd: run.costUsd,
+    findings_counts: countsByRun.get(run.id) ?? null,
   }));
 }
 

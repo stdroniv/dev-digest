@@ -6,7 +6,12 @@
  * + age, so it gets unit coverage independent of the route's queries.
  */
 import { describe, it, expect } from 'vitest';
-import { deriveReviewStatus, rollupSeverities, STALE_DAYS } from '../src/modules/pulls/status.js';
+import {
+  deriveReviewStatus,
+  groupSeverities,
+  rollupSeverities,
+  STALE_DAYS,
+} from '../src/modules/pulls/status.js';
 
 const DAY = 86_400_000;
 const now = Date.UTC(2026, 5, 11);
@@ -64,5 +69,25 @@ describe('rollupSeverities', () => {
 
   it('is all-zero for no findings', () => {
     expect(rollupSeverities([])).toEqual({ critical: 0, warning: 0, suggestion: 0 });
+  });
+});
+
+describe('groupSeverities', () => {
+  it('groups rows by key and tallies each group independently (ignores unknown severities)', () => {
+    const out = groupSeverities([
+      { key: 'pr1', severity: 'CRITICAL' },
+      { key: 'pr1', severity: 'WARNING' },
+      { key: 'pr1', severity: 'WEIRD' },
+      { key: 'pr2', severity: 'SUGGESTION' },
+      { key: 'pr2', severity: 'CRITICAL' },
+    ]);
+    expect(out.get('pr1')).toEqual({ critical: 1, warning: 1, suggestion: 0 });
+    expect(out.get('pr2')).toEqual({ critical: 1, warning: 0, suggestion: 1 });
+    // Only keys that actually had findings appear in the map.
+    expect(out.size).toBe(2);
+  });
+
+  it('returns an empty map for no rows', () => {
+    expect(groupSeverities([]).size).toBe(0);
   });
 });

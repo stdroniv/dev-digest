@@ -11,6 +11,19 @@ import { z } from 'zod';
 export const Severity = z.enum(['CRITICAL', 'WARNING', 'SUGGESTION']);
 export type Severity = z.infer<typeof Severity>;
 
+/**
+ * Per-severity tally of findings, surfaced as compact counters on the PR list
+ * (aggregated across a PR's reviewer agents) and on each Agent-runs row. Counts
+ * ALL grounded findings (dismissed included), so the totals stay consistent with
+ * a run's `findings_count` / `blockers`.
+ */
+export const SeverityCounts = z.object({
+  critical: z.number().int(),
+  warning: z.number().int(),
+  suggestion: z.number().int(),
+});
+export type SeverityCounts = z.infer<typeof SeverityCounts>;
+
 export const FindingCategory = z.enum(['bug', 'security', 'perf', 'style', 'test']);
 export type FindingCategory = z.infer<typeof FindingCategory>;
 

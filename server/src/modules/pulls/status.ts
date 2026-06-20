@@ -31,6 +31,29 @@ export function rollupSeverities(rows: { severity: string }[]): SeverityCounts {
 }
 
 /**
+ * Group finding rows by a key (a PR id for the list, a run id for the timeline),
+ * then `rollupSeverities` per group. Drives the FINDINGS counters on both the PR
+ * list and the Agent-runs rows — computed on read (no denorm), so it stays a
+ * pure, unit-testable transform over an already-fetched flat row set.
+ */
+export function groupSeverities(
+  rows: { key: string; severity: string }[],
+): Map<string, SeverityCounts> {
+  const byKey = new Map<string, SeverityCounts>();
+  for (const { key, severity } of rows) {
+    let c = byKey.get(key);
+    if (!c) {
+      c = { critical: 0, warning: 0, suggestion: 0 };
+      byKey.set(key, c);
+    }
+    if (severity === 'CRITICAL') c.critical += 1;
+    else if (severity === 'WARNING') c.warning += 1;
+    else if (severity === 'SUGGESTION') c.suggestion += 1;
+  }
+  return byKey;
+}
+
+/**
  * Review-freshness status for the PR list. Merged/closed PRs keep their GitHub
  * merge state; open PRs map to:
  *  - `needs_review` — never reviewed, OR head moved since the last review

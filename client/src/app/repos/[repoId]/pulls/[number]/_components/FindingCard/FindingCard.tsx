@@ -20,7 +20,7 @@ import {
 import type { FindingRecord, FindingActionKind } from "@devdigest/shared";
 import { SEV_COLOR, SEV_COLOR_FALLBACK } from "./constants";
 import { lineLabel } from "./helpers";
-import { githubBlobUrl } from "../../../../../../../lib/github-urls";
+import { githubPrFileUrl } from "../../../../../../../lib/github-urls";
 import { s } from "./styles";
 
 export function FindingCard({
@@ -30,7 +30,8 @@ export function FindingCard({
   onAction,
   pending,
   repoFullName,
-  headSha,
+  prNumber,
+  pathSha,
 }: {
   f: FindingRecord;
   focused?: boolean;
@@ -38,14 +39,16 @@ export function FindingCard({
   onAction?: (action: FindingActionKind, reply?: string) => void;
   pending?: boolean;
   repoFullName?: string | null;
-  headSha?: string | null;
+  prNumber?: number | null;
+  /** SHA-256 of `f.file` for the PR-files diff anchor; absent → bare /files link. */
+  pathSha?: string;
 }) {
   const t = useTranslations("prReview");
   const [expanded, setExpanded] = React.useState(defaultExpanded ?? false);
   const sevColor = SEV_COLOR[f.severity] ?? SEV_COLOR_FALLBACK;
   const fileHref =
-    repoFullName && headSha
-      ? githubBlobUrl(repoFullName, headSha, f.file, f.start_line, f.end_line)
+    repoFullName && prNumber != null
+      ? githubPrFileUrl(repoFullName, prNumber, f.file, f.start_line, f.end_line, pathSha)
       : undefined;
   const accepted = !!f.accepted_at;
   const dismissed = !!f.dismissed_at;

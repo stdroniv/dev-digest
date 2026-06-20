@@ -3,7 +3,8 @@
 import React from "react";
 import { useTranslations } from "next-intl";
 import { Badge, Icon, CircularScore, type IconName } from "@devdigest/ui";
-import type { RunSummary, PrCommit } from "@devdigest/shared";
+import type { RunSummary, PrCommit, FindingRecord } from "@devdigest/shared";
+import { FindingsCounts, FindingsHoverCard } from "@/components/FindingsCounts";
 import { formatUsd } from "@/lib/cost";
 
 /**
@@ -88,12 +89,16 @@ function tsOf(s: string | null | undefined): number {
 export function RunHistory({
   runs,
   commits = [],
+  findingsByRun,
   onOpenTrace,
   onGoToReview,
   onDelete,
 }: {
   runs: RunSummary[];
   commits?: PrCommit[];
+  /** This run's findings (by run_id) for the timeline's hover popover. The page
+   *  already has them from `usePrReviews`, so they're passed in (not refetched). */
+  findingsByRun?: Map<string, FindingRecord[]>;
   /** Open the trace + log drawer for a run (the logs icon). */
   onOpenTrace: (runId: string) => void;
   /** Jump to this run's inline review accordion below (clicking the agent name). */
@@ -190,9 +195,31 @@ export function RunHistory({
                 </div>
               )}
               {settled && (
-                <div style={{ fontSize: 12, color: "var(--text-muted)" }}>
-                  {t("runStatus.findings", { count: r.findings_count ?? 0 })}
-                  {(r.blockers ?? 0) > 0 ? t("runStatus.blockers", { count: r.blockers ?? 0 }) : ""}
+                <div
+                  style={{
+                    display: "flex",
+                    alignItems: "center",
+                    gap: 8,
+                    fontSize: 12,
+                    color: "var(--text-muted)",
+                  }}
+                >
+                  <FindingsHoverCard
+                    total={
+                      r.findings_counts
+                        ? r.findings_counts.critical +
+                          r.findings_counts.warning +
+                          r.findings_counts.suggestion
+                        : 0
+                    }
+                    findings={findingsByRun?.get(r.run_id) ?? []}
+                    headerLabel={t("findings.summaryCountInRun", {
+                      count: r.findings_count ?? 0,
+                    })}
+                  >
+                    <FindingsCounts counts={r.findings_counts} />
+                  </FindingsHoverCard>
+                  {(r.blockers ?? 0) > 0 ? <span>{t("runStatus.blockers", { count: r.blockers ?? 0 })}</span> : null}
                 </div>
               )}
             </div>

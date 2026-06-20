@@ -1,4 +1,11 @@
 {
+  "findings": {
+    "countsLabel": "{critical} critical, {warning} warning, {suggestion} suggestion",
+    "summaryCount": "{count} findings",
+    "summaryCountInRun": "{count} findings in this run",
+    "loading": "Loading findings…",
+    "more": "+{count} more"
+  },
   "finding": {
     "accepted": "accepted",
     "dismissed": "dismissed",
@@ -29,7 +36,9 @@
   "panel": {
     "hideLowConfidence": "Hide low confidence",
     "noMatchTitle": "No findings match",
-    "noMatchBody": "Adjust the filters above, or run a review to generate findings."
+    "noMatchBody": "Adjust the filters above, or run a review to generate findings.",
+    "severityFilterGroupLabel": "Filter findings by severity",
+    "filterSeverity": "Show only {severity} ({count})"
   },
   "runReview": {
     "runAll": "Run all enabled agents",
@@ -91,6 +100,7 @@
       "author": "Author",
       "size": "Size",
       "score": "Score",
+      "findings": "Findings",
       "status": "Status",
       "cost": "Cost",
       "updated": "Updated"

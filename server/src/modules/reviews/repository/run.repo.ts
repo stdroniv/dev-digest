@@ -1,7 +1,8 @@
-import { and, desc, eq } from 'drizzle-orm';
+import { and, desc, eq, inArray } from 'drizzle-orm';
 import type { Db } from '../../../db/client.js';
 import * as t from '../../../db/schema.js';
-import type { RunSummary, RunTrace } from '@devdigest/shared';
+import type { RunSummary, RunTrace, SeverityCounts } from '@devdigest/shared';
+import { groupSeverities } from '../../pulls/status.js';
 
 // ---- in-flight / history --------------------------------------------------
 
@@ -48,24 +49,51 @@ export async function listRunsForPull(
     .leftJoin(t.agents, eq(t.agents.id, t.agentRuns.agentId))
     .where(and(eq(t.agentRuns.workspaceId, workspaceId), eq(t.agentRuns.prId, prId)))
     .orderBy(desc(t.agentRuns.ranAt));
-  return rows.map(({ run, agentName }) => ({
-    run_id: run.id,
-    agent_id: run.agentId,
-    agent_name: agentName ?? null,
-    provider: run.provider,
-    model: run.model,
-    status: run.status,
-    error: run.error,
-    duration_ms: run.durationMs,
-    tokens_in: run.tokensIn,
-    tokens_out: run.tokensOut,
-    findings_count: run.findingsCount,
-    grounding: run.grounding,
-    ran_at: run.ranAt ? run.ranAt.toISOString() : null,
-    score: run.score,
-    blockers: run.blockers,
-    cost_usd: run.costUsd,
-  }));
+
+  // Per-run severity breakdown for the timeline's FINDINGS counters. Computed on
+  // read by joining findings → reviews (reviews.run_id links a run to its review;
+  // agent_runs carries only a total findings_count, not a severity split).
+  const runIds = rows.map((r) => r.run.id);
+  let countsByRun = new Map<string, SeverityCounts>();
+  if (runIds.length > 0) {
+    const findingRows = await db
+      .select({ runId: t.reviews.runId, severity: t.findings.severity })
+      .from(t.findings)
+      .innerJoin(t.reviews, eq(t.findings.reviewId, t.reviews.id))
+      .where(inArray(t.reviews.runId, runIds));
+    countsByRun = groupSeverities(
+      findingRows
+        .filter((f) => f.runId != null)
+        .map((f) => ({ key: f.runId as string, severity: f.severity })),
+    );
+  }
+
+  return rows.map(({ run, agentName }) => {
+    // Prefer the fresh per-severity counts (joined from `findings` above) over the
+    // denormalized `agent_runs.findings_count`/`blockers` columns, which can be stale/0 and
+    // would otherwise make the Timeline row read "0 finding(s)" + a green "approved" badge
+    // while the Review Runs accordion (reading `review.findings`) shows the real findings.
+    const c = countsByRun.get(run.id);
+    return {
+      run_id: run.id,
+      agent_id: run.agentId,
+      agent_name: agentName ?? null,
+      provider: run.provider,
+      model: run.model,
+      status: run.status,
+      error: run.error,
+      duration_ms: run.durationMs,
+      tokens_in: run.tokensIn,
+      tokens_out: run.tokensOut,
+      findings_count: c ? c.critical + c.warning + c.suggestion : run.findingsCount,
+      grounding: run.grounding,
+      ran_at: run.ranAt ? run.ranAt.toISOString() : null,
+      score: run.score,
+      blockers: c ? c.critical : run.blockers,
+      cost_usd: run.costUsd,
+      findings_counts: c ?? null,
+    };
+  });
 }
 
 /**

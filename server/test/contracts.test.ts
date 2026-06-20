@@ -189,10 +189,13 @@ describe('AI contracts parse fixtures', () => {
       score: 61,
       blockers: 1,
       cost_usd: 0.0013,
+      findings_counts: { critical: 1, warning: 1, suggestion: 0 },
     });
     expect(done.cost_usd).toBe(0.0013);
-    const failed = RunSummary.parse({ ...done, status: 'failed', cost_usd: null });
+    expect(done.findings_counts).toEqual({ critical: 1, warning: 1, suggestion: 0 });
+    const failed = RunSummary.parse({ ...done, status: 'failed', cost_usd: null, findings_counts: null });
     expect(failed.cost_usd).toBeNull();
+    expect(failed.findings_counts).toBeNull();
   });
 
   it('PrMeta carries the aggregate run cost (list endpoint)', () => {

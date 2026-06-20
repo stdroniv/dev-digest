@@ -232,6 +232,7 @@ export async function seed(db: Db): Promise<{ workspaceId: string; userId: strin
     .select({ id: t.agentRuns.id })
     .from(t.agentRuns)
     .where(eq(t.agentRuns.prId, pr!.id));
+  let seededRunId: string | undefined = existingRun?.id;
   if (securityAgent && !existingRun) {
     const tokensIn = 9119;
     const tokensOut = 612;
@@ -256,6 +257,7 @@ export async function seed(db: Db): Promise<{ workspaceId: string; userId: strin
         costUsd,
       })
       .returning();
+    seededRunId = run!.id;
     await db.insert(t.runTraces).values({
       runId: run!.id,
       trace: {
@@ -283,6 +285,19 @@ export async function seed(db: Db): Promise<{ workspaceId: string; userId: strin
         log: [],
       },
     });
+  }
+
+  // Link the sample review to the seeded run + agent. Real runs set
+  // `reviews.run_id` in the executor; the demo review is created standalone, so
+  // without this the timeline run can't attribute its findings — per-run
+  // `findings_counts` (the severity counters + hover popover) come back null and
+  // the review run shows a generic "Agent". Outside the `!existingRun` guard so
+  // re-running `pnpm db:seed` repairs an already-seeded DB.
+  if (securityAgent && seededRunId) {
+    await db
+      .update(t.reviews)
+      .set({ runId: seededRunId, agentId: securityAgent.id })
+      .where(and(eq(t.reviews.prId, pr!.id), eq(t.reviews.kind, 'review')));
   }
 
   return { workspaceId, userId };

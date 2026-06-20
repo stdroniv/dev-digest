@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { SeverityCounts } from './findings.js';
 
 /**
  * Run trace. The ENTIRE trace of one run is persisted as a SINGLE
@@ -114,5 +115,8 @@ export const RunSummary = z.object({
   blockers: z.number().int().nullable(),
   // Dollar cost of the run; null on failed/cancelled runs.
   cost_usd: z.number().nullable(),
+  // Per-severity tally of this run's findings (computed on read from the run's
+  // review). null when the run produced no review (running/failed/cancelled).
+  findings_counts: SeverityCounts.nullable(),
 });
 export type RunSummary = z.infer<typeof RunSummary>;

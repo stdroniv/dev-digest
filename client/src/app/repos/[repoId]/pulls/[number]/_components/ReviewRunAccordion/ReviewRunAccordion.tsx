@@ -28,7 +28,8 @@ export function ReviewRunAccordion({
   prId,
   defaultOpen = false,
   repoFullName,
-  headSha,
+  prNumber,
+  focusFindingId = null,
   targetRunId = null,
   targetNonce = 0,
 }: {
@@ -36,7 +37,10 @@ export function ReviewRunAccordion({
   prId: string;
   defaultOpen?: boolean;
   repoFullName?: string | null;
-  headSha?: string | null;
+  prNumber?: number | null;
+  /** From a `#finding-<id>` deep link: if this run owns that finding, open + scroll here
+   *  so its card (inside FindingsPanel) can be focused. */
+  focusFindingId?: string | null;
   /** When this matches review.run_id, the accordion opens and scrolls into view
    *  (driven from the Timeline: clicking an agent name navigates here). */
   targetRunId?: string | null;
@@ -51,6 +55,11 @@ export function ReviewRunAccordion({
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [targetRunId, targetNonce, review.run_id]);
+  // Open the run that owns a deep-linked finding so FindingsPanel can scroll to its card.
+  const ownsFocus = !!focusFindingId && review.findings.some((f) => f.id === focusFindingId);
+  React.useEffect(() => {
+    if (ownsFocus) setOpen(true);
+  }, [ownsFocus]);
   const del = useDeleteReview(prId);
   const findings = review.findings;
   const blockers = findings.filter((f) => f.severity === "CRITICAL" && !f.dismissed_at).length;
@@ -151,7 +160,8 @@ export function ReviewRunAccordion({
             findings={findings}
             prId={prId}
             repoFullName={repoFullName}
-            headSha={headSha}
+            prNumber={prNumber}
+            focusFindingId={ownsFocus ? focusFindingId : null}
           />
         </div>
       )}

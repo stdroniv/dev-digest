@@ -6,6 +6,7 @@ import React from "react";
 import { describe, it, expect, afterEach, vi } from "vitest";
 import { render, screen, cleanup } from "@testing-library/react";
 import { NextIntlClientProvider } from "next-intl";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import type { PrMeta } from "@/lib/types";
 import messages from "../../../../../../../messages/en/prReview.json";
 import { PRRow } from "./PRRow";
@@ -33,15 +34,21 @@ function pr(o: Partial<PrMeta>): PrMeta {
     updated_at: "2026-06-18T09:00:00.000Z",
     score: 61,
     cost_usd: null,
+    // Non-empty by default so the findings cell renders counters (not a dash) —
+    // keeps the single "—" the cost tests assert unambiguous.
+    findings_counts: { critical: 2, warning: 2, suggestion: 1 },
     ...o,
   };
 }
 
 function renderRow(meta: PrMeta) {
+  const qc = new QueryClient();
   return render(
-    <NextIntlClientProvider locale="en" messages={{ prReview: messages }}>
-      <PRRow pr={meta} repoId="repo-1" />
-    </NextIntlClientProvider>,
+    <QueryClientProvider client={qc}>
+      <NextIntlClientProvider locale="en" messages={{ prReview: messages }}>
+        <PRRow pr={meta} repoId="repo-1" />
+      </NextIntlClientProvider>
+    </QueryClientProvider>,
   );
 }
 
@@ -53,6 +60,19 @@ describe("PRRow — cost cell", () => {
 
   it("renders an em dash when the PR has no runs (cost null)", () => {
     renderRow(pr({ cost_usd: null }));
+    expect(screen.getByText("—")).toBeInTheDocument();
+  });
+});
+
+describe("PRRow — findings cell", () => {
+  it("renders the per-severity counters when the PR has findings", () => {
+    renderRow(pr({ findings_counts: { critical: 2, warning: 2, suggestion: 1 } }));
+    expect(screen.getByLabelText("2 critical, 2 warning, 1 suggestion")).toBeInTheDocument();
+  });
+
+  it("renders an em dash when the PR has no findings_counts (never reviewed)", () => {
+    // cost present (non-dash) so the only "—" on the row is the findings cell.
+    renderRow(pr({ findings_counts: null, cost_usd: 0.01 }));
     expect(screen.getByText("—")).toBeInTheDocument();
   });
 });

@@ -49,6 +49,25 @@ describe("FindingCard (smoke, both themes)", () => {
     });
   });
 
+  it("links file:line to the PR Files view (not a blob URL) when repo + PR number are given", () => {
+    renderWithIntl(
+      <FindingCard f={FINDING} defaultExpanded repoFullName="acme/payments-api" prNumber={482} pathSha="abc" />,
+    );
+    const link = screen.getByText("src/config.ts:11").closest("a");
+    expect(link).toHaveAttribute("href", "https://github.com/acme/payments-api/pull/482/files#diff-abcR11");
+    expect(link?.getAttribute("href")).not.toContain("/blob/");
+  });
+
+  it("falls back to the bare /files URL before the path sha resolves", () => {
+    renderWithIntl(
+      <FindingCard f={FINDING} defaultExpanded repoFullName="acme/payments-api" prNumber={482} />,
+    );
+    expect(screen.getByText("src/config.ts:11").closest("a")).toHaveAttribute(
+      "href",
+      "https://github.com/acme/payments-api/pull/482/files",
+    );
+  });
+
   it("fires accept/dismiss actions", () => {
     const onAction = vi.fn();
     renderWithIntl(<FindingCard f={FINDING} defaultExpanded onAction={onAction} />);

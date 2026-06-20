@@ -5,11 +5,12 @@
 import React from "react";
 import { useTranslations } from "next-intl";
 import { Toggle, EmptyState } from "@devdigest/ui";
-import type { FindingRecord } from "@devdigest/shared";
+import type { FindingRecord, Severity } from "@devdigest/shared";
 import { FindingCard } from "../FindingCard";
 import { useFindingAction } from "../../../../../../../lib/hooks/reviews";
-import { KEY_TO_ACTION } from "./constants";
-import { visibleFindings } from "./helpers";
+import { KEY_TO_ACTION, LOW_CONFIDENCE_THRESHOLD } from "./constants";
+import { countBySeverity, visibleFindings } from "./helpers";
+import { SeverityFilter } from "./SeverityFilter";
 import { s } from "./styles";
 
 export function FindingsPanel({
@@ -26,9 +27,29 @@ export function FindingsPanel({
   const t = useTranslations("prReview");
   const action = useFindingAction();
   const [hideLow, setHideLow] = React.useState(false);
+  const [sevFilter, setSevFilter] = React.useState<Severity | null>(null);
   const [focusIdx, setFocusIdx] = React.useState(0);
 
-  const shown = React.useMemo(() => visibleFindings(findings, hideLow), [findings, hideLow]);
+  // Counters reflect the post-hide-low set, so a chip's number always equals the
+  // rows shown when that severity is selected.
+  const counts = React.useMemo(
+    () =>
+      countBySeverity(
+        hideLow ? findings.filter((f) => f.confidence >= LOW_CONFIDENCE_THRESHOLD) : findings,
+      ),
+    [findings, hideLow],
+  );
+
+  const shown = React.useMemo(
+    () => visibleFindings(findings, hideLow, sevFilter),
+    [findings, hideLow, sevFilter],
+  );
+
+  // Keep j/k focus valid when the visible set shrinks/changes under a filter.
+  const handleSevChange = React.useCallback((sev: Severity | null) => {
+    setSevFilter(sev);
+    setFocusIdx(0);
+  }, []);
 
   // j/k navigation + a/d shortcuts on the focused finding (keyboard).
   React.useEffect(() => {
@@ -48,6 +69,7 @@ export function FindingsPanel({
   return (
     <div>
       <div style={s.toolbar}>
+        <SeverityFilter counts={counts} active={sevFilter} onChange={handleSevChange} />
         <div style={s.toggleGroup}>
           {t("panel.hideLowConfidence")}
           <Toggle on={hideLow} onChange={setHideLow} size={16} />

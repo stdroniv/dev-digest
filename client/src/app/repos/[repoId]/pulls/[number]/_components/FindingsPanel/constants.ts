@@ -8,6 +8,9 @@ export const SEVERITY_ORDER: Record<string, number> = {
   INFO: 3,
 };
 
+/** Severity chips shown in the filter, in display order (highest first). */
+export const SEVERITY_FILTERS = ["CRITICAL", "WARNING", "SUGGESTION"] as const;
+
 /** Confidence below this is hidden when "hide low confidence" is on. */
 export const LOW_CONFIDENCE_THRESHOLD = 0.65;
 

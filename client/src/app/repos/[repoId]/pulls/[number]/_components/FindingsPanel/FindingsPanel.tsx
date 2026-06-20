@@ -8,6 +8,7 @@ import { Toggle, EmptyState } from "@devdigest/ui";
 import type { FindingRecord, Severity } from "@devdigest/shared";
 import { FindingCard } from "../FindingCard";
 import { useFindingAction } from "../../../../../../../lib/hooks/reviews";
+import { usePathShas } from "../../../../../../../lib/hooks/use-path-shas";
 import { KEY_TO_ACTION, LOW_CONFIDENCE_THRESHOLD } from "./constants";
 import { countBySeverity, visibleFindings } from "./helpers";
 import { SeverityFilter } from "./SeverityFilter";
@@ -17,12 +18,15 @@ export function FindingsPanel({
   findings,
   prId,
   repoFullName,
-  headSha,
+  prNumber,
+  focusFindingId,
 }: {
   findings: FindingRecord[];
   prId: string;
   repoFullName?: string | null;
-  headSha?: string | null;
+  prNumber?: number | null;
+  /** When set (from a `#finding-<id>` deep link), focus + scroll to this finding. */
+  focusFindingId?: string | null;
 }) {
   const t = useTranslations("prReview");
   const action = useFindingAction();
@@ -44,6 +48,20 @@ export function FindingsPanel({
     () => visibleFindings(findings, hideLow, sevFilter),
     [findings, hideLow, sevFilter],
   );
+
+  // SHA-256 of each visible finding's path → PR-files diff anchor (async; resolves to a
+  // precise anchor, falling back to the bare /files URL until ready).
+  const shas = usePathShas(React.useMemo(() => shown.map((f) => f.file), [shown]));
+
+  // Deep link (`#finding-<id>`): focus + scroll the targeted card into view once it's shown.
+  React.useEffect(() => {
+    if (!focusFindingId) return;
+    const idx = shown.findIndex((f) => f.id === focusFindingId);
+    if (idx < 0) return;
+    setFocusIdx(idx);
+    const el = document.querySelector(`[data-finding-id="${focusFindingId}"]`);
+    el?.scrollIntoView({ behavior: "smooth", block: "center" });
+  }, [focusFindingId, shown]);
 
   // Keep j/k focus valid when the visible set shrinks/changes under a filter.
   const handleSevChange = React.useCallback((sev: Severity | null) => {
@@ -85,10 +103,11 @@ export function FindingsPanel({
               key={f.id}
               f={f}
               focused={i === focusIdx}
-              defaultExpanded={i === 0}
+              defaultExpanded={i === 0 || i === focusIdx}
               pending={action.isPending}
               repoFullName={repoFullName}
-              headSha={headSha}
+              prNumber={prNumber}
+              pathSha={shas[f.file]}
               onAction={(act) => action.mutate({ findingId: f.id, action: act, prId })}
             />
           ))

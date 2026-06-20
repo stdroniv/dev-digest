@@ -87,4 +87,29 @@ describe("FindingsPopover", () => {
     expect(screen.queryByText("f6")).not.toBeInTheDocument();
     expect(screen.getByText("+3 more")).toBeInTheDocument();
   });
+
+  it("links the file:line to the PR Files view and the title to the in-app finding", () => {
+    renderPopover(
+      <FindingsPopover
+        total={1}
+        findings={[finding({ id: "Hardcoded key", file: "src/config.ts", start_line: 12, end_line: 12 })]}
+        findingHref={(f) => `/repos/r1/pulls/482?tab=findings#finding-${f.id}`}
+        fileHref={(f) => `https://github.com/acme/payments-api/pull/482/files#diff-abcR${f.start_line}`}
+      />,
+    );
+    const fileLink = screen.getByText("src/config.ts:12").closest("a");
+    expect(fileLink).toHaveAttribute(
+      "href",
+      "https://github.com/acme/payments-api/pull/482/files#diff-abcR12",
+    );
+    expect(fileLink).toHaveAttribute("target", "_blank");
+
+    const titleLink = screen.getByText("Hardcoded key").closest("a");
+    expect(titleLink).toHaveAttribute("href", "/repos/r1/pulls/482?tab=findings#finding-Hardcoded key");
+  });
+
+  it("renders file:line as plain text (no link) when no builders are passed", () => {
+    renderPopover(<FindingsPopover total={1} findings={[finding({ id: "f", file: "src/config.ts", start_line: 12, end_line: 12 })]} />);
+    expect(screen.getByText("src/config.ts:12").closest("a")).toBeNull();
+  });
 });

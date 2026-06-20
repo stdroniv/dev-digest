@@ -28,6 +28,8 @@ export function FindingsHoverCard({
   findings,
   loading,
   headerLabel,
+  findingHref,
+  fileHref,
   onOpenChange,
 }: {
   children: React.ReactNode;
@@ -35,6 +37,9 @@ export function FindingsHoverCard({
   findings: FindingRecord[];
   loading?: boolean;
   headerLabel?: string;
+  /** Passed through to {@link FindingsPopover} — see its prop docs. */
+  findingHref?: (f: FindingRecord) => string;
+  fileHref?: (f: FindingRecord) => string | undefined;
   onOpenChange?: (open: boolean) => void;
 }) {
   const [open, setOpen] = React.useState(false);
@@ -117,6 +122,8 @@ export function FindingsHoverCard({
               findings={findings}
               loading={loading}
               headerLabel={headerLabel}
+              findingHref={findingHref}
+              fileHref={fileHref}
             />
           </div>,
           document.body,

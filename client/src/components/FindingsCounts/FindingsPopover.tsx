@@ -1,6 +1,7 @@
 "use client";
 
 import React from "react";
+import Link from "next/link";
 import { useTranslations } from "next-intl";
 import {
   Icon,
@@ -45,6 +46,8 @@ export function FindingsPopover({
   findings,
   loading,
   headerLabel,
+  findingHref,
+  fileHref,
 }: {
   total: number;
   findings: FindingRecord[];
@@ -52,6 +55,11 @@ export function FindingsPopover({
   /** Override the header/aria text (defaults to "{count} findings"). The
    *  Agent-runs timeline passes "{count} findings in this run". */
   headerLabel?: string;
+  /** When set, the row's title+rationale link here (in-app deep link to the finding).
+   *  Omitted by callers that don't navigate (e.g. the Agent-runs timeline). */
+  findingHref?: (f: FindingRecord) => string;
+  /** When set, the `file:line` ref links here (the PR's Files-changed view on GitHub). */
+  fileHref?: (f: FindingRecord) => string | undefined;
 }) {
   const t = useTranslations("prReview");
   const shown = findings.slice(0, MAX_ROWS);
@@ -95,15 +103,22 @@ export function FindingsPopover({
           {t("findings.loading")}
         </div>
       ) : (
-        shown.map((f, i) => (
-          <div
-            key={f.id}
-            style={{
-              padding: "9px 0",
-              borderTop: i === 0 ? "none" : "1px solid var(--border)",
-            }}
-          >
-            <div style={{ display: "flex", alignItems: "center", gap: 8, minWidth: 0 }}>
+        shown.map((f, i) => {
+          const href = findingHref?.(f);
+          const fHref = fileHref?.(f);
+          // Title (severity + title + category) is the in-app click target. The file:line
+          // ref is a SEPARATE GitHub link — kept a sibling, never nested in the title link
+          // (nested <a>/<Link> is invalid HTML).
+          const titleRow = (
+            <div
+              style={{
+                display: "flex",
+                alignItems: "center",
+                gap: 8,
+                minWidth: 0,
+                cursor: href ? "pointer" : undefined,
+              }}
+            >
               <SeverityBadge severity={f.severity as Severity} compact />
               <span
                 style={{
@@ -119,30 +134,56 @@ export function FindingsPopover({
               </span>
               <CategoryTag category={f.category as Category} />
             </div>
-            <div style={{ display: "flex", alignItems: "center", gap: 12, margin: "3px 0 4px" }}>
-              <span
-                className="mono"
-                style={{ fontSize: 12.5, color: "var(--accent-text)" }}
-              >
-                {f.file}:{lineLabel(f)}
-              </span>
-              <ConfidenceNum value={f.confidence} />
-            </div>
+          );
+          return (
             <div
+              key={f.id}
               style={{
-                fontSize: 12.5,
-                lineHeight: 1.45,
-                color: "var(--text-secondary)",
-                display: "-webkit-box",
-                WebkitLineClamp: 2,
-                WebkitBoxOrient: "vertical",
-                overflow: "hidden",
+                padding: "9px 0",
+                borderTop: i === 0 ? "none" : "1px solid var(--border)",
               }}
             >
-              {previewText(f.rationale)}
+              {href ? (
+                <Link href={href} style={{ textDecoration: "none", color: "inherit", display: "block" }}>
+                  {titleRow}
+                </Link>
+              ) : (
+                titleRow
+              )}
+              <div style={{ display: "flex", alignItems: "center", gap: 12, margin: "3px 0 4px" }}>
+                {fHref ? (
+                  <a
+                    href={fHref}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="mono"
+                    style={{ fontSize: 12.5, color: "var(--accent-text)", textDecoration: "none" }}
+                  >
+                    {f.file}:{lineLabel(f)}
+                  </a>
+                ) : (
+                  <span className="mono" style={{ fontSize: 12.5, color: "var(--accent-text)" }}>
+                    {f.file}:{lineLabel(f)}
+                  </span>
+                )}
+                <ConfidenceNum value={f.confidence} />
+              </div>
+              <div
+                style={{
+                  fontSize: 12.5,
+                  lineHeight: 1.45,
+                  color: "var(--text-secondary)",
+                  display: "-webkit-box",
+                  WebkitLineClamp: 2,
+                  WebkitBoxOrient: "vertical",
+                  overflow: "hidden",
+                }}
+              >
+                {previewText(f.rationale)}
+              </div>
             </div>
-          </div>
-        ))
+          );
+        })
       )}
 
       {findings.length > MAX_ROWS && (

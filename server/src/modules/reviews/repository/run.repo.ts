@@ -68,25 +68,32 @@ export async function listRunsForPull(
     );
   }
 
-  return rows.map(({ run, agentName }) => ({
-    run_id: run.id,
-    agent_id: run.agentId,
-    agent_name: agentName ?? null,
-    provider: run.provider,
-    model: run.model,
-    status: run.status,
-    error: run.error,
-    duration_ms: run.durationMs,
-    tokens_in: run.tokensIn,
-    tokens_out: run.tokensOut,
-    findings_count: run.findingsCount,
-    grounding: run.grounding,
-    ran_at: run.ranAt ? run.ranAt.toISOString() : null,
-    score: run.score,
-    blockers: run.blockers,
-    cost_usd: run.costUsd,
-    findings_counts: countsByRun.get(run.id) ?? null,
-  }));
+  return rows.map(({ run, agentName }) => {
+    // Prefer the fresh per-severity counts (joined from `findings` above) over the
+    // denormalized `agent_runs.findings_count`/`blockers` columns, which can be stale/0 and
+    // would otherwise make the Timeline row read "0 finding(s)" + a green "approved" badge
+    // while the Review Runs accordion (reading `review.findings`) shows the real findings.
+    const c = countsByRun.get(run.id);
+    return {
+      run_id: run.id,
+      agent_id: run.agentId,
+      agent_name: agentName ?? null,
+      provider: run.provider,
+      model: run.model,
+      status: run.status,
+      error: run.error,
+      duration_ms: run.durationMs,
+      tokens_in: run.tokensIn,
+      tokens_out: run.tokensOut,
+      findings_count: c ? c.critical + c.warning + c.suggestion : run.findingsCount,
+      grounding: run.grounding,
+      ran_at: run.ranAt ? run.ranAt.toISOString() : null,
+      score: run.score,
+      blockers: c ? c.critical : run.blockers,
+      cost_usd: run.costUsd,
+      findings_counts: c ?? null,
+    };
+  });
 }
 
 /**

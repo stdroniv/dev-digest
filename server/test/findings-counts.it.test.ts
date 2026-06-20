@@ -195,4 +195,76 @@ d('findings counters (PR list + agent runs)', () => {
     expect(byId.get(runs.b)!.findings_counts).toEqual({ critical: 0, warning: 1, suggestion: 1 });
     await app.close();
   });
+
+  it('derives findings_count + blockers from findings when the run’s denorm columns are stale', async () => {
+    // Regression for the Timeline showing "0 finding(s)" + a green "approved" badge: the
+    // agent_runs.findings_count / blockers columns can be 0/null while the review actually
+    // produced findings. listRunsForPull must read the fresh per-severity join, not the
+    // stale denorm columns.
+    const db = pg.handle.db;
+    const [pr2] = await db
+      .insert(t.pullRequests)
+      .values({
+        workspaceId,
+        repoId,
+        number: 2,
+        title: 'Stale denorm counts',
+        author: 'dev',
+        branch: 'feat/stale',
+        base: 'main',
+        headSha: 'sha2',
+        additions: 3,
+        deletions: 0,
+        filesCount: 1,
+        status: 'open',
+        body: '',
+      })
+      .returning();
+    const [agent] = await db
+      .insert(t.agents)
+      .values({ workspaceId, name: 'Stale', provider: 'openai', model: 'gpt-4.1', systemPrompt: 's' })
+      .returning();
+    // Denorm columns intentionally stale: findingsCount 0, blockers null.
+    const [run] = await db
+      .insert(t.agentRuns)
+      .values({
+        workspaceId,
+        agentId: agent!.id,
+        prId: pr2!.id,
+        status: 'done',
+        source: 'local',
+        findingsCount: 0,
+        blockers: null,
+      })
+      .returning({ id: t.agentRuns.id });
+    const [review] = await db
+      .insert(t.reviews)
+      .values({
+        workspaceId,
+        prId: pr2!.id,
+        agentId: agent!.id,
+        runId: run!.id,
+        kind: 'review',
+        verdict: 'request_changes',
+        summary: '',
+        score: 40,
+        model: 'gpt-4.1',
+      })
+      .returning({ id: t.reviews.id });
+    // 1 CRITICAL (a blocker) + 1 WARNING — but the denorm columns above say "0".
+    await db.insert(t.findings).values([
+      { reviewId: review!.id, file: 'src/a.ts', startLine: 1, endLine: 1, severity: 'CRITICAL', category: 'security', title: 'c', rationale: 'r', confidence: 0.9 },
+      { reviewId: review!.id, file: 'src/a.ts', startLine: 2, endLine: 2, severity: 'WARNING', category: 'perf', title: 'w', rationale: 'r', confidence: 0.8 },
+    ]);
+
+    const app = await buildApp({ config: config(), db });
+    const res = await app.inject({ method: 'GET', url: `/pulls/${pr2!.id}/runs` });
+    expect(res.statusCode).toBe(200);
+    const row = (res.json() as RunSummary[]).find((r) => r.run_id === run!.id);
+    expect(row).toBeDefined();
+    expect(row!.findings_count).toBe(2); // not the stale 0
+    expect(row!.blockers).toBe(1); // critical count → "rejected" badge, not green "approved"
+    expect(row!.findings_counts).toEqual({ critical: 1, warning: 1, suggestion: 0 });
+    await app.close();
+  });
 });

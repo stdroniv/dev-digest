@@ -2,7 +2,11 @@
 
 import React from "react";
 import type { PrMeta } from "@/lib/types";
+import type { FindingRecord } from "@devdigest/shared";
 import { usePrReviews } from "@/lib/hooks/reviews";
+import { usePathShas } from "@/lib/hooks/use-path-shas";
+import { useActiveRepo } from "@/lib/repo-context";
+import { githubPrFileUrl } from "@/lib/github-urls";
 import {
   FindingsCounts,
   FindingsHoverCard,
@@ -16,7 +20,9 @@ import {
  * total comes from the server-computed `findings_counts`, so it shows instantly
  * and always matches the badge.
  */
-export function FindingsCell({ pr }: { pr: PrMeta }) {
+export function FindingsCell({ pr, repoId }: { pr: PrMeta; repoId: string }) {
+  const { activeRepo } = useActiveRepo();
+  const repoFullName = activeRepo?.full_name ?? null;
   const [active, setActive] = React.useState(false);
   const counts = pr.findings_counts;
   const total = counts ? counts.critical + counts.warning + counts.suggestion : 0;
@@ -29,11 +35,29 @@ export function FindingsCell({ pr }: { pr: PrMeta }) {
     [reviews.data],
   );
 
+  const shas = usePathShas(React.useMemo(() => findings.map((f) => f.file), [findings]));
+
+  // Clicking a finding → its card on the PR detail page (Findings tab, scrolled into view).
+  const findingHref = React.useCallback(
+    (f: FindingRecord) => `/repos/${repoId}/pulls/${pr.number}?tab=findings#finding-${f.id}`,
+    [repoId, pr.number],
+  );
+  // Clicking the file:line → the file inside the PR's "Files changed" diff on GitHub.
+  const fileHref = React.useCallback(
+    (f: FindingRecord) =>
+      repoFullName
+        ? githubPrFileUrl(repoFullName, pr.number, f.file, f.start_line, f.end_line, shas[f.file])
+        : undefined,
+    [repoFullName, pr.number, shas],
+  );
+
   return (
     <FindingsHoverCard
       total={total}
       findings={findings}
       loading={reviews.isLoading}
+      findingHref={findingHref}
+      fileHref={fileHref}
       onOpenChange={setActive}
     >
       <FindingsCounts counts={counts} />

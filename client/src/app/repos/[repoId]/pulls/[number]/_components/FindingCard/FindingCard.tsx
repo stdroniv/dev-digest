@@ -20,7 +20,7 @@ import {
 import type { FindingRecord, FindingActionKind } from "@devdigest/shared";
 import { SEV_COLOR, SEV_COLOR_FALLBACK } from "./constants";
 import { lineLabel } from "./helpers";
-import { githubPrFileUrl } from "../../../../../../../lib/github-urls";
+import { githubPrFileUrl } from "@/lib/github-urls";
 import { s } from "./styles";
 
 export function FindingCard({

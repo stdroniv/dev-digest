@@ -1,0 +1,11 @@
+{
+  "name": "devdigest/backend-onion-architecture",
+  "version": "1.0.0",
+  "private": true,
+  "summary": "Enforces strict Onion (Clean/Hexagonal) Architecture on DevDigest's TypeScript backend (server/ and reviewer-core/). Use when adding or reviewing a backend module, route, service, repository, adapter, or domain rule — deciding where business logic, DB access, validation, or external-API calls belong, or wiring dependency injection. Enforces the inward-only dependency rule across domain → application → infrastructure → presentation, keeps Fastify/Drizzle/Zod/OpenAI out of the core, and ships a dependency-cruiser rule to block inner→outer imports. Trigger terms: onion architecture, clean architecture, hexagonal, ports and adapters, repository pattern, dependency inversion, backend architecture.",
+  "skills": {
+    "backend-onion-architecture": {
+      "path": "SKILL.md"
+    }
+  }
+}

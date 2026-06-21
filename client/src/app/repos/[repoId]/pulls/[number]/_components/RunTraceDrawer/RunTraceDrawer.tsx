@@ -1,8 +1,8 @@
 /* RunTraceDrawer — A5 Run Trace + Live Log drawer (720px). Ported from
    screen_trace.jsx. Tabs: Trace (Configuration / Stats / Prompt assembly /
    Tool calls / Raw output) and Live log (SSE via useRunEvents → LiveLogStream,
-   which has client-side Filter-input search). Default export so the PR-detail
-   page (A2) can mount it from the run-status area. */
+   which has client-side Filter-input search). Mounted by the PR-detail page (A2)
+   from the run-status area. */
 "use client";
 
 import React from "react";
@@ -33,7 +33,7 @@ export interface RunTraceDrawerProps {
  * over SSE (useRunEvents). The Trace tab loads the persisted single-document
  * RunTrace (useRunTrace) once the run completes (or for historical runs).
  */
-export default function RunTraceDrawer({
+export function RunTraceDrawer({
   runId,
   agentName,
   prNumber,

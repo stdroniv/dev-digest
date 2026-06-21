@@ -20,7 +20,18 @@ const miniBtnStyle: React.CSSProperties = {
   cursor: "pointer",
 };
 
-export function PromptBlock({ label, text, color }: { label: string; text: string; color: string }) {
+export function PromptBlock({
+  label,
+  text,
+  color,
+  badge,
+}: {
+  label: string;
+  text: string;
+  color: string;
+  /** Optional trailing chip on the header (e.g. "+128 tokens" for the skills leg). */
+  badge?: string;
+}) {
   const t = useTranslations("runs");
   const [open, setOpen] = React.useState(false);
   const [full, setFull] = React.useState(false);
@@ -35,6 +46,20 @@ export function PromptBlock({ label, text, color }: { label: string; text: strin
       <div onClick={() => setOpen((o) => !o)} style={s.promptHead}>
         <span style={s.promptDot(color)} />
         <span style={s.promptLabel}>{label}</span>
+        {badge && (
+          <span
+            className="mono"
+            style={{
+              fontSize: 11,
+              padding: "1px 7px",
+              borderRadius: 999,
+              background: "var(--bg-hover)",
+              color: "var(--text-secondary)",
+            }}
+          >
+            {badge}
+          </span>
+        )}
         <span style={{ marginLeft: "auto", display: "flex", alignItems: "center", gap: 8 }}>
           <button
             type="button"

@@ -1,0 +1,48 @@
+import type { CSSProperties } from "react";
+
+export const s = {
+  card: (active: boolean, enabled: boolean): CSSProperties => ({
+    padding: "12px 13px",
+    marginBottom: 8,
+    borderRadius: 10,
+    border: `1px solid ${active ? "var(--accent)" : "var(--border)"}`,
+    background: active ? "var(--bg-hover)" : "var(--bg-elevated)",
+    cursor: "pointer",
+    opacity: enabled ? 1 : 0.62,
+    transition: "border-color .12s, background .12s",
+  }),
+  headerRow: { display: "flex", alignItems: "center", gap: 8, marginBottom: 6 } as CSSProperties,
+  iconBox: (color: string): CSSProperties => ({
+    width: 22,
+    height: 22,
+    borderRadius: 6,
+    display: "inline-flex",
+    alignItems: "center",
+    justifyContent: "center",
+    background: "var(--bg-hover)",
+    color,
+    flexShrink: 0,
+  }),
+  name: {
+    flex: 1,
+    fontSize: 13,
+    fontWeight: 600,
+    color: "var(--text-primary)",
+    overflow: "hidden",
+    textOverflow: "ellipsis",
+    whiteSpace: "nowrap",
+  } as CSSProperties,
+  description: {
+    fontSize: 12,
+    color: "var(--text-secondary)",
+    lineHeight: 1.4,
+    marginBottom: 8,
+    display: "-webkit-box",
+    WebkitLineClamp: 2,
+    WebkitBoxOrient: "vertical",
+    overflow: "hidden",
+  } as CSSProperties,
+  metaRow: { display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" } as CSSProperties,
+  source: { display: "inline-flex", alignItems: "center", gap: 4, fontSize: 11, color: "var(--text-muted)" } as CSSProperties,
+  vetting: { fontSize: 11, color: "var(--warn)", fontWeight: 600 } as CSSProperties,
+} as const;

@@ -1,4 +1,4 @@
-import { and, asc, desc, eq } from 'drizzle-orm';
+import { and, asc, desc, eq, sql } from 'drizzle-orm';
 import type { Db } from '../../db/client.js';
 import * as t from '../../db/schema.js';
 import type { CiFailOn, Provider, ReviewStrategy } from '@devdigest/shared';
@@ -227,10 +227,25 @@ export class AgentsRepository {
    * the list are unlinked.
    */
   async setSkills(agentId: string, skillIds: string[]): Promise<void> {
-    await this.db.delete(t.agentSkills).where(eq(t.agentSkills.agentId, agentId));
-    if (skillIds.length === 0) return;
-    await this.db
-      .insert(t.agentSkills)
-      .values(skillIds.map((skillId, i) => ({ agentId, skillId, order: i })));
+    // Dedupe while preserving order: a repeated id in the request would otherwise
+    // produce two rows with the same (agent_id, skill_id) PK in one insert.
+    const uniqueIds = [...new Set(skillIds)];
+    await this.db.transaction(async (tx) => {
+      // SERIALIZE concurrent setSkills for the SAME agent. The Agent editor's
+      // vendored checkbox double-fires onChange (a <button> inside a <label>), so
+      // two identical requests arrive at once. Without serialization the delete +
+      // insert pair either trips the (agent_id, skill_id) PK
+      // (`agent_skills_agent_id_skill_id_pk`) — under READ COMMITTED the 2nd tx's
+      // DELETE can't see the 1st's just-committed rows — or DEADLOCKS, when the two
+      // transactions lock agent_skills rows/index entries in opposite order. A
+      // transaction-scoped advisory lock (auto-released at COMMIT/ROLLBACK) makes
+      // them run one-at-a-time, so a plain delete-all + insert is correct.
+      await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtext(${agentId}))`);
+      await tx.delete(t.agentSkills).where(eq(t.agentSkills.agentId, agentId));
+      if (uniqueIds.length === 0) return;
+      await tx
+        .insert(t.agentSkills)
+        .values(uniqueIds.map((skillId, i) => ({ agentId, skillId, order: i })));
+    });
   }
 }

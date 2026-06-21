@@ -68,6 +68,9 @@ export const RunStats = z.object({
   // Dollar cost of the run (provider-reported when available, else estimated);
   // null on failed/cancelled runs.
   cost_usd: z.number().nullable(),
+  // Tokens contributed by the agent's enabled skills block (tokenizer adapter).
+  // null when the agent had no enabled skills or on failed/cancelled runs.
+  skills_tokens: z.number().int().nullish(),
 });
 export type RunStats = z.infer<typeof RunStats>;
 

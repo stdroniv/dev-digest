@@ -7,7 +7,8 @@
     "searchPlaceholder": "Search skills…",
     "loadError": "Could not load skills.",
     "menu": {
-      "fromFile": "Import from file",
+      "create": "Create from scratch",
+      "fromFile": "Import from file / archive",
       "fromUrl": "Import from URL",
       "community": "Search community skills…"
     },
@@ -45,11 +46,17 @@
     "nameHint": "Optional — derived from the first heading if blank.",
     "namePlaceholder": "pr-quality-rubric",
     "bodyLabel": "Skill body (Markdown)",
-    "bodyHint": "Pasted content is wrapped as untrusted data — never executed as instructions.",
+    "bodyHint": "Imported content is stored as untrusted data — never executed. The skill stays disabled until you vet and enable it.",
     "bodyPlaceholder": "# Rule\nDescribe the rule…",
+    "importedDescription": "Imported skill — review before enabling.",
+    "pick": "Choose a skill file",
+    "dropTitle": "Import a markdown file or a .zip archive",
+    "choose": "Choose file",
+    "chooseAnother": "Choose another",
+    "ignoredTitle": "{count} non-markdown file(s) ignored (never run, never stored)",
     "importing": "Importing…",
     "import": "Import skill",
-    "success": "Imported \"{name}\" (stored as untrusted data)."
+    "success": "Imported \"{name}\" — disabled until you vet + enable it."
   },
   "url": {
     "label": "Skill URL",
@@ -88,6 +95,8 @@
     }
   },
   "preview": {
+    "heading": "Preview",
+    "renderedAs": "Rendered as the reviewing agent receives it.",
     "untrustedBadge": "untrusted source",
     "enabled": "Enabled",
     "disabled": "Disabled",
@@ -96,6 +105,42 @@
     "untrustedNotice": "This skill came from an untrusted source. Its body is stored as data (delimiter-wrapped) and must be vetted before it is enabled for an agent.",
     "bodyLabel": "Skill body (Markdown)",
     "bodyHint": "Saving a changed body creates a new immutable version.",
-    "version": "v{version}"
+    "version": "v{version}",
+    "draft": "Draft"
+  },
+  "tabs": {
+    "config": "Config",
+    "preview": "Preview",
+    "versions": "Versions"
+  },
+  "config": {
+    "title": "Configuration",
+    "name": "Name",
+    "description": "Description",
+    "descriptionHint": "The skill's interface — write it directively, as an instruction to the reviewing agent.",
+    "type": "Type",
+    "body": "Skill body",
+    "bodyHint": "Markdown. Saving a changed body creates a new immutable version.",
+    "tokens": "{count} tokens",
+    "unsaved": "unsaved",
+    "enabled": "Enabled",
+    "save": "Save",
+    "saving": "Saving…",
+    "saved": "Saved (v{version})",
+    "savedToast": "Saved \"{name}\" (v{version})"
+  },
+  "versions": {
+    "title": "Version history",
+    "subtitle": "Every save snapshots the body so eval runs stay reproducible against the exact text they scored.",
+    "current": "Current",
+    "restore": "Restore",
+    "restored": "Restored v{version} as v{newVersion}",
+    "emptyTitle": "No versions yet",
+    "emptyBody": "Save a change to the body to create the first snapshot."
+  },
+  "new": {
+    "defaultName": "new-skill",
+    "defaultBody": "# New skill\n\nDescribe the rule the reviewing agent should apply…",
+    "created": "Created a new skill — edit its body and enable it."
   }
 }

@@ -48,6 +48,17 @@ cold; never edit or delete existing entries.
   in `.claude/settings.json` (`PostToolUse` on `git commit` auto-invokes the skill; `PreToolUse`
   on `git push` runs `.claude/hooks/block-git-push.sh`). Honest escape hatch is always
   `git push --no-verify`.
+- When severity-rating security findings in a review (esp. `pr-self-review`), apply
+  DevDigest's actual threat model: it is **local-first, single-user, bound to localhost,
+  with no auth on routes** (per root `CLAUDE.md`: "All local; outbound calls only to GitHub
+  and the LLM"). A resource-exhaustion/DoS-class bug whose only trigger is input the local
+  user themselves feeds (e.g. the `/skills/import` decompression-bomb at
+  `server/src/modules/skills/import-parse.ts` — `inflateRawSync` without `maxOutputLength`,
+  guarding on the attacker-controlled central-directory `uncompressedSize`) crosses **no
+  trust boundary** here, so it is a WARNING, not the CRITICAL it would be in a multi-user /
+  remote-exposed service. Reserve CRITICAL (which trips the gate) for harm that crosses a
+  real boundary; the rubric's "down-rank rather than over-block" exists precisely so the
+  gate doesn't train `--no-verify`. Still fix the hardening — just don't block the merge on it.
 
 ## Tool & Library Notes
 

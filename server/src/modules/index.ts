@@ -4,6 +4,7 @@ import repos from './repos/routes.js';
 import pulls from './pulls/routes.js';
 import polling from './polling/routes.js';
 import workspace from './workspace/routes.js';
+import skills from './skills/routes.js';
 import agents from './agents/routes.js';
 import reviews from './reviews/routes.js';
 import repoIntel from './repo-intel/routes.js';
@@ -27,6 +28,7 @@ export const modules: Record<string, FastifyPluginAsync> = {
   pulls,
   polling,
   workspace,
+  skills,
   agents,
   reviews,
   repoIntel,

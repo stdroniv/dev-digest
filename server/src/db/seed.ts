@@ -6,7 +6,10 @@ import {
   GENERAL_REVIEWER_PROMPT,
   SECURITY_REVIEWER_PROMPT,
   PERFORMANCE_REVIEWER_PROMPT,
+  TEST_QUALITY_REVIEWER_PROMPT,
+  API_CONTRACT_REVIEWER_PROMPT,
 } from './seed-prompts.js';
+import { DEMO_SKILLS, AGENT_SKILL_LINKS } from './seed-skills.js';
 
 /** Default provider/model for the built-in reviewer agents. */
 const DEFAULT_PROVIDER = 'openrouter' as const;
@@ -211,6 +214,30 @@ export async function seed(db: Db): Promise<{ workspaceId: string; userId: strin
       version: 1,
       createdBy: userId,
     },
+    // L02 — two reviewers built FROM skills (the control experiment). Each is a
+    // bare persona; the team rules it checks live in its linked skills below.
+    {
+      workspaceId,
+      name: 'Test Quality Reviewer',
+      description: 'Flags uncovered branches, missed corner cases, over-mocking, and flaky tests.',
+      provider: DEFAULT_PROVIDER,
+      model: DEFAULT_MODEL,
+      systemPrompt: TEST_QUALITY_REVIEWER_PROMPT,
+      enabled: true,
+      version: 1,
+      createdBy: userId,
+    },
+    {
+      workspaceId,
+      name: 'API Contract Reviewer',
+      description: 'Detects breaking changes to HTTP request/response contracts before merge.',
+      provider: DEFAULT_PROVIDER,
+      model: DEFAULT_MODEL,
+      systemPrompt: API_CONTRACT_REVIEWER_PROMPT,
+      enabled: true,
+      version: 1,
+      createdBy: userId,
+    },
   ];
   for (const a of seedAgents) {
     const [existing] = await db
@@ -218,6 +245,48 @@ export async function seed(db: Db): Promise<{ workspaceId: string; userId: strin
       .from(t.agents)
       .where(and(eq(t.agents.workspaceId, workspaceId), eq(t.agents.name, a.name)));
     if (!existing) await db.insert(t.agents).values(a);
+  }
+
+  // ---- L02 skills + agent links ----
+  // The knowledge layer: markdown rule blocks stored in the DB and injected into
+  // an agent's prompt. `phantom-api-gate` is seeded via the IMPORT path (an
+  // untrusted source, disabled until vetted) so the whole flow is represented.
+  for (const s of DEMO_SKILLS) {
+    let [skill] = await db
+      .select()
+      .from(t.skills)
+      .where(and(eq(t.skills.workspaceId, workspaceId), eq(t.skills.name, s.name)));
+    if (!skill) {
+      [skill] = await db
+        .insert(t.skills)
+        .values({ workspaceId, ...s })
+        .returning();
+      // Record the immutable v1 body snapshot (mirrors SkillsRepository.insert).
+      await db
+        .insert(t.skillVersions)
+        .values({ skillId: skill!.id, version: 1, body: s.body })
+        .onConflictDoNothing();
+    }
+  }
+
+  // Link skills to agents in order (the order drives prompt-block order).
+  for (const [agentName, skillNames] of Object.entries(AGENT_SKILL_LINKS)) {
+    const [agent] = await db
+      .select()
+      .from(t.agents)
+      .where(and(eq(t.agents.workspaceId, workspaceId), eq(t.agents.name, agentName)));
+    if (!agent) continue;
+    for (let i = 0; i < skillNames.length; i++) {
+      const [skill] = await db
+        .select()
+        .from(t.skills)
+        .where(and(eq(t.skills.workspaceId, workspaceId), eq(t.skills.name, skillNames[i]!)));
+      if (!skill) continue;
+      await db
+        .insert(t.agentSkills)
+        .values({ agentId: agent.id, skillId: skill.id, order: i })
+        .onConflictDoNothing();
+    }
   }
 
   // ---- one completed agent run for PR #482 ----

@@ -183,6 +183,24 @@ export class ReviewRunExecutor {
 
       const task = taskLine(pull) + rankNote;
 
+      // L02 — skills. Load this agent's linked skills (already ordered by
+      // agent_skills.order) and keep only the ENABLED ones: a disabled skill must
+      // never enter the prompt or appear as a block in the trace. Their bodies are
+      // injected as ordered rule blocks; assemblePrompt omits the section when the
+      // list is empty (behaviour identical to the no-skills baseline).
+      const linkedSkills = await this.agents.linkedSkills(agent.id);
+      const skillBodies = linkedSkills.filter((l) => l.skill.enabled).map((l) => l.skill.body);
+      if (skillBodies.length) {
+        runLog.info(
+          `Injecting ${skillBodies.length} enabled skill(s) into the prompt as rule block(s)`,
+        );
+      }
+      // "How many tokens did skills add" — the measurement surfaced in the trace.
+      // null when the agent has no enabled skills (so the UI shows no skills block).
+      const skillsTokens = skillBodies.length
+        ? this.container.tokenizer.count(skillBodies.join('\n\n'))
+        : null;
+
       // ---- Engine: assemble → single-pass → grounding -----------------------
       // The pure review pipeline lives in @devdigest/reviewer-core (shared with
       // the CI runner). The service owns only I/O: repo-intel context resolution
@@ -195,6 +213,9 @@ export class ReviewRunExecutor {
         // Per-agent review strategy (configured in the Agent editor); falls back
         // to the studio default. single-pass = whole diff in one call.
         strategy: agent.strategy ?? REVIEW_STRATEGY,
+        // L02 — ordered, enabled skill bodies. Omitted when empty so the prompt is
+        // byte-identical to the no-skills baseline (the control experiment).
+        ...(skillBodies.length ? { skills: skillBodies } : {}),
         // T1.3 — pass the callers digest only when we built one. assemblePrompt
         // omits the section when this is empty/undefined.
         ...(callersDigest ? { callers: callersDigest } : {}),
@@ -269,6 +290,7 @@ export class ReviewRunExecutor {
           findings: findingRows.length,
           grounding,
           cost_usd: costUsd,
+          skills_tokens: skillsTokens,
         },
         prompt_assembly: outcome.assembly,
         tool_calls: outcome.chunks.map((c) => ({

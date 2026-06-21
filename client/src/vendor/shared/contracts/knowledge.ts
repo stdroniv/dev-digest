@@ -128,8 +128,36 @@ export const Skill = z.object({
   enabled: z.boolean(),
   version: z.number().int(),
   evidence_files: z.array(z.string()).nullish(),
+  // Derived, server-computed token count of `body` (tokenizer adapter). Not
+  // persisted — surfaced so the editor can show how many tokens a skill adds to
+  // an agent's prompt. Absent on payloads where it wasn't computed.
+  tokens: z.number().int().optional(),
 });
 export type Skill = z.infer<typeof Skill>;
+
+// One immutable body snapshot from `skill_versions` — every saved body change
+// appends a version so eval runs stay reproducible against the exact text scored.
+export const SkillVersion = z.object({
+  skill_id: z.string(),
+  version: z.number().int(),
+  body: z.string(),
+  created_at: z.string(),
+});
+export type SkillVersion = z.infer<typeof SkillVersion>;
+
+// Parsed preview returned by POST /skills/import before anything is persisted.
+// The body is treated as untrusted data; executable archive entries are ignored.
+export const SkillImportPreview = z.object({
+  name: z.string(),
+  body: z.string(),
+  type: SkillType,
+  source: SkillSource,
+  tokens: z.number().int(),
+  // Non-markdown / executable archive entries that were ignored (never run,
+  // never stored) — surfaced so the import drawer can show what was skipped.
+  ignored_files: z.array(z.string()),
+});
+export type SkillImportPreview = z.infer<typeof SkillImportPreview>;
 
 export const CommunitySkill = z.object({
   name: z.string(),

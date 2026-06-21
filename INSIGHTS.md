@@ -23,6 +23,13 @@ cold; never edit or delete existing entries.
   keep a sibling `CHANGELOG.md` following SemVer (major = breaking guidance change, minor =
   new section/reference file, patch = clarification/source-link fix). Not all existing
   skills do this yet; follow it for new/updated skills.
+- The prescribed skill-versioning convention above (sibling `CHANGELOG.md` + `updated:` date)
+  is **not** universal — two competing shapes exist in `.claude/skills/`. `ui-frontend-architecture`
+  uses the sibling-`CHANGELOG.md` form; `backend-onion-architecture` and `client-server-communication`
+  use `metadata.version` (SemVer) under frontmatter **plus a grouped `metadata.references:` URL map
+  and an inline `## Changelog` section at the end of `SKILL.md`** (no separate file, no `updated:`).
+  Before adding versioning to a skill, grep a sibling skill's frontmatter and match the neighbor you're
+  most aligned with rather than assuming the CHANGELOG.md form; both pass review.
 - Backend architecture guidance lives in the `backend-onion-architecture` skill — the
   `server/` + `reviewer-core/` counterpart to `ui-frontend-architecture`. It owns onion-layer
   file placement, the inward-only dependency rule, and a dependency-cruiser enforcement config;
@@ -54,6 +61,14 @@ cold; never edit or delete existing entries.
   `tool_input.command` is then just `bash /tmp/test.sh` (no gated literal), while the real
   command lives in the file, read at runtime. Same applies to smoke-testing any self-gating
   hook right after installing it.
+
+- `Explore` subagents are unreliable for tasks that need a **full written report** back to the
+  parent: in this session two `Explore` agents (codebase-mapping prompts) each returned only their
+  one-line opening narration ("I'll investigate…") instead of the report, while the identical prompts
+  re-run as `general-purpose` agents returned complete structured reports. `Explore` is tuned to
+  return terse located-conclusions, not long-form summaries. When you need a thorough multi-section
+  write-up from a subagent (architecture maps, research digests), use `general-purpose`; reserve
+  `Explore` for "find me where X is" fan-out.
 
 ## Recurring Errors & Fixes
 

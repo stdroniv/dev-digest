@@ -61,6 +61,13 @@ export interface StructuredRequest<T> {
   maxTokens?: number;
   timeoutMs?: number;
   maxRetries?: number;
+  /**
+   * Sampling seed forwarded to providers that support it (OpenAI / OpenRouter).
+   * Omitted → no `seed` sent → request byte-identical to today. On OpenRouter it
+   * also pins upstream routing (no fallbacks, require_parameters) so the same
+   * model id stops drifting across hosts/quantizations between runs.
+   */
+  seed?: number;
 }
 
 export interface StructuredResult<T> {

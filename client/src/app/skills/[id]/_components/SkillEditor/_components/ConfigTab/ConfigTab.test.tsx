@@ -6,11 +6,15 @@ import messages from "../../../../../../../../messages/en/skills.json";
 
 const mutate = vi.fn();
 const createMutate = vi.fn();
+const deleteMutate = vi.fn();
+const push = vi.fn();
 vi.mock("@/lib/hooks/skills", () => ({
   useUpdateSkill: () => ({ mutate, isPending: false, isSuccess: false, data: undefined }),
   useCreateSkill: () => ({ mutate: createMutate, isPending: false }),
+  useDeleteSkill: () => ({ mutate: deleteMutate, isPending: false }),
 }));
 vi.mock("@/lib/toast", () => ({ useToast: () => ({ success: vi.fn(), error: vi.fn() }) }));
+vi.mock("next/navigation", () => ({ useRouter: () => ({ push }) }));
 
 import { ConfigTab } from "./ConfigTab";
 
@@ -18,6 +22,8 @@ afterEach(() => {
   cleanup();
   mutate.mockReset();
   createMutate.mockReset();
+  deleteMutate.mockReset();
+  push.mockReset();
 });
 
 const SKILL: Skill = {
@@ -85,6 +91,41 @@ describe("Skill ConfigTab", () => {
         patch: { body: "# PR Quality Rubric\nEvaluate it thoroughly." },
       }),
     );
+  });
+
+  it("does not render the delete control in create mode", () => {
+    renderWithIntl(
+      <ConfigTab
+        create={{ defaultName: "new-skill", defaultBody: "# New skill", onCreated: vi.fn(), onCancel: vi.fn() }}
+      />,
+    );
+    expect(screen.queryByText("Delete skill")).not.toBeInTheDocument();
+  });
+
+  it("opens a confirmation modal and Cancel closes it without deleting", () => {
+    renderWithIntl(<ConfigTab skill={SKILL} />);
+    fireEvent.click(screen.getByText("Delete skill"));
+    // Modal is up (title shown), nothing deleted yet.
+    expect(screen.getByText("Delete this skill?")).toBeInTheDocument();
+    expect(deleteMutate).not.toHaveBeenCalled();
+
+    fireEvent.click(screen.getByText("Cancel"));
+    expect(screen.queryByText("Delete this skill?")).not.toBeInTheDocument();
+    expect(deleteMutate).not.toHaveBeenCalled();
+  });
+
+  it("confirming the modal deletes the skill, then toasts and routes to /skills", () => {
+    renderWithIntl(<ConfigTab skill={SKILL} />);
+    fireEvent.click(screen.getByText("Delete skill"));
+    // The modal's confirm button (distinct from the trigger label "Delete skill").
+    fireEvent.click(screen.getByText("Delete"));
+
+    expect(deleteMutate).toHaveBeenCalledTimes(1);
+    expect(deleteMutate.mock.calls[0]![0]).toBe("sk1");
+
+    // Drive the success path the component passes to mutate.
+    deleteMutate.mock.calls[0]![1].onSuccess();
+    expect(push).toHaveBeenCalledWith("/skills");
   });
 
   it("in create mode persists nothing until Save, then POSTs the new skill", () => {

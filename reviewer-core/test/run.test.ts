@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
-import type { LLMProvider, StructuredResult } from '@devdigest/shared';
+import type { Finding, LLMProvider, StructuredResult } from '@devdigest/shared';
 import { MockLLMProvider, MockGitClient } from '../../server/src/adapters/mocks.js';
-import { reviewPullRequest } from '../src/index.js';
+import { reviewPullRequest, dedupeFindings } from '../src/index.js';
 
 /**
  * Engine-level test for reviewPullRequest (the core lifted out of the server's
@@ -137,5 +137,165 @@ describe('reviewPullRequest (engine)', () => {
     await reviewPullRequest({ systemPrompt: 's', model: 'm', diff, llm: recorder, sessionId: 'sess-abc' });
     expect(seen.length).toBeGreaterThan(0);
     expect(seen.every((s) => s === 'sess-abc')).toBe(true);
+  });
+
+  it('forwards seed to the LLM, and omits it when not set', async () => {
+    const seen: (number | undefined)[] = [];
+    const recorder: LLMProvider = {
+      id: 'openrouter',
+      async completeStructured<T>(req): Promise<StructuredResult<T>> {
+        seen.push(req.seed);
+        return { data: fixture as unknown as T, model: req.model, tokensIn: 0, tokensOut: 0, costUsd: 0, raw: '', attempts: 1 };
+      },
+      async listModels() { return []; },
+      async complete() { throw new Error('not used'); },
+      async embed() { return []; },
+    };
+    const diff = await new MockGitClient().diff();
+    await reviewPullRequest({ systemPrompt: 's', model: 'm', diff, llm: recorder, seed: 1729 });
+    await reviewPullRequest({ systemPrompt: 's', model: 'm', diff, llm: recorder });
+    expect(seen).toEqual([1729, undefined]);
+  });
+});
+
+describe('reviewPullRequest — false-negative re-sample guard', () => {
+  // A clean approve with ZERO findings (the lazy-empty failure shape) followed by
+  // a sample that DOES surface the grounded finding (line 11 is in the mock diff).
+  const empty = { verdict: 'approve', summary: 'looks good', score: 10, findings: [] };
+  const withFinding = {
+    verdict: 'request_changes',
+    summary: 'secret key committed',
+    score: 38,
+    findings: [
+      {
+        id: 'f1',
+        severity: 'CRITICAL',
+        category: 'security',
+        title: 'Hardcoded Stripe secret key',
+        file: 'src/config.ts',
+        start_line: 11,
+        end_line: 11,
+        rationale: 'sk_live in diff',
+        confidence: 0.98,
+        kind: 'finding',
+      },
+    ],
+  };
+  const structuredCalls = (llm: MockLLMProvider) =>
+    llm.calls.filter((c) => c.method === 'completeStructured').length;
+
+  it('regression: an empty first sample is rescued by a re-sample that finds the bug', async () => {
+    const llm = new MockLLMProvider('openai', { structuredSequence: [empty, withFinding] });
+    const diff = await new MockGitClient().diff();
+    const events: string[] = [];
+
+    const outcome = await reviewPullRequest({
+      systemPrompt: 'security reviewer',
+      model: 'deepseek/deepseek-v4-flash',
+      diff,
+      llm,
+      resampleOnEmpty: 1,
+      onEvent: (e) => events.push(e.msg),
+    });
+
+    expect(structuredCalls(llm)).toBe(2);
+    expect(outcome.resampled).toBe(true);
+    expect(outcome.samples).toBe(2);
+    expect(outcome.review.findings).toHaveLength(1);
+    expect(outcome.review.verdict).toBe('request_changes'); // worst verdict wins
+    expect(outcome.review.score).toBe(65); // one surviving CRITICAL ⇒ 100 − 35
+    expect(events.some((m) => m.includes('re-sampling'))).toBe(true);
+  });
+
+  it('off by default: omitting resampleOnEmpty keeps the single lazy approve (back-compat)', async () => {
+    const llm = new MockLLMProvider('openai', { structuredSequence: [empty, withFinding] });
+    const diff = await new MockGitClient().diff();
+
+    const outcome = await reviewPullRequest({ systemPrompt: 's', model: 'm', diff, llm });
+
+    expect(structuredCalls(llm)).toBe(1);
+    expect(outcome.resampled).toBe(false);
+    expect(outcome.samples).toBe(1);
+    expect(outcome.review.findings).toHaveLength(0);
+    expect(outcome.review.score).toBe(100);
+  });
+
+  it('does NOT re-sample when the first sample already has findings', async () => {
+    const llm = new MockLLMProvider('openai', { structuredSequence: [withFinding, withFinding] });
+    const diff = await new MockGitClient().diff();
+
+    const outcome = await reviewPullRequest({ systemPrompt: 's', model: 'm', diff, llm, resampleOnEmpty: 1 });
+
+    expect(structuredCalls(llm)).toBe(1);
+    expect(outcome.resampled).toBe(false);
+    expect(outcome.review.findings).toHaveLength(1);
+  });
+
+  it('re-sample that is still empty stays a clean approve (guard ran, found nothing)', async () => {
+    const llm = new MockLLMProvider('openai', { structuredSequence: [empty, empty] });
+    const diff = await new MockGitClient().diff();
+
+    const outcome = await reviewPullRequest({ systemPrompt: 's', model: 'm', diff, llm, resampleOnEmpty: 1 });
+
+    expect(structuredCalls(llm)).toBe(2);
+    expect(outcome.resampled).toBe(true);
+    expect(outcome.review.findings).toHaveLength(0);
+    expect(outcome.review.score).toBe(100);
+  });
+
+  it('perturbs the re-sample: higher temperature + offset seed so it actually differs', async () => {
+    let n = 0;
+    const seen: { temperature?: number; seed?: number }[] = [];
+    const recorder: LLMProvider = {
+      id: 'openrouter',
+      async completeStructured<T>(req): Promise<StructuredResult<T>> {
+        seen.push({ temperature: req.temperature, seed: req.seed });
+        const data = (n++ === 0 ? empty : withFinding) as unknown as T;
+        return { data, model: req.model, tokensIn: 0, tokensOut: 0, costUsd: 0, raw: '', attempts: 1 };
+      },
+      async listModels() { return []; },
+      async complete() { throw new Error('not used'); },
+      async embed() { return []; },
+    };
+    const diff = await new MockGitClient().diff();
+
+    await reviewPullRequest({ systemPrompt: 's', model: 'm', diff, llm: recorder, seed: 1729, resampleOnEmpty: 1 });
+
+    expect(seen).toHaveLength(2);
+    expect(seen[0]!.seed).toBe(1729); // first pass: caller's seed, default temperature
+    expect(seen[1]!.seed).toBe(1730); // re-sample: offset seed …
+    expect(seen[1]!.temperature).toBeCloseTo(0.4, 9); // … and a perturbed temperature
+  });
+});
+
+describe('dedupeFindings', () => {
+  const make = (over: Partial<Finding>): Finding => ({
+    id: 'x',
+    severity: 'WARNING',
+    category: 'bug',
+    title: 'Same defect',
+    file: 'src/a.ts',
+    start_line: 10,
+    end_line: 10,
+    rationale: 'r',
+    confidence: 0.5,
+    kind: 'finding',
+    ...over,
+  });
+
+  it('collapses same file:line:title and keeps the higher-severity copy', () => {
+    const out = dedupeFindings([
+      make({ id: 'a', severity: 'WARNING', confidence: 0.9 }),
+      make({ id: 'b', severity: 'CRITICAL', confidence: 0.5 }),
+    ]);
+    expect(out).toHaveLength(1);
+    expect(out[0]!.severity).toBe('CRITICAL');
+  });
+
+  it('keeps distinct findings (different line) and is a no-op on a single finding', () => {
+    const a = make({ id: 'a', start_line: 10, end_line: 10 });
+    const b = make({ id: 'b', start_line: 20, end_line: 20 });
+    expect(dedupeFindings([a, b])).toHaveLength(2);
+    expect(dedupeFindings([a])).toEqual([a]);
   });
 });

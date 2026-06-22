@@ -128,7 +128,14 @@
     "saving": "Saving…",
     "saved": "Saved (v{version})",
     "savedToast": "Saved \"{name}\" (v{version})",
-    "saveError": "Couldn't save the skill."
+    "saveError": "Couldn't save the skill.",
+    "delete": "Delete skill",
+    "deleteConfirmTitle": "Delete this skill?",
+    "deleteConfirmBody": "This permanently deletes \"{name}\" and all its versions, and removes it from every agent that uses it. This can't be undone.",
+    "deleteCancel": "Cancel",
+    "deleteConfirm": "Delete",
+    "deleted": "Deleted \"{name}\"",
+    "deleteError": "Couldn't delete the skill."
   },
   "versions": {
     "title": "Version history",

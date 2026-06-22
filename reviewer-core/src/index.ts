@@ -31,8 +31,8 @@ export {
   type ParseResult,
 } from './llm/structured.js';
 
-// Map-reduce helpers (reduce partials, slice a file's diff).
-export { reduceReviews, sliceDiff } from './review/reduce.js';
+// Map-reduce helpers (reduce partials, slice a file's diff, dedup merged findings).
+export { reduceReviews, sliceDiff, dedupeFindings } from './review/reduce.js';
 
 // The engine entry point: given (diff + resolved agent inputs + LLM) → grounded Review.
 export {

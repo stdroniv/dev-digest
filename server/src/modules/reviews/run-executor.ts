@@ -5,7 +5,12 @@ import { RunLogger } from '../../platform/run-logger.js';
 import * as schema from '../../db/schema.js';
 import type { AgentRow } from '../../db/rows.js';
 import type { ReviewRepository, FindingRow, PullRow, ReviewRow } from './repository.js';
-import { REVIEW_STRATEGY } from './constants.js';
+import {
+  REVIEW_STRATEGY,
+  REVIEW_SEED,
+  REVIEW_RESAMPLE_ON_EMPTY,
+  FLASH_TIER_MODEL_RE,
+} from './constants.js';
 import { taskLine } from './helpers.js';
 import { loadDiff } from './diff-loader.js';
 
@@ -201,6 +206,17 @@ export class ReviewRunExecutor {
         ? this.container.tokenizer.count(skillBodies.join('\n\n'))
         : null;
 
+      // Soft nudge (log-only, never a block): gating merges on a cheap "flash/
+      // mini" tier is the exact setup that produced the silent auto-approve —
+      // those tiers emit lazy short completions. The re-sample guard below
+      // mitigates it, but flag the risky config so it's visible in the Live Log.
+      if (agent.ciFailOn !== 'never' && FLASH_TIER_MODEL_RE.test(agent.model)) {
+        runLog.info(
+          `⚠️ Model "${agent.model}" is a cheap/distilled tier but gates merges (ciFailOn=${agent.ciFailOn}); ` +
+            `these tiers under-report — prefer a mid-tier model for the verdict.`,
+        );
+      }
+
       // ---- Engine: assemble → single-pass → grounding -----------------------
       // The pure review pipeline lives in @devdigest/reviewer-core (shared with
       // the CI runner). The service owns only I/O: repo-intel context resolution
@@ -213,6 +229,12 @@ export class ReviewRunExecutor {
         // Per-agent review strategy (configured in the Agent editor); falls back
         // to the studio default. single-pass = whole diff in one call.
         strategy: agent.strategy ?? REVIEW_STRATEGY,
+        // Determinism: fixed seed + (in the OpenRouter provider) upstream pinning
+        // so a byte-identical prompt stops drifting verdicts across runs.
+        seed: REVIEW_SEED,
+        // False-negative guard: re-sample an empty single-pass result so one lazy
+        // "0 findings → approve" draw can't silently pass a buggy PR.
+        resampleOnEmpty: REVIEW_RESAMPLE_ON_EMPTY,
         // L02 — ordered, enabled skill bodies. Omitted when empty so the prompt is
         // byte-identical to the no-skills baseline (the control experiment).
         ...(skillBodies.length ? { skills: skillBodies } : {}),
@@ -291,6 +313,10 @@ export class ReviewRunExecutor {
           grounding,
           cost_usd: costUsd,
           skills_tokens: skillsTokens,
+          // False-negative guard observability: how many samples backed this
+          // review and whether the empty-result re-sample path ran.
+          samples: outcome.samples,
+          resampled: outcome.resampled,
         },
         prompt_assembly: outcome.assembly,
         tool_calls: outcome.chunks.map((c) => ({

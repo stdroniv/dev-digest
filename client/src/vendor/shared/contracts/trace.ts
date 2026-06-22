@@ -70,6 +70,12 @@ export const RunStats = z.object({
   // Tokens contributed by the agent's enabled skills block (tokenizer adapter).
   // null when the agent had no enabled skills or on failed/cancelled runs.
   skills_tokens: z.number().int().nullish(),
+  // Total LLM samples behind this review: 1 normally; >1 when the false-negative
+  // guard re-sampled an empty single-pass result. nullish on older traces.
+  samples: z.number().int().nullish(),
+  // True when the empty-result re-sample guard ran (explains a non-trivial
+  // sample count / "why did this approve"). nullish on older traces.
+  resampled: z.boolean().nullish(),
 });
 export type RunStats = z.infer<typeof RunStats>;
 

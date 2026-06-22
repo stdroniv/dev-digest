@@ -9,10 +9,11 @@
 "use client";
 
 import React from "react";
+import { useRouter } from "next/navigation";
 import { useTranslations } from "next-intl";
-import { FormField, TextInput, SelectInput, Textarea, Toggle, Button, Badge } from "@devdigest/ui";
+import { FormField, TextInput, SelectInput, Textarea, Toggle, Button, Badge, Modal } from "@devdigest/ui";
 import type { Skill, SkillType } from "@devdigest/shared";
-import { useCreateSkill, useUpdateSkill } from "@/lib/hooks/skills";
+import { useCreateSkill, useDeleteSkill, useUpdateSkill } from "@/lib/hooks/skills";
 import { useToast } from "@/lib/toast";
 import { ApiError } from "@/lib/api";
 import { SKILL_TYPE_VALUES } from "../../constants";
@@ -32,9 +33,14 @@ export interface ConfigCreateMode {
 export function ConfigTab({ skill, create }: { skill?: Skill; create?: ConfigCreateMode }) {
   const t = useTranslations("skills");
   const toast = useToast();
+  const router = useRouter();
   const update = useUpdateSkill();
   const createSkill = useCreateSkill();
+  const del = useDeleteSkill();
   const isCreate = !!create;
+
+  // Confirmation modal for deleting the persisted skill (edit mode only).
+  const [confirming, setConfirming] = React.useState(false);
 
   const [name, setName] = React.useState(skill?.name ?? create?.defaultName ?? "");
   const [description, setDescription] = React.useState(skill?.description ?? "");
@@ -120,6 +126,21 @@ export function ConfigTab({ skill, create }: { skill?: Skill; create?: ConfigCre
     );
   };
 
+  // Delete the persisted skill. The server cascade-removes its versions and agent
+  // links; on success we leave the (now-stale) detail route for the list.
+  const confirmDelete = () => {
+    del.mutate(skill!.id, {
+      onSuccess: () => {
+        toast.success(t("config.deleted", { name: skill!.name }));
+        router.push("/skills");
+      },
+      onError: (e) => {
+        setConfirming(false);
+        toast.error(e instanceof ApiError ? e.message : t("config.deleteError"));
+      },
+    });
+  };
+
   const versionBadge =
     isCreate || (skill && skill.version < 1) ? t("preview.draft") : t("preview.version", { version: skill!.version });
 
@@ -184,7 +205,41 @@ export function ConfigTab({ skill, create }: { skill?: Skill; create?: ConfigCre
         {!isCreate && update.isSuccess && (
           <span style={s.savedNote}>{t("config.saved", { version: update.data?.version })}</span>
         )}
+        {!isCreate && (
+          <Button
+            kind="danger"
+            icon="Trash"
+            onClick={() => setConfirming(true)}
+            disabled={del.isPending}
+            style={s.deleteBtn}
+          >
+            {t("config.delete")}
+          </Button>
+        )}
       </div>
+
+      {!isCreate && confirming && (
+        <Modal
+          width={460}
+          title={t("config.deleteConfirmTitle")}
+          subtitle={skill!.name}
+          onClose={del.isPending ? undefined : () => setConfirming(false)}
+          footer={
+            <div style={{ display: "flex", justifyContent: "flex-end", gap: 10 }}>
+              <Button kind="secondary" onClick={() => setConfirming(false)} disabled={del.isPending}>
+                {t("config.deleteCancel")}
+              </Button>
+              <Button kind="danger" onClick={confirmDelete} loading={del.isPending}>
+                {t("config.deleteConfirm")}
+              </Button>
+            </div>
+          }
+        >
+          <div style={{ padding: "18px 24px", fontSize: 14, color: "var(--text-secondary)", lineHeight: 1.5 }}>
+            {t("config.deleteConfirmBody", { name: skill!.name })}
+          </div>
+        </Modal>
+      )}
     </div>
   );
 }

@@ -14,4 +14,5 @@ export const s = {
   bodyLabel: { display: "inline-flex", alignItems: "center", gap: 8 } as CSSProperties,
   actions: { display: "flex", alignItems: "center", gap: 12, marginTop: 8 } as CSSProperties,
   savedNote: { fontSize: 12, color: "var(--ok)" } as CSSProperties,
+  deleteBtn: { marginLeft: "auto" } as CSSProperties,
 } as const;

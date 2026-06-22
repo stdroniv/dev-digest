@@ -34,10 +34,23 @@ flowchart LR
 ## Trust & determinism (the two load-bearing ideas)
 
 - **Grounding gate** — the model cannot hallucinate a location; uncited findings are
-  dropped and the score is derived mechanically, not trusted from the model.
+  dropped and the score is derived mechanically, not trusted from the model. Note this
+  gate is *asymmetric*: it removes false positives but cannot recover a finding the
+  model lazily failed to emit — that gap is covered by the re-sample guard below.
 - **Injection defense** — a single trusted rule (`INJECTION_GUARD`) treats all
   untrusted content (diff, PR body, README, comments) as data, never instructions.
   No keyword denylists.
+- **Determinism** — `temperature: 0` is *not* reproducible on OpenRouter on its own:
+  the engine sends a fixed `seed` (`REVIEW_SEED`) and, on OpenRouter, pins upstream
+  routing (`provider: { allow_fallbacks: false, require_parameters: true }`) so the
+  same model id stops drifting across hosts/quantizations between runs.
+- **False-negative guard** — a single-pass review that returns 0 findings is
+  re-sampled (`resampleOnEmpty`, perturbed temperature + offset seed) and merged
+  worst-verdict/union, so one lazy "approve" draw can't silently pass a buggy PR.
+- **Model tier** — do **not** gate merges (`ciFailOn != 'never'`) on a cheap
+  `flash/mini/nano/free` tier: those under-report and emit lazy short completions
+  (the failure the guard exists to catch). Prefer a mid-tier model for the verdict;
+  the runner logs a warning when a flash-tier model is used as a gate.
 
 ## Where to go deeper
 

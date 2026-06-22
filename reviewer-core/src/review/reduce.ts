@@ -29,6 +29,39 @@ export function scoreFromFindings(findings: Finding[]): number {
   return Math.max(0, Math.min(100, 100 - penalty));
 }
 
+/** Severity rank for dedup tie-breaks (higher = worse). Mirrors SEVERITY_PENALTY order. */
+const SEVERITY_RANK: Record<Finding['severity'], number> = {
+  CRITICAL: 3,
+  WARNING: 2,
+  SUGGESTION: 1,
+};
+
+/**
+ * Collapse duplicate findings that point at the same defect — used when the
+ * false-negative re-sample path merges N samples (the same bug surfaces in more
+ * than one draw). Two findings collide when they share file + line range +
+ * (case-insensitive) title; the worse one wins (higher severity, then higher
+ * confidence). Over a single sample this is a no-op, so the normal review path
+ * stays byte-identical — only the re-sample branch calls it.
+ */
+export function dedupeFindings(findings: Finding[]): Finding[] {
+  const byKey = new Map<string, Finding>();
+  for (const f of findings) {
+    const key = `${f.file}|${f.start_line}|${f.end_line}|${f.title.trim().toLowerCase()}`;
+    const prev = byKey.get(key);
+    if (!prev) {
+      byKey.set(key, f);
+      continue;
+    }
+    const better =
+      (SEVERITY_RANK[f.severity] ?? 0) !== (SEVERITY_RANK[prev.severity] ?? 0)
+        ? (SEVERITY_RANK[f.severity] ?? 0) > (SEVERITY_RANK[prev.severity] ?? 0)
+        : (f.confidence ?? 0) > (prev.confidence ?? 0);
+    if (better) byKey.set(key, f);
+  }
+  return [...byKey.values()];
+}
+
 /** Verdict severity order for the reduce step (worst verdict wins). */
 const VERDICT_RANK: Record<string, number> = {
   request_changes: 2,

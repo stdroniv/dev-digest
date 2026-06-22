@@ -9,7 +9,7 @@ import type {
 import { Review as ReviewSchema } from '@devdigest/shared';
 import { assemblePrompt } from '../prompt.js';
 import { groundFindings, groundingSummary } from '../grounding.js';
-import { reduceReviews, scoreFromFindings, sliceDiff } from './reduce.js';
+import { reduceReviews, scoreFromFindings, sliceDiff, dedupeFindings } from './reduce.js';
 
 /**
  * reviewPullRequest — the review engine entry point.
@@ -82,6 +82,26 @@ export interface ReviewInput {
    * review group into one session in the OpenRouter dashboard.
    */
   sessionId?: string;
+  /**
+   * Determinism seed forwarded to the provider (see `StructuredRequest.seed`).
+   * Omitted → no seed sent → byte-identical request to today. When the
+   * false-negative guard re-samples, each extra draw uses `seed + i + 1` so the
+   * samples actually differ.
+   */
+  seed?: number;
+  /**
+   * False-negative guard. If a SINGLE-PASS review yields 0 findings, take this
+   * many ADDITIONAL samples and merge (worst-verdict + union of findings) so one
+   * lazy empty draw can't auto-approve a buggy PR. 0/undefined → off (identical
+   * to today). Ignored in map-reduce mode (which already issues one call/file).
+   */
+  resampleOnEmpty?: number;
+  /**
+   * Temperature for the re-sample(s). A small positive value adds the diversity
+   * needed to escape a deterministic lazy empty — re-sending temperature 0 + the
+   * same seed would just reproduce the empty. Default 0.4 when re-sampling.
+   */
+  resampleTemperature?: number;
   /** Progress sink. */
   onEvent?: (e: ReviewEvent) => void;
   /**
@@ -110,6 +130,13 @@ export interface ReviewOutcome {
   costUsd: number | null;
   /** Joined raw model outputs (for the run trace). */
   raw: string;
+  /**
+   * Total LLM samples behind the final review: 1 normally; >1 when the
+   * false-negative guard re-sampled an empty single-pass result.
+   */
+  samples: number;
+  /** True when the empty-result re-sample guard ran (for the trace / "why approved"). */
+  resampled: boolean;
 }
 
 function selectMode(strategy: ReviewStrategy, diff: UnifiedDiff, threshold: number): ReviewMode {
@@ -178,6 +205,7 @@ export async function reviewPullRequest(input: ReviewInput): Promise<ReviewOutco
       messages: a.messages,
       maxRetries,
       ...(input.sessionId ? { sessionId: input.sessionId } : {}),
+      ...(input.seed != null ? { seed: input.seed } : {}),
     });
     tokensIn += res.tokensIn;
     tokensOut += res.tokensOut;
@@ -187,7 +215,47 @@ export async function reviewPullRequest(input: ReviewInput): Promise<ReviewOutco
     emit('result', `${chunk.label}: ${res.data.findings.length} candidate finding(s)`);
   }
 
-  const merged = reduceReviews(partials);
+  let merged = reduceReviews(partials);
+
+  // False-negative guard (opt-in via `resampleOnEmpty`). A single-pass review
+  // that returns ZERO findings is the exact shape of the "lazy approve" failure:
+  // identical input can flip to an empty result on a cheap/non-deterministic
+  // model, and grounding only DROPS findings — it can't recover a missed one. So
+  // re-sample the whole diff a few more times (perturbed: higher temperature +
+  // offset seed, else we'd just reproduce the empty) and merge worst-verdict +
+  // union. Off by default and scoped to this branch → the normal path is
+  // byte-identical to today.
+  let samples = partials.length;
+  let resampled = false;
+  const resampleN = input.resampleOnEmpty ?? 0;
+  if (mode === 'single-pass' && merged.findings.length === 0 && resampleN > 0) {
+    emit('info', `0 findings → re-sampling ${resampleN}x (false-negative guard)`);
+    const spMessages = assemblePrompt({ ...promptParts, diff: chunks[0]!.diffText }).messages;
+    for (let i = 0; i < resampleN; i++) {
+      input.checkCancelled?.();
+      const res = await input.llm.completeStructured<Review>({
+        model: input.model,
+        schema: ReviewSchema,
+        schemaName: 'Review',
+        messages: spMessages,
+        maxRetries,
+        temperature: input.resampleTemperature ?? 0.4,
+        ...(input.sessionId ? { sessionId: input.sessionId } : {}),
+        ...(input.seed != null ? { seed: input.seed + i + 1 } : {}),
+      });
+      tokensIn += res.tokensIn;
+      tokensOut += res.tokensOut;
+      costUsd = costUsd == null || res.costUsd == null ? null : costUsd + res.costUsd;
+      raws.push(res.raw);
+      partials.push(res.data);
+      samples++;
+      emit('result', `re-sample ${i + 1}: ${res.data.findings.length} candidate finding(s)`);
+    }
+    const remerged = reduceReviews(partials);
+    merged = { ...remerged, findings: dedupeFindings(remerged.findings) };
+    resampled = true;
+  }
+
   emit(
     'result',
     `Reduced to ${merged.findings.length} finding(s); verdict=${merged.verdict}, score=${merged.score}`,
@@ -215,5 +283,7 @@ export async function reviewPullRequest(input: ReviewInput): Promise<ReviewOutco
     tokensOut,
     costUsd,
     raw: raws.join('\n---\n'),
+    samples,
+    resampled,
   };
 }

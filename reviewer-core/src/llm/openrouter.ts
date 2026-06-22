@@ -81,6 +81,18 @@ export class OpenRouterProvider implements LLMProvider {
         // OpenRouter usage accounting — ask it to return the REAL generation
         // cost (USD) in `usage.cost`, instead of estimating from a price book.
         ...(this.id === 'openrouter' ? { usage: { include: true } } : {}),
+        // Determinism (opt-in): a `seed` reduces run-to-run drift. `temperature: 0`
+        // alone is NOT reproducible here — without a seed AND provider pinning the
+        // same model id routes across different upstream hosts/quantizations, so a
+        // byte-identical prompt can flip verdicts between runs. Sent only when the
+        // caller passes a seed → request stays byte-identical to today otherwise.
+        // `seed` is OpenAI-standard (sent for both ids); `provider` is OpenRouter-
+        // only: `require_parameters` routes only to hosts that honor the seed,
+        // `allow_fallbacks: false` stops silent same-id re-routing (the drift source).
+        ...(req.seed != null ? { seed: req.seed } : {}),
+        ...(this.id === 'openrouter' && req.seed != null
+          ? { provider: { allow_fallbacks: false, require_parameters: true } }
+          : {}),
       });
 
       // OpenRouter can return HTTP 200 with no `choices` (an upstream provider

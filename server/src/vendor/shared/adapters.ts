@@ -67,6 +67,13 @@ export interface StructuredRequest<T> {
    * the `session_id` body field; ignored by providers that don't support it.
    */
   sessionId?: string;
+  /**
+   * Sampling seed forwarded to providers that support it (OpenAI / OpenRouter).
+   * Omitted → no `seed` sent → request byte-identical to today. On OpenRouter it
+   * also pins upstream routing (no fallbacks, require_parameters) so the same
+   * model id stops drifting across hosts/quantizations between runs.
+   */
+  seed?: number;
 }
 
 export interface StructuredResult<T> {
@@ -213,6 +220,12 @@ export interface GitClient {
    */
   sync(repo: RepoRef, branch: string): Promise<{ head: string }>;
   currentHead(repo: RepoRef): Promise<string>;
+  /**
+   * The repo's default branch name as checked out by `clone` (e.g. `main` or
+   * `master`). Used to build correct GitHub blob links and to target re-syncs at
+   * the right branch instead of a hardcoded default.
+   */
+  defaultBranch(repo: RepoRef): Promise<string>;
   diff(repo: RepoRef, base: string, head: string): Promise<UnifiedDiff>;
   /**
    * Names of files changed between two commits (`git diff --name-only base..head`).

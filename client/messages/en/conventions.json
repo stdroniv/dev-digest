@@ -8,19 +8,51 @@
     "scanning": "Scanning…",
     "rescan": "Re-scan",
     "runExtraction": "Run extraction",
-    "extractionFailed": "Extraction failed",
+    "extractionFailed": "Extraction failed. Check that an LLM key is configured and the repo is cloned.",
     "loadError": "Could not load conventions.",
+    "needsRepo": "Select a repository to extract conventions.",
+    "createSkill": "Create skill",
+    "createSkillCount": "Create skill ({count})",
+    "acceptedCount": "{count} accepted",
     "empty": {
       "title": "No conventions extracted yet",
       "body": "Scan the repo to surface house-rules — naming, error handling, structure — each backed by evidence you can turn into a Skill.",
       "cta": "Run extraction"
     },
+    "emptyAfterScan": "The scan found no verifiable conventions. Try re-scanning, or index the repo first.",
     "candidateCount": "{count, plural, one {# candidate} other {# candidates}} · grounded against sampled files"
   },
   "card": {
     "confidence": "Confidence",
     "accepted": "Accepted",
-    "accepting": "Accepting…",
-    "acceptAsSkill": "Accept as Skill"
+    "rejected": "Rejected",
+    "accept": "Accept",
+    "reject": "Reject",
+    "edit": "Edit",
+    "save": "Save",
+    "cancel": "Cancel",
+    "category": "Category",
+    "rule": "Rule",
+    "viewOnGithub": "Open on GitHub"
+  },
+  "modal": {
+    "title": "Create skill from conventions",
+    "mergedFrom": "Merged from {count, plural, one {# accepted convention} other {# accepted conventions}} in {repo}. Everything below is editable before you save.",
+    "name": "Name",
+    "description": "Description",
+    "type": "Type",
+    "enabled": "Enabled",
+    "enabledHint": "Whether this block is added to agents' prompts.",
+    "body": "Skill body",
+    "save": "Create skill",
+    "cancel": "Cancel"
+  },
+  "toast": {
+    "scanDone": "{count, plural, one {Found # convention} other {Found # conventions}}",
+    "accepted": "Accepted",
+    "rejected": "Rejected",
+    "edited": "Saved",
+    "skillCreated": "Created skill “{name}”",
+    "skillError": "Could not create the skill. Please try again."
   }
 }

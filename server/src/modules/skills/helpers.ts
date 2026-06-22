@@ -1,4 +1,11 @@
-import type { Skill, SkillSource, SkillType, SkillVersion } from '@devdigest/shared';
+import type {
+  Skill,
+  SkillSource,
+  SkillStats,
+  SkillStatsAgent,
+  SkillType,
+  SkillVersion,
+} from '@devdigest/shared';
 import type { SkillRow, SkillVersionRow } from '../../db/rows.js';
 
 /**
@@ -62,4 +69,68 @@ export function deriveSkillName(body: string, fallback = 'imported-skill'): stri
     }
   }
   return fallback;
+}
+
+/**
+ * Raw aggregates the repository pulls for one skill's Stats tab. Kept as plain
+ * numbers + rows so the percentage math lives in `computeSkillStats` (pure, unit
+ * tested) rather than in SQL.
+ */
+export interface SkillStatsRaw {
+  /** Agents linked to the skill (id + name), already ordered for display. */
+  agents: SkillStatsAgent[];
+  /** In-window reviews with a non-null agent_id (the pull-frequency denominator). */
+  reviewsInWindowTotal: number;
+  /** In-window reviews produced by an agent that uses this skill (numerator). */
+  reviewsInWindowForSkill: number;
+  /** In-window findings from this skill's agents, with their accept/dismiss state. */
+  findings: { category: string; acceptedAt: Date | null; dismissedAt: Date | null }[];
+}
+
+/** Round to one decimal place (percentages render as e.g. 71.4%). */
+function round1(n: number): number {
+  return Math.round(n * 10) / 10;
+}
+
+/**
+ * Fold raw per-skill aggregates into the public `SkillStats` DTO. Pure: owns the
+ * percentage rounding, the zero-denominator → 0 guards (pull frequency with no
+ * reviews; accept rate with nothing decided), and the category rollup (sorted
+ * descending by count, then name for stable ordering).
+ */
+export function computeSkillStats(
+  skillId: string,
+  windowDays: number,
+  raw: SkillStatsRaw,
+): SkillStats {
+  const pullFrequencyPct =
+    raw.reviewsInWindowTotal > 0
+      ? round1((raw.reviewsInWindowForSkill / raw.reviewsInWindowTotal) * 100)
+      : 0;
+
+  let accepted = 0;
+  let decided = 0;
+  const byCategory = new Map<string, number>();
+  for (const f of raw.findings) {
+    byCategory.set(f.category, (byCategory.get(f.category) ?? 0) + 1);
+    const isAccepted = f.acceptedAt != null;
+    const isDismissed = f.dismissedAt != null;
+    if (isAccepted) accepted += 1;
+    if (isAccepted || isDismissed) decided += 1;
+  }
+  const acceptRatePct = decided > 0 ? round1((accepted / decided) * 100) : 0;
+
+  const findingsByCategory = [...byCategory.entries()]
+    .map(([category, count]) => ({ category, count }))
+    .sort((a, b) => b.count - a.count || a.category.localeCompare(b.category));
+
+  return {
+    skill_id: skillId,
+    window_days: windowDays,
+    used_by: { count: raw.agents.length, agents: raw.agents },
+    pull_frequency_pct: pullFrequencyPct,
+    accept_rate_pct: acceptRatePct,
+    findings_30d: raw.findings.length,
+    findings_by_category: findingsByCategory,
+  };
 }

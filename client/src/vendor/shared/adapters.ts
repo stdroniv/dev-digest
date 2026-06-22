@@ -61,6 +61,13 @@ export interface StructuredRequest<T> {
   maxTokens?: number;
   timeoutMs?: number;
   maxRetries?: number;
+  /**
+   * Sampling seed forwarded to providers that support it (OpenAI / OpenRouter).
+   * Omitted → no `seed` sent → request byte-identical to today. On OpenRouter it
+   * also pins upstream routing (no fallbacks, require_parameters) so the same
+   * model id stops drifting across hosts/quantizations between runs.
+   */
+  seed?: number;
 }
 
 export interface StructuredResult<T> {
@@ -177,6 +184,12 @@ export interface GitClient {
   clone(repo: RepoRef, url: string, opts?: CloneOptions): Promise<{ path: string }>;
   fetchPullHead(repo: RepoRef, n: number): Promise<void>;
   currentHead(repo: RepoRef): Promise<string>;
+  /**
+   * The repo's default branch name as checked out by `clone` (e.g. `main` or
+   * `master`). Used to build correct GitHub blob links and to target re-syncs at
+   * the right branch instead of a hardcoded default.
+   */
+  defaultBranch(repo: RepoRef): Promise<string>;
   diff(repo: RepoRef, base: string, head: string): Promise<UnifiedDiff>;
   blame(repo: RepoRef, path: string): Promise<BlameLine[]>;
   log(repo: RepoRef, path?: string): Promise<GitCommit[]>;

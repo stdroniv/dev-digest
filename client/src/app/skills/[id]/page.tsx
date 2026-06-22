@@ -15,7 +15,8 @@ export default function SkillDetailPage() {
   const setTab = (t: string) => {
     const sp = new URLSearchParams(search.toString());
     sp.set("tab", t);
-    router.replace(`/skills/${id}?${sp.toString()}`);
+    // scroll:false — a tab change must not jump the left list's scroll container.
+    router.replace(`/skills/${id}?${sp.toString()}`, { scroll: false });
   };
 
   return <SkillsWorkspace selectedId={id} tab={tab} onTab={setTab} />;

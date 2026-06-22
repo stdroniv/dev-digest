@@ -111,7 +111,24 @@
   "tabs": {
     "config": "Config",
     "preview": "Preview",
+    "stats": "Stats",
     "versions": "Versions"
+  },
+  "stats": {
+    "usedBy": "Used by",
+    "agentsUnit": "agents",
+    "pullFrequency": "Pull frequency",
+    "acceptRate": "Accept rate",
+    "findings30d": "Findings (30D)",
+    "agentsUsing": "Agents using this skill",
+    "open": "Open",
+    "findingsByCategory": "Findings by category",
+    "noAgentsTitle": "No agents yet",
+    "noAgentsBody": "Link this skill to an agent from the agent's Skills tab to see usage here.",
+    "noFindingsTitle": "No findings in the last 30 days",
+    "noFindingsBody": "Findings appear once this skill's agents review a pull request.",
+    "errorTitle": "Couldn't load stats",
+    "errorBody": "The skill statistics failed to load."
   },
   "config": {
     "title": "Configuration",
@@ -127,7 +144,15 @@
     "save": "Save",
     "saving": "Saving…",
     "saved": "Saved (v{version})",
-    "savedToast": "Saved \"{name}\" (v{version})"
+    "savedToast": "Saved \"{name}\" (v{version})",
+    "saveError": "Couldn't save the skill.",
+    "delete": "Delete skill",
+    "deleteConfirmTitle": "Delete this skill?",
+    "deleteConfirmBody": "This permanently deletes \"{name}\" and all its versions, and removes it from every agent that uses it. This can't be undone.",
+    "deleteCancel": "Cancel",
+    "deleteConfirm": "Delete",
+    "deleted": "Deleted \"{name}\"",
+    "deleteError": "Couldn't delete the skill."
   },
   "versions": {
     "title": "Version history",
@@ -141,6 +166,7 @@
   "new": {
     "defaultName": "new-skill",
     "defaultBody": "# New skill\n\nDescribe the rule the reviewing agent should apply…",
-    "created": "Created a new skill — edit its body and enable it."
+    "created": "Created a new skill — edit its body and enable it.",
+    "cancel": "Cancel"
   }
 }

@@ -8,6 +8,7 @@ import { Tabs } from "@devdigest/ui";
 import type { Skill } from "@devdigest/shared";
 import { ConfigTab } from "./_components/ConfigTab";
 import { PreviewTab } from "./_components/PreviewTab";
+import { StatsTab } from "./_components/StatsTab";
 import { VersionsTab } from "./_components/VersionsTab";
 import { TABS } from "./constants";
 
@@ -30,6 +31,7 @@ export function SkillEditor({
       <div style={{ flex: 1, minHeight: 0, overflow: "auto", padding: 24 }}>
         {tab === "config" && <ConfigTab skill={skill} />}
         {tab === "preview" && <PreviewTab skill={skill} />}
+        {tab === "stats" && <StatsTab skill={skill} />}
         {tab === "versions" && <VersionsTab skill={skill} />}
       </div>
     </div>

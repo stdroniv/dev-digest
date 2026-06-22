@@ -1,9 +1,9 @@
-import { and, desc, eq } from 'drizzle-orm';
+import { and, asc, desc, eq, gte, inArray, isNotNull, sql } from 'drizzle-orm';
 import type { Db } from '../../db/client.js';
 import * as t from '../../db/schema.js';
 import type { SkillSource, SkillType } from '@devdigest/shared';
-import { DRAFT_SKILL_VERSION, INITIAL_SKILL_VERSION } from './constants.js';
-import { isBodyChange } from './helpers.js';
+import { INITIAL_SKILL_VERSION } from './constants.js';
+import { isBodyChange, type SkillStatsRaw } from './helpers.js';
 
 /**
  * A1 — skills data-access. Owns the `skills` table + its immutable `skill_versions`
@@ -53,6 +53,23 @@ export class SkillsRepository {
     return row;
   }
 
+  /**
+   * Find a skill in a workspace by name, CASE-INSENSITIVELY. Used to block
+   * duplicate names on create/rename (`lower(name)` matches the unique index).
+   */
+  async findByName(workspaceId: string, name: string): Promise<SkillRow | undefined> {
+    const [row] = await this.db
+      .select()
+      .from(t.skills)
+      .where(
+        and(
+          eq(t.skills.workspaceId, workspaceId),
+          sql`lower(${t.skills.name}) = lower(${name})`,
+        ),
+      );
+    return row;
+  }
+
   async deleteById(workspaceId: string, id: string): Promise<boolean> {
     const rows = await this.db
       .delete(t.skills)
@@ -62,9 +79,9 @@ export class SkillsRepository {
   }
 
   /**
-   * Insert a skill as a DRAFT (version 0, no snapshot). The body present here is a
-   * scaffold/seed; the first save commits it as v1 (see `update`). This keeps an
-   * auto-created placeholder from occupying v1.
+   * Insert a skill at v1 with its immutable v1 body snapshot. The client defers
+   * the POST until the user's first Save, so by the time we persist, the body is
+   * the user's authored content — it earns v1 directly (no draft state).
    */
   async insert(values: InsertSkill): Promise<SkillRow> {
     const [row] = await this.db
@@ -77,20 +94,17 @@ export class SkillsRepository {
         source: values.source ?? 'manual',
         body: values.body,
         enabled: values.enabled ?? true,
-        version: DRAFT_SKILL_VERSION,
+        version: INITIAL_SKILL_VERSION,
         evidenceFiles: values.evidenceFiles ?? null,
       })
       .returning();
+    await this.snapshotBody(row!.id, INITIAL_SKILL_VERSION, row!.body);
     return row!;
   }
 
   /**
-   * Update a skill. Versioning rules:
-   * - A DRAFT (version 0, never saved) COMMITS to v1 on its first save that
-   *   includes a body — even if the body still equals the scaffold — so the user's
-   *   first authored content is v1, not v2.
-   * - A committed skill bumps the version + appends an immutable snapshot ONLY on a
-   *   real body change; name/description/type/enabled edits do not version.
+   * Update a skill. A body change bumps the version + appends an immutable
+   * snapshot; name/description/type/enabled edits do NOT version.
    */
   async update(
     workspaceId: string,
@@ -100,16 +114,8 @@ export class SkillsRepository {
     const existing = await this.getById(workspaceId, id);
     if (!existing) return undefined;
 
-    const isDraft = existing.version < INITIAL_SKILL_VERSION;
-    // The first save of a draft commits v1 (the scaffold never burns a version).
-    const commitDraft = isDraft && patch.body !== undefined;
-    const bumpCommitted = !isDraft && isBodyChange(existing, patch);
-    const writeSnapshot = commitDraft || bumpCommitted;
-    const nextVersion = commitDraft
-      ? INITIAL_SKILL_VERSION
-      : bumpCommitted
-        ? existing.version + 1
-        : existing.version;
+    const writeSnapshot = isBodyChange(existing, patch);
+    const nextVersion = writeSnapshot ? existing.version + 1 : existing.version;
 
     const [row] = await this.db
       .update(t.skills)
@@ -126,6 +132,71 @@ export class SkillsRepository {
 
     if (writeSnapshot && row) await this.snapshotBody(row.id, nextVersion, row.body);
     return row;
+  }
+
+  /**
+   * Raw aggregates for one skill's Stats tab over a rolling window. Reads the
+   * `agent_skills` link (owned by the agents module) read-only — cross-module
+   * aggregation, like the pulls/reviews modules already do. The percentage math
+   * is left to `computeSkillStats` (pure); here we only count rows.
+   */
+  async getStats(workspaceId: string, skillId: string, windowDays: number): Promise<SkillStatsRaw> {
+    const windowStart = sql`now() - (${windowDays} * interval '1 day')`;
+
+    // Agents linked to this skill (workspace-scoped), ordered for display.
+    const agents = await this.db
+      .select({ id: t.agents.id, name: t.agents.name })
+      .from(t.agentSkills)
+      .innerJoin(t.agents, eq(t.agents.id, t.agentSkills.agentId))
+      .where(and(eq(t.agentSkills.skillId, skillId), eq(t.agents.workspaceId, workspaceId)))
+      .orderBy(asc(t.agents.name));
+
+    const agentIds = agents.map((a) => a.id);
+    // Empty array → `inArray(col, [])` would emit invalid SQL; use a `false`
+    // predicate so the skill simply matches no reviews/findings.
+    const usesSkill = agentIds.length ? inArray(t.reviews.agentId, agentIds) : sql`false`;
+
+    // Pull frequency: in-window reviews by this skill's agents vs all in-window
+    // reviews with an agent. One pass with FILTER for the numerator.
+    const [pull] = await this.db
+      .select({
+        total: sql<number>`count(*)::int`,
+        forSkill: sql<number>`count(*) filter (where ${usesSkill})::int`,
+      })
+      .from(t.reviews)
+      .where(
+        and(
+          eq(t.reviews.workspaceId, workspaceId),
+          isNotNull(t.reviews.agentId),
+          gte(t.reviews.createdAt, windowStart),
+        ),
+      );
+
+    // In-window findings from this skill's agents (accept/dismiss state + category).
+    const findings = agentIds.length
+      ? await this.db
+          .select({
+            category: t.findings.category,
+            acceptedAt: t.findings.acceptedAt,
+            dismissedAt: t.findings.dismissedAt,
+          })
+          .from(t.findings)
+          .innerJoin(t.reviews, eq(t.reviews.id, t.findings.reviewId))
+          .where(
+            and(
+              eq(t.reviews.workspaceId, workspaceId),
+              inArray(t.reviews.agentId, agentIds),
+              gte(t.reviews.createdAt, windowStart),
+            ),
+          )
+      : [];
+
+    return {
+      agents,
+      reviewsInWindowTotal: pull?.total ?? 0,
+      reviewsInWindowForSkill: pull?.forSkill ?? 0,
+      findings,
+    };
   }
 
   private async snapshotBody(skillId: string, version: number, body: string): Promise<void> {

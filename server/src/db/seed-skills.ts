@@ -159,8 +159,83 @@ flag them. Internal refactors that leave the wire shape identical are NOT breaki
  * which drives the order of skill blocks in the assembled prompt.
  */
 export const AGENT_SKILL_LINKS: Record<string, string[]> = {
+  // `pr-quality-rubric` is shared across three reviewers so the Skills → Stats tab
+  // has a "used by 3 agents" demo (mirrors the design mockup).
+  'General Reviewer': ['pr-quality-rubric'],
   'Security Reviewer': ['secret-leakage-gate', 'lethal-trifecta'],
   'Performance Reviewer': ['pr-quality-rubric', 'no-then-chains'],
   'Test Quality Reviewer': ['test-coverage-nudge', 'pr-quality-rubric'],
   'API Contract Reviewer': ['api-contract-guard'],
 };
+
+/**
+ * Demo data for the Skills → Stats tab. The base seed only attributes PR #482's
+ * review to the Security Reviewer (which does NOT use `pr-quality-rubric`), so
+ * that skill would otherwise show all-zero stats. This adds a second demo PR
+ * whose reviews are attributed to the rubric's agents, with categorized findings
+ * in a realistic accepted/dismissed mix — giving non-zero pull frequency, accept
+ * rate, findings count, and a category breakdown. Kept on its OWN PR so PR #482
+ * (asserted by existing tests + e2e flows) is left untouched.
+ */
+export interface StatsDemoFinding {
+  category: string;
+  severity: string;
+  /** 'accepted' or 'dismissed' — every demo finding is decided for a clean accept rate. */
+  decision: 'accepted' | 'dismissed';
+}
+
+export interface StatsDemoReview {
+  /** Agent (by name) the review is attributed to. */
+  agent: string;
+  findings: StatsDemoFinding[];
+}
+
+/**
+ * Reviews for the stats-demo PR. The three `pr-quality-rubric` agents carry
+ * categorized findings; Security + API Contract reviews (which don't use the
+ * rubric) pad the pull-frequency denominator so it lands below 100%.
+ *
+ * Rubric totals: 15 findings across bug/perf/style/security/test, 11 accepted →
+ * ~73% accept rate, used by 3 agents.
+ */
+export const STATS_DEMO_REVIEWS: StatsDemoReview[] = [
+  {
+    agent: 'Performance Reviewer',
+    findings: [
+      { category: 'perf', severity: 'WARNING', decision: 'accepted' },
+      { category: 'perf', severity: 'WARNING', decision: 'accepted' },
+      { category: 'bug', severity: 'WARNING', decision: 'accepted' },
+      { category: 'bug', severity: 'SUGGESTION', decision: 'dismissed' },
+      { category: 'style', severity: 'SUGGESTION', decision: 'accepted' },
+      { category: 'security', severity: 'CRITICAL', decision: 'dismissed' },
+    ],
+  },
+  {
+    agent: 'General Reviewer',
+    findings: [
+      { category: 'bug', severity: 'WARNING', decision: 'accepted' },
+      { category: 'bug', severity: 'WARNING', decision: 'accepted' },
+      { category: 'style', severity: 'SUGGESTION', decision: 'accepted' },
+      { category: 'style', severity: 'SUGGESTION', decision: 'dismissed' },
+      { category: 'security', severity: 'CRITICAL', decision: 'accepted' },
+      { category: 'perf', severity: 'WARNING', decision: 'accepted' },
+    ],
+  },
+  {
+    agent: 'Test Quality Reviewer',
+    findings: [
+      { category: 'bug', severity: 'WARNING', decision: 'accepted' },
+      { category: 'style', severity: 'SUGGESTION', decision: 'dismissed' },
+      { category: 'test', severity: 'SUGGESTION', decision: 'accepted' },
+    ],
+  },
+  // Denominator padding — these agents do NOT use pr-quality-rubric.
+  {
+    agent: 'Security Reviewer',
+    findings: [{ category: 'security', severity: 'CRITICAL', decision: 'accepted' }],
+  },
+  {
+    agent: 'API Contract Reviewer',
+    findings: [{ category: 'bug', severity: 'WARNING', decision: 'dismissed' }],
+  },
+];

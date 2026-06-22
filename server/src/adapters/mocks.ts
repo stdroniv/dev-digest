@@ -51,6 +51,14 @@ export interface MockLLMOptions {
    * by req.schemaName; falls back to `structured` when no entry matches.
    */
   structuredBySchema?: Record<string, unknown>;
+  /**
+   * Successive fixtures for multi-CALL flows where the same schema is requested
+   * more than once (e.g. the false-negative re-sample: first an empty Review,
+   * then one with findings). The Nth completeStructured call returns
+   * `structuredSequence[N]`; once exhausted it repeats the last entry. Takes
+   * precedence over `structuredBySchema`/`structured` when set.
+   */
+  structuredSequence?: unknown[];
   completionText?: string;
   embedding?: number[];
 }
@@ -58,6 +66,7 @@ export interface MockLLMOptions {
 export class MockLLMProvider implements LLMProvider {
   readonly id: 'openai' | 'anthropic';
   public calls: { method: string; req: unknown }[] = [];
+  private structuredCallCount = 0;
 
   constructor(
     id: 'openai' | 'anthropic' = 'openai',
@@ -88,7 +97,11 @@ export class MockLLMProvider implements LLMProvider {
 
   async completeStructured<T>(req: StructuredRequest<T>): Promise<StructuredResult<T>> {
     this.calls.push({ method: 'completeStructured', req });
-    const fixture = this.opts.structuredBySchema?.[req.schemaName] ?? this.opts.structured ?? {};
+    const seq = this.opts.structuredSequence;
+    const fixture =
+      seq && seq.length > 0
+        ? seq[Math.min(this.structuredCallCount++, seq.length - 1)]
+        : (this.opts.structuredBySchema?.[req.schemaName] ?? this.opts.structured ?? {});
     const parsed = (req.schema as z.ZodType<T>).safeParse(fixture);
     if (!parsed.success) {
       throw new Error(`MockLLMProvider fixture failed schema: ${parsed.error.message}`);
@@ -249,6 +262,8 @@ export interface MockGitOptions {
   head?: string;
   /** Head `currentHead()` returns AFTER `sync()` runs — simulates fetch+reset advancing HEAD. */
   syncedHead?: string;
+  /** Override `defaultBranch()` so tests can simulate a non-`main` default (e.g. `master`). */
+  defaultBranch?: string;
 }
 
 export class MockGitClient implements GitClient {
@@ -274,6 +289,9 @@ export class MockGitClient implements GitClient {
   }
   async currentHead(): Promise<string> {
     return this.syncedHead ?? this.opts.head ?? 'a1b2c3d4';
+  }
+  async defaultBranch(): Promise<string> {
+    return this.opts.defaultBranch ?? 'main';
   }
   async diffNameOnly(): Promise<string[]> {
     return this.opts.diffNameOnly ?? [];

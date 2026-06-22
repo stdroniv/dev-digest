@@ -5,16 +5,25 @@ import type { Skill } from "@devdigest/shared";
 import messages from "../../../../../../../../messages/en/skills.json";
 
 const mutate = vi.fn();
+const createMutate = vi.fn();
+const deleteMutate = vi.fn();
+const push = vi.fn();
 vi.mock("@/lib/hooks/skills", () => ({
   useUpdateSkill: () => ({ mutate, isPending: false, isSuccess: false, data: undefined }),
+  useCreateSkill: () => ({ mutate: createMutate, isPending: false }),
+  useDeleteSkill: () => ({ mutate: deleteMutate, isPending: false }),
 }));
 vi.mock("@/lib/toast", () => ({ useToast: () => ({ success: vi.fn(), error: vi.fn() }) }));
+vi.mock("next/navigation", () => ({ useRouter: () => ({ push }) }));
 
 import { ConfigTab } from "./ConfigTab";
 
 afterEach(() => {
   cleanup();
   mutate.mockReset();
+  createMutate.mockReset();
+  deleteMutate.mockReset();
+  push.mockReset();
 });
 
 const SKILL: Skill = {
@@ -52,13 +61,95 @@ describe("Skill ConfigTab", () => {
     expect(screen.queryByText("v0")).not.toBeInTheDocument();
   });
 
-  it("saves the current form via the update mutation", () => {
+  it("disables Save until a field changes, then patches only what changed", () => {
     renderWithIntl(<ConfigTab skill={SKILL} />);
-    fireEvent.click(screen.getByText("Save"));
-    expect(mutate).toHaveBeenCalledTimes(1);
-    expect(mutate.mock.calls[0]![0]).toMatchObject({
-      id: "sk1",
-      patch: { name: "pr-quality-rubric", type: "rubric", enabled: true },
+    const saveBtn = screen.getByText("Save").closest("button")!;
+    expect(saveBtn).toBeDisabled();
+
+    fireEvent.change(screen.getByDisplayValue("pr-quality-rubric"), {
+      target: { value: "renamed-rubric" },
     });
+    expect(saveBtn).toBeEnabled();
+
+    fireEvent.click(saveBtn);
+    expect(mutate).toHaveBeenCalledTimes(1);
+    // Only the edited field is sent — the unchanged body is omitted so it does
+    // not spuriously bump (or fail to bump) the server-side version.
+    expect(mutate.mock.calls[0]![0]).toEqual(
+      expect.objectContaining({ id: "sk1", patch: { name: "renamed-rubric" } }),
+    );
+  });
+
+  it("includes the body in the patch when the body changes", () => {
+    renderWithIntl(<ConfigTab skill={SKILL} />);
+    fireEvent.change(screen.getByDisplayValue(/Evaluate the PR\./), {
+      target: { value: "# PR Quality Rubric\nEvaluate it thoroughly." },
+    });
+    fireEvent.click(screen.getByText("Save"));
+    expect(mutate.mock.calls[0]![0]).toEqual(
+      expect.objectContaining({
+        patch: { body: "# PR Quality Rubric\nEvaluate it thoroughly." },
+      }),
+    );
+  });
+
+  it("does not render the delete control in create mode", () => {
+    renderWithIntl(
+      <ConfigTab
+        create={{ defaultName: "new-skill", defaultBody: "# New skill", onCreated: vi.fn(), onCancel: vi.fn() }}
+      />,
+    );
+    expect(screen.queryByText("Delete skill")).not.toBeInTheDocument();
+  });
+
+  it("opens a confirmation modal and Cancel closes it without deleting", () => {
+    renderWithIntl(<ConfigTab skill={SKILL} />);
+    fireEvent.click(screen.getByText("Delete skill"));
+    // Modal is up (title shown), nothing deleted yet.
+    expect(screen.getByText("Delete this skill?")).toBeInTheDocument();
+    expect(deleteMutate).not.toHaveBeenCalled();
+
+    fireEvent.click(screen.getByText("Cancel"));
+    expect(screen.queryByText("Delete this skill?")).not.toBeInTheDocument();
+    expect(deleteMutate).not.toHaveBeenCalled();
+  });
+
+  it("confirming the modal deletes the skill, then toasts and routes to /skills", () => {
+    renderWithIntl(<ConfigTab skill={SKILL} />);
+    fireEvent.click(screen.getByText("Delete skill"));
+    // The modal's confirm button (distinct from the trigger label "Delete skill").
+    fireEvent.click(screen.getByText("Delete"));
+
+    expect(deleteMutate).toHaveBeenCalledTimes(1);
+    expect(deleteMutate.mock.calls[0]![0]).toBe("sk1");
+
+    // Drive the success path the component passes to mutate.
+    deleteMutate.mock.calls[0]![1].onSuccess();
+    expect(push).toHaveBeenCalledWith("/skills");
+  });
+
+  it("in create mode persists nothing until Save, then POSTs the new skill", () => {
+    const onCreated = vi.fn();
+    renderWithIntl(
+      <ConfigTab
+        create={{
+          defaultName: "new-skill 2",
+          defaultBody: "# New skill",
+          onCreated,
+          onCancel: vi.fn(),
+        }}
+      />,
+    );
+    // Seeded with the unique default name and a Draft badge; no create call yet.
+    expect(screen.getByDisplayValue("new-skill 2")).toBeInTheDocument();
+    expect(screen.getByText("Draft")).toBeInTheDocument();
+    expect(createMutate).not.toHaveBeenCalled();
+
+    // Save is enabled immediately (name + body present) and creates the skill.
+    fireEvent.click(screen.getByText("Save").closest("button")!);
+    expect(createMutate).toHaveBeenCalledTimes(1);
+    expect(createMutate.mock.calls[0]![0]).toEqual(
+      expect.objectContaining({ name: "new-skill 2", body: "# New skill", type: "custom" }),
+    );
   });
 });

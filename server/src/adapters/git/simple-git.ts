@@ -91,6 +91,36 @@ export class SimpleGitClient implements GitClient {
     return (await this.git(repo).revparse(['HEAD'])).trim();
   }
 
+  /**
+   * The default branch the clone checked out. `clone` (no `--branch`) checks out
+   * the remote's default branch, so the current branch name IS the default. Prefer
+   * origin/HEAD's target when available (survives a later detach); fall back to the
+   * current branch, then `main` if HEAD is detached (returns "HEAD").
+   */
+  async defaultBranch(repo: RepoRef): Promise<string> {
+    const g = this.git(repo);
+    try {
+      // e.g. "origin/master" → "master"
+      const ref = (await g.revparse(['--abbrev-ref', 'origin/HEAD'])).trim();
+      const name = ref.replace(/^origin\//, '');
+      if (name && name !== 'HEAD') return name;
+    } catch {
+      // origin/HEAD may be unset on a shallow clone — fall through to HEAD.
+    }
+    const head = (await g.revparse(['--abbrev-ref', 'HEAD'])).trim();
+    if (head && head !== 'HEAD') return head;
+    // Both local refs failed (detached HEAD + no origin/HEAD): query the remote
+    // directly. Acceptable here — we're already inside a clone-job network context.
+    try {
+      const raw = (await g.raw(['ls-remote', '--symref', 'origin', 'HEAD'])).trim();
+      const match = raw.match(/^ref:\s+refs\/heads\/(\S+)\s+HEAD/m);
+      if (match?.[1]) return match[1];
+    } catch {
+      // Remote unreachable or returned an unexpected format.
+    }
+    return 'main';
+  }
+
   async diff(repo: RepoRef, base: string, head: string): Promise<UnifiedDiff> {
     const raw = await this.git(repo).diff([`${base}...${head}`]);
     return parseUnifiedDiff(raw);

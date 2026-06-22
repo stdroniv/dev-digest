@@ -249,6 +249,8 @@ export interface MockGitOptions {
   head?: string;
   /** Head `currentHead()` returns AFTER `sync()` runs — simulates fetch+reset advancing HEAD. */
   syncedHead?: string;
+  /** Override `defaultBranch()` so tests can simulate a non-`main` default (e.g. `master`). */
+  defaultBranch?: string;
 }
 
 export class MockGitClient implements GitClient {
@@ -274,6 +276,9 @@ export class MockGitClient implements GitClient {
   }
   async currentHead(): Promise<string> {
     return this.syncedHead ?? this.opts.head ?? 'a1b2c3d4';
+  }
+  async defaultBranch(): Promise<string> {
+    return this.opts.defaultBranch ?? 'main';
   }
   async diffNameOnly(): Promise<string[]> {
     return this.opts.diffNameOnly ?? [];

@@ -213,6 +213,12 @@ export interface GitClient {
    */
   sync(repo: RepoRef, branch: string): Promise<{ head: string }>;
   currentHead(repo: RepoRef): Promise<string>;
+  /**
+   * The repo's default branch name as checked out by `clone` (e.g. `main` or
+   * `master`). Used to build correct GitHub blob links and to target re-syncs at
+   * the right branch instead of a hardcoded default.
+   */
+  defaultBranch(repo: RepoRef): Promise<string>;
   diff(repo: RepoRef, base: string, head: string): Promise<UnifiedDiff>;
   /**
    * Names of files changed between two commits (`git diff --name-only base..head`).

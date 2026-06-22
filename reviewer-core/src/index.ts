@@ -57,3 +57,24 @@ export {
 // The single OpenAI-compatible structured provider (OpenRouter), shared by the
 // CI runner and the server's openrouter path. Owns session grouping + guards.
 export { OpenRouterProvider, type OpenRouterProviderOptions } from './llm/openrouter.js';
+
+// Conventions Extractor — sampled repo files → LLM candidate drafts → mechanical
+// citation verification → a single `repo-conventions` skill body. Pure (the only
+// side effect is the injected LLM in extractConventions).
+export {
+  extractConventions,
+  buildExtractionPrompt,
+  type ConventionSample,
+  type ExtractConventionsInput,
+} from './conventions/extract.js';
+export {
+  verifyConventions,
+  verificationSummary,
+  locateSnippet,
+  type ConventionVerifyResult,
+} from './conventions/verify.js';
+export {
+  assembleConventionSkill,
+  REPO_CONVENTIONS_SKILL_NAME,
+  type AssembledConventionSkill,
+} from './conventions/assemble.js';

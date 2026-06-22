@@ -45,16 +45,22 @@ d('skills CRUD + versions + import', () => {
     body: '# Rule\nDo the thing.',
   };
 
-  it('creates a skill as a DRAFT (v0, no snapshot) with a derived token count and lists it', async () => {
+  it('creates a skill at v1 (with a v1 snapshot) + a derived token count, and lists it', async () => {
     const app = await makeApp();
-    const created = await app.inject({ method: 'POST', url: '/skills', payload: createBody });
+    const created = await app.inject({
+      method: 'POST',
+      url: '/skills',
+      payload: { ...createBody, name: 'unit-rule-create' },
+    });
     expect(created.statusCode).toBe(201);
     const skill = created.json();
-    // A freshly-created skill is an unsaved draft: version 0, no body snapshot yet.
-    expect(skill).toMatchObject({ name: 'unit-rule', type: 'custom', version: 0, enabled: true });
+    // The client defers the POST until Save, so creation earns v1 directly.
+    expect(skill).toMatchObject({ name: 'unit-rule-create', type: 'custom', version: 1, enabled: true });
     expect(typeof skill.tokens).toBe('number');
     expect(skill.tokens).toBeGreaterThan(0);
-    expect((await app.inject({ method: 'GET', url: `/skills/${skill.id}/versions` })).json()).toEqual([]);
+    const versions = (await app.inject({ method: 'GET', url: `/skills/${skill.id}/versions` })).json();
+    expect(versions.map((v: { version: number }) => v.version)).toEqual([1]);
+    expect(versions[0].body).toBe('# Rule\nDo the thing.');
 
     const list = await app.inject({ method: 'GET', url: '/skills' });
     expect(list.statusCode).toBe(200);
@@ -62,30 +68,54 @@ d('skills CRUD + versions + import', () => {
     await app.close();
   });
 
-  it('first save commits v1 (not v2); later body edits bump; enabled-only toggles do not', async () => {
+  it('body edits bump the version + snapshot; metadata-only edits do not', async () => {
     const app = await makeApp();
-    const id = (await app.inject({ method: 'POST', url: '/skills', payload: createBody })).json().id as string;
+    const id = (
+      await app.inject({ method: 'POST', url: '/skills', payload: { ...createBody, name: 'unit-rule-version' } })
+    ).json().id as string;
 
-    // enabled-only toggle on a draft → still a draft (no body in the save → no commit)
+    // enabled-only toggle → no body change, so the version stays at v1
     const toggled = await app.inject({ method: 'PUT', url: `/skills/${id}`, payload: { enabled: false } });
     expect(toggled.statusCode).toBe(200);
-    expect(toggled.json().version).toBe(0);
+    expect(toggled.json().version).toBe(1);
     expect(toggled.json().enabled).toBe(false);
 
-    // first body save COMMITS v1 — the scaffold never burns a version
-    const first = await app.inject({ method: 'PUT', url: `/skills/${id}`, payload: { body: '# Rule\nFirst real content.' } });
+    // first body change bumps to v2
+    const first = await app.inject({ method: 'PUT', url: `/skills/${id}`, payload: { body: '# Rule\nSecond content.' } });
     expect(first.statusCode).toBe(200);
-    expect(first.json().version).toBe(1);
+    expect(first.json().version).toBe(2);
 
-    // a later body change bumps to v2
+    // a later body change bumps to v3
     const edited = await app.inject({ method: 'PUT', url: `/skills/${id}`, payload: { body: '# Rule\nDo it better.' } });
     expect(edited.statusCode).toBe(200);
-    expect(edited.json().version).toBe(2);
+    expect(edited.json().version).toBe(3);
 
     const versions = (await app.inject({ method: 'GET', url: `/skills/${id}/versions` })).json();
-    expect(versions.map((v: { version: number }) => v.version)).toEqual([2, 1]); // newest first
-    expect(versions[1].body).toBe('# Rule\nFirst real content.'); // v1 = first authored save, NOT the scaffold
+    expect(versions.map((v: { version: number }) => v.version)).toEqual([3, 2, 1]); // newest first
+    expect(versions[2].body).toBe('# Rule\nDo the thing.'); // v1 = the body at create
     expect(versions[0].body).toBe('# Rule\nDo it better.');
+    await app.close();
+  });
+
+  it('rejects a duplicate skill name (case-insensitive) with 409, on create and rename', async () => {
+    const app = await makeApp();
+    const first = await app.inject({ method: 'POST', url: '/skills', payload: { ...createBody, name: 'dupe-rule' } });
+    expect(first.statusCode).toBe(201);
+
+    // Same name (different case) → 409 conflict, nothing created.
+    const dup = await app.inject({ method: 'POST', url: '/skills', payload: { ...createBody, name: 'DUPE-RULE' } });
+    expect(dup.statusCode).toBe(409);
+
+    // Renaming a different skill onto the taken name → 409.
+    const otherId = (
+      await app.inject({ method: 'POST', url: '/skills', payload: { ...createBody, name: 'other-rule' } })
+    ).json().id as string;
+    const renamed = await app.inject({ method: 'PUT', url: `/skills/${otherId}`, payload: { name: 'dupe-rule' } });
+    expect(renamed.statusCode).toBe(409);
+
+    // Renaming a skill to its OWN name (no real change) is fine.
+    const noop = await app.inject({ method: 'PUT', url: `/skills/${otherId}`, payload: { name: 'other-rule' } });
+    expect(noop.statusCode).toBe(200);
     await app.close();
   });
 

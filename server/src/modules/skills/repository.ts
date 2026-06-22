@@ -1,8 +1,8 @@
-import { and, desc, eq } from 'drizzle-orm';
+import { and, desc, eq, sql } from 'drizzle-orm';
 import type { Db } from '../../db/client.js';
 import * as t from '../../db/schema.js';
 import type { SkillSource, SkillType } from '@devdigest/shared';
-import { DRAFT_SKILL_VERSION, INITIAL_SKILL_VERSION } from './constants.js';
+import { INITIAL_SKILL_VERSION } from './constants.js';
 import { isBodyChange } from './helpers.js';
 
 /**
@@ -53,6 +53,23 @@ export class SkillsRepository {
     return row;
   }
 
+  /**
+   * Find a skill in a workspace by name, CASE-INSENSITIVELY. Used to block
+   * duplicate names on create/rename (`lower(name)` matches the unique index).
+   */
+  async findByName(workspaceId: string, name: string): Promise<SkillRow | undefined> {
+    const [row] = await this.db
+      .select()
+      .from(t.skills)
+      .where(
+        and(
+          eq(t.skills.workspaceId, workspaceId),
+          sql`lower(${t.skills.name}) = lower(${name})`,
+        ),
+      );
+    return row;
+  }
+
   async deleteById(workspaceId: string, id: string): Promise<boolean> {
     const rows = await this.db
       .delete(t.skills)
@@ -62,9 +79,9 @@ export class SkillsRepository {
   }
 
   /**
-   * Insert a skill as a DRAFT (version 0, no snapshot). The body present here is a
-   * scaffold/seed; the first save commits it as v1 (see `update`). This keeps an
-   * auto-created placeholder from occupying v1.
+   * Insert a skill at v1 with its immutable v1 body snapshot. The client defers
+   * the POST until the user's first Save, so by the time we persist, the body is
+   * the user's authored content — it earns v1 directly (no draft state).
    */
   async insert(values: InsertSkill): Promise<SkillRow> {
     const [row] = await this.db
@@ -77,20 +94,17 @@ export class SkillsRepository {
         source: values.source ?? 'manual',
         body: values.body,
         enabled: values.enabled ?? true,
-        version: DRAFT_SKILL_VERSION,
+        version: INITIAL_SKILL_VERSION,
         evidenceFiles: values.evidenceFiles ?? null,
       })
       .returning();
+    await this.snapshotBody(row!.id, INITIAL_SKILL_VERSION, row!.body);
     return row!;
   }
 
   /**
-   * Update a skill. Versioning rules:
-   * - A DRAFT (version 0, never saved) COMMITS to v1 on its first save that
-   *   includes a body — even if the body still equals the scaffold — so the user's
-   *   first authored content is v1, not v2.
-   * - A committed skill bumps the version + appends an immutable snapshot ONLY on a
-   *   real body change; name/description/type/enabled edits do not version.
+   * Update a skill. A body change bumps the version + appends an immutable
+   * snapshot; name/description/type/enabled edits do NOT version.
    */
   async update(
     workspaceId: string,
@@ -100,16 +114,8 @@ export class SkillsRepository {
     const existing = await this.getById(workspaceId, id);
     if (!existing) return undefined;
 
-    const isDraft = existing.version < INITIAL_SKILL_VERSION;
-    // The first save of a draft commits v1 (the scaffold never burns a version).
-    const commitDraft = isDraft && patch.body !== undefined;
-    const bumpCommitted = !isDraft && isBodyChange(existing, patch);
-    const writeSnapshot = commitDraft || bumpCommitted;
-    const nextVersion = commitDraft
-      ? INITIAL_SKILL_VERSION
-      : bumpCommitted
-        ? existing.version + 1
-        : existing.version;
+    const writeSnapshot = isBodyChange(existing, patch);
+    const nextVersion = writeSnapshot ? existing.version + 1 : existing.version;
 
     const [row] = await this.db
       .update(t.skills)

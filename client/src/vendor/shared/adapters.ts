@@ -177,6 +177,12 @@ export interface GitClient {
   clone(repo: RepoRef, url: string, opts?: CloneOptions): Promise<{ path: string }>;
   fetchPullHead(repo: RepoRef, n: number): Promise<void>;
   currentHead(repo: RepoRef): Promise<string>;
+  /**
+   * The repo's default branch name as checked out by `clone` (e.g. `main` or
+   * `master`). Used to build correct GitHub blob links and to target re-syncs at
+   * the right branch instead of a hardcoded default.
+   */
+  defaultBranch(repo: RepoRef): Promise<string>;
   diff(repo: RepoRef, base: string, head: string): Promise<UnifiedDiff>;
   blame(repo: RepoRef, path: string): Promise<BlameLine[]>;
   log(repo: RepoRef, path?: string): Promise<GitCommit[]>;

@@ -55,7 +55,12 @@ export class RepoService {
     const { path } = await this.container.git.clone({ owner, name }, cloneUrl, {
       depth: CLONE_DEPTH,
     });
-    await this.repo.updateClonePath(repoId, path);
+    // Capture the repo's real default branch (e.g. `master`) so GitHub blob links
+    // resolve and re-syncs target the right branch — not a hardcoded `main`.
+    const defaultBranch = await this.container.git
+      .defaultBranch({ owner, name })
+      .catch(() => undefined);
+    await this.repo.updateClonePath(repoId, path, defaultBranch);
 
     // T2.2 — kick off the indexer in the background. ENQUEUE (not call) so the
     // clone job closes immediately and the (heavier) index runs as its own

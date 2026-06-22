@@ -168,14 +168,51 @@ export const CommunitySkill = z.object({
 });
 export type CommunitySkill = z.infer<typeof CommunitySkill>;
 
-// ---- Conventions ----
+// ---- Conventions (Conventions Extractor) ----
+// A repo coding convention the user lifts into a reusable skill. Two shapes:
+//  - ConventionDraft: the RAW LLM output (no id/status — the model never invents
+//    those). Each draft must cite the exact file + line range + snippet proving
+//    the rule; code-side verification drops any whose evidence doesn't exist.
+//  - ConventionCandidate: the persisted / UI DTO (adds id, repo, status, lines).
+export const ConventionEvidence = z.object({
+  file: z.string(),
+  start_line: z.number().int().positive(),
+  end_line: z.number().int().positive(),
+  snippet: z.string(),
+});
+export type ConventionEvidence = z.infer<typeof ConventionEvidence>;
+
+export const ConventionDraft = z.object({
+  category: z.string(),
+  rule: z.string(),
+  evidence: ConventionEvidence,
+  confidence: z.number().min(0).max(1),
+});
+export type ConventionDraft = z.infer<typeof ConventionDraft>;
+
+// Wrapper the extractor model returns (a named array makes the json_schema /
+// tool-call shape stable across providers).
+export const ConventionExtraction = z.object({
+  conventions: z.array(ConventionDraft),
+});
+export type ConventionExtraction = z.infer<typeof ConventionExtraction>;
+
+export const ConventionStatus = z.enum(['pending', 'accepted', 'rejected']);
+export type ConventionStatus = z.infer<typeof ConventionStatus>;
+
 export const ConventionCandidate = z.object({
   id: z.string(),
+  repo_id: z.string().nullable(),
+  run_id: z.string().nullable(),
+  category: z.string().nullable(),
   rule: z.string(),
-  evidence_path: z.string(),
-  evidence_snippet: z.string(),
-  confidence: z.number().min(0).max(1),
-  accepted: z.boolean(),
+  evidence_path: z.string().nullable(),
+  evidence_snippet: z.string().nullable(),
+  evidence_start_line: z.number().int().nullable(),
+  evidence_end_line: z.number().int().nullable(),
+  confidence: z.number().min(0).max(1).nullable(),
+  status: ConventionStatus,
+  created_at: z.string(),
 });
 export type ConventionCandidate = z.infer<typeof ConventionCandidate>;
 

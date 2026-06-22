@@ -1,5 +1,6 @@
 import type { Container } from '../../platform/container.js';
 import type { Skill, SkillImportPreview, SkillSource, SkillType, SkillVersion } from '@devdigest/shared';
+import { ConflictError } from '../../platform/errors.js';
 import { SkillsRepository } from './repository.js';
 import { toSkillDto, toSkillVersionDto, deriveSkillName } from './helpers.js';
 import { ImportError, parseImport } from './import-parse.js';
@@ -71,6 +72,8 @@ export class SkillsService {
   }
 
   async create(workspaceId: string, input: CreateSkillInput): Promise<Skill> {
+    const clash = await this.repo.findByName(workspaceId, input.name);
+    if (clash) throw new ConflictError(`A skill named "${input.name}" already exists.`);
     const row = await this.repo.insert({
       workspaceId,
       name: input.name,
@@ -88,6 +91,12 @@ export class SkillsService {
     id: string,
     patch: UpdateSkillInput,
   ): Promise<Skill | undefined> {
+    if (patch.name !== undefined) {
+      const clash = await this.repo.findByName(workspaceId, patch.name);
+      if (clash && clash.id !== id) {
+        throw new ConflictError(`A skill named "${patch.name}" already exists.`);
+      }
+    }
     const row = await this.repo.update(workspaceId, id, {
       ...(patch.name !== undefined ? { name: patch.name } : {}),
       ...(patch.description !== undefined ? { description: patch.description } : {}),

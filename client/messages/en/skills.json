@@ -127,7 +127,8 @@
     "save": "Save",
     "saving": "Saving…",
     "saved": "Saved (v{version})",
-    "savedToast": "Saved \"{name}\" (v{version})"
+    "savedToast": "Saved \"{name}\" (v{version})",
+    "saveError": "Couldn't save the skill."
   },
   "versions": {
     "title": "Version history",
@@ -141,6 +142,7 @@
   "new": {
     "defaultName": "new-skill",
     "defaultBody": "# New skill\n\nDescribe the rule the reviewing agent should apply…",
-    "created": "Created a new skill — edit its body and enable it."
+    "created": "Created a new skill — edit its body and enable it.",
+    "cancel": "Cancel"
   }
 }

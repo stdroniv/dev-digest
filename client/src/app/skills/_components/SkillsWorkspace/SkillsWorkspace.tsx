@@ -9,12 +9,13 @@ import { useTranslations } from "next-intl";
 import { Button, Dropdown, TextInput, Icon, EmptyState, ErrorState, Skeleton, Badge } from "@devdigest/ui";
 import type { Skill } from "@devdigest/shared";
 import { AppShell } from "@/components/app-shell";
-import { useToast } from "@/lib/toast";
-import { useSkills, useSkill, useCreateSkill, useUpdateSkill } from "@/lib/hooks/skills";
+import { useSkills, useSkill, useUpdateSkill } from "@/lib/hooks/skills";
 import { ApiError } from "@/lib/api";
+import { uniqueName } from "@/lib/unique-name";
 import { SkillCard } from "../SkillCard";
 import { ImportSkillDrawer } from "../ImportSkillDrawer";
 import { SkillEditor } from "../../[id]/_components/SkillEditor";
+import { ConfigTab } from "../../[id]/_components/SkillEditor/_components/ConfigTab";
 import { VALID_SKILL_TABS } from "../../[id]/_components/SkillEditor/constants";
 
 export function SkillsWorkspace({
@@ -28,15 +29,16 @@ export function SkillsWorkspace({
 }) {
   const t = useTranslations("skills");
   const router = useRouter();
-  const toast = useToast();
 
   const { data: skills, isLoading, isError, error, refetch } = useSkills();
   const selected = useSkill(selectedId);
-  const create = useCreateSkill();
   const update = useUpdateSkill();
 
   const [query, setQuery] = React.useState("");
   const [importing, setImporting] = React.useState(false);
+  // An unsaved new-skill draft. Nothing is persisted until the user hits Save in
+  // the editor (then it's created at v1); clicking Create just opens this form.
+  const [draft, setDraft] = React.useState<{ defaultName: string; defaultBody: string } | null>(null);
 
   const activeTab = VALID_SKILL_TABS.includes(tab) ? tab : "config";
 
@@ -44,23 +46,17 @@ export function SkillsWorkspace({
     `${s.name} ${s.description}`.toLowerCase().includes(query.toLowerCase()),
   );
 
-  const open = (id: string) => router.push(`/skills/${id}?tab=${activeTab}`);
+  const open = (id: string) => {
+    setDraft(null);
+    router.push(`/skills/${id}?tab=${activeTab}`);
+  };
 
+  // Open an unsaved draft seeded with a collision-free default name.
   const onCreate = () =>
-    create.mutate(
-      {
-        name: t("new.defaultName"),
-        description: "",
-        type: "custom",
-        body: t("new.defaultBody"),
-      },
-      {
-        onSuccess: (skill) => {
-          toast.success(t("new.created"));
-          router.push(`/skills/${skill.id}?tab=config`);
-        },
-      },
-    );
+    setDraft({
+      defaultName: uniqueName((skills ?? []).map((sk) => sk.name), t("new.defaultName")),
+      defaultBody: t("new.defaultBody"),
+    });
 
   const crumb = [{ label: t("page.crumbLab") }, { label: t("page.crumbSkills"), href: "/skills" }];
 
@@ -130,7 +126,31 @@ export function SkillsWorkspace({
         </div>
 
         {/* right: editor / prompt */}
-        {!selectedId ? (
+        {draft ? (
+          <div style={{ flex: 1, display: "flex", flexDirection: "column", minWidth: 0, minHeight: 0 }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 12, padding: "16px 24px 0", flexShrink: 0 }}>
+              <Icon.Sparkles size={18} style={{ color: "var(--accent)" }} />
+              <h1 className="mono" style={{ fontSize: 16, fontWeight: 700 }}>
+                {draft.defaultName}
+              </h1>
+              <Badge color="var(--text-muted)">{t("preview.draft")}</Badge>
+            </div>
+            <div style={{ flex: 1, minHeight: 0, overflow: "auto", padding: 24 }}>
+              <ConfigTab
+                key="new-skill-draft"
+                create={{
+                  defaultName: draft.defaultName,
+                  defaultBody: draft.defaultBody,
+                  onCreated: (skill) => {
+                    setDraft(null);
+                    router.push(`/skills/${skill.id}?tab=config`);
+                  },
+                  onCancel: () => setDraft(null),
+                }}
+              />
+            </div>
+          </div>
+        ) : !selectedId ? (
           <div style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center" }}>
             <EmptyState icon="Sparkles" title={t("page.selectPrompt.title")} body={t("page.selectPrompt.body")} />
           </div>

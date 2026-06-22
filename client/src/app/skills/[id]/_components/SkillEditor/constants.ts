@@ -9,12 +9,13 @@ export interface SkillEditorTab {
 }
 
 /**
- * Skill editor tabs. L02 ships Config + Preview + Versions; the Evals/Stats tabs
- * in the design are a later lesson (no eval/aggregation data yet).
+ * Skill editor tabs. Config + Preview + Stats + Versions; the Evals tab in the
+ * design is a later lesson (no eval data yet).
  */
 export const TABS: readonly SkillEditorTab[] = [
   { key: "config", labelKey: "tabs.config", icon: "Settings" },
   { key: "preview", labelKey: "tabs.preview", icon: "Eye" },
+  { key: "stats", labelKey: "tabs.stats", icon: "BarChart" },
   { key: "versions", labelKey: "tabs.versions", icon: "History" },
 ];
 

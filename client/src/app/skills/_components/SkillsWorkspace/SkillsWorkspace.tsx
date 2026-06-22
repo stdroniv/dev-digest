@@ -48,7 +48,9 @@ export function SkillsWorkspace({
 
   const open = (id: string) => {
     setDraft(null);
-    router.push(`/skills/${id}?tab=${activeTab}`);
+    // scroll:false — selecting a skill is an intra master/detail navigation; the
+    // App Router default would reset the left list's scroll container to the top.
+    router.push(`/skills/${id}?tab=${activeTab}`, { scroll: false });
   };
 
   // Open an unsaved draft seeded with a collision-free default name.

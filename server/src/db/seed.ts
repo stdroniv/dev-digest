@@ -9,7 +9,7 @@ import {
   TEST_QUALITY_REVIEWER_PROMPT,
   API_CONTRACT_REVIEWER_PROMPT,
 } from './seed-prompts.js';
-import { DEMO_SKILLS, AGENT_SKILL_LINKS } from './seed-skills.js';
+import { DEMO_SKILLS, AGENT_SKILL_LINKS, STATS_DEMO_REVIEWS } from './seed-skills.js';
 
 /** Default provider/model for the built-in reviewer agents. */
 const DEFAULT_PROVIDER = 'openrouter' as const;
@@ -367,6 +367,74 @@ export async function seed(db: Db): Promise<{ workspaceId: string; userId: strin
       .update(t.reviews)
       .set({ runId: seededRunId, agentId: securityAgent.id })
       .where(and(eq(t.reviews.prId, pr!.id), eq(t.reviews.kind, 'review')));
+  }
+
+  // ---- Skills → Stats tab demo (PR #501) ----
+  // A second demo PR whose reviews are attributed to the `pr-quality-rubric`
+  // agents, with categorized + decided findings, so that skill's Stats tab shows
+  // realistic non-zero metrics. Guarded on PR #501 so re-seeding is idempotent.
+  let [statsPr] = await db
+    .select()
+    .from(t.pullRequests)
+    .where(and(eq(t.pullRequests.repoId, repoId), eq(t.pullRequests.number, 501)));
+  if (!statsPr) {
+    [statsPr] = await db
+      .insert(t.pullRequests)
+      .values({
+        workspaceId,
+        repoId,
+        number: 501,
+        title: 'Refactor checkout totals and tax rounding',
+        author: 'devon.li',
+        branch: 'feat/checkout-totals',
+        base: 'main',
+        headSha: 'b7c8d9e0f1a2',
+        additions: 184,
+        deletions: 52,
+        filesCount: 7,
+        status: 'needs_review',
+        body: 'Refactor checkout total calculation and fix tax rounding for multi-currency carts.',
+      })
+      .returning();
+
+    // Resolve the seeded agents once, by name.
+    const agentRows = await db
+      .select({ id: t.agents.id, name: t.agents.name })
+      .from(t.agents)
+      .where(eq(t.agents.workspaceId, workspaceId));
+    const agentIdByName = new Map(agentRows.map((a) => [a.name, a.id]));
+
+    for (const demo of STATS_DEMO_REVIEWS) {
+      const agentId = agentIdByName.get(demo.agent);
+      if (!agentId) continue;
+      const [review] = await db
+        .insert(t.reviews)
+        .values({
+          workspaceId,
+          prId: statsPr!.id,
+          agentId,
+          kind: 'review',
+          verdict: 'comment',
+          summary: `${demo.agent} review of PR #501 (stats demo).`,
+          model: 'seed',
+        })
+        .returning();
+      await db.insert(t.findings).values(
+        demo.findings.map((f, i) => ({
+          reviewId: review!.id,
+          file: 'src/checkout/totals.ts',
+          startLine: 10 + i,
+          endLine: 10 + i,
+          severity: f.severity,
+          category: f.category,
+          title: `${f.category} finding ${i + 1}`,
+          rationale: `Seeded ${f.category} finding for the skill-stats demo.`,
+          confidence: 0.8,
+          acceptedAt: f.decision === 'accepted' ? new Date() : null,
+          dismissedAt: f.decision === 'dismissed' ? new Date() : null,
+        })),
+      );
+    }
   }
 
   return { workspaceId, userId };

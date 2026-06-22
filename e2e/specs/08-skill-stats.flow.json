@@ -1,0 +1,19 @@
+{
+  "name": "Skill Stats tab shows per-skill usage metrics",
+  "description": "From the Skills Lab, open the seeded `pr-quality-rubric` skill and switch to its Stats tab. Confirms the tab routes (tab=stats) and renders the seeded usage metrics: the 'Used by' KPI, the agents-using panel with a seeded agent (Performance Reviewer) + its Open link, and a finding category in the donut legend. Exercises the new GET /skills/:id/stats endpoint + StatsTab component end-to-end against freshly-seeded data (the seed attributes PR #501's categorized findings to the rubric's agents). NOTE: assertions avoid the SectionLabel panel headings ('Agents using this skill', 'Findings by category') because agent-browser matches CSS-rendered text and those labels are text-transform:uppercase — match case-stable content instead. Assumes a freshly-seeded DB — guaranteed by e2e-web.yml; run locally via the hermetic stack (see e2e/README.md).",
+  "steps": [
+    { "cmd": ["open", "{BASE}/skills"], "label": "load the Skills Lab" },
+    { "cmd": ["wait", "--url", "/skills"], "label": "skills route reached" },
+    { "cmd": ["wait", "--load", "networkidle"], "label": "skills list fetch settles" },
+    { "cmd": ["wait", "--text", "pr-quality-rubric"], "label": "seeded skill card is visible" },
+    { "cmd": ["find", "text", "pr-quality-rubric", "click"], "label": "open the skill" },
+    { "cmd": ["wait", "--text", "Stats"], "label": "the skill editor tabs render" },
+    { "cmd": ["find", "role", "button", "click", "--name", "Stats"], "label": "switch to the Stats tab" },
+    { "cmd": ["wait", "--url", "tab=stats"], "label": "stats tab is active in the URL" },
+    { "cmd": ["wait", "--load", "networkidle"], "label": "stats fetch settles" },
+    { "cmd": ["wait", "--text", "Used by"], "label": "the Used-by KPI renders" },
+    { "cmd": ["wait", "--text", "Performance Reviewer"], "label": "the agents-using panel lists a seeded agent that uses the skill" },
+    { "cmd": ["wait", "--text", "Open"], "label": "each agent row exposes an Open link" },
+    { "cmd": ["wait", "--text", "security"], "label": "the findings-by-category donut legend renders a category" }
+  ]
+}

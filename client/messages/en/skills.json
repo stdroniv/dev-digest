@@ -111,7 +111,24 @@
   "tabs": {
     "config": "Config",
     "preview": "Preview",
+    "stats": "Stats",
     "versions": "Versions"
+  },
+  "stats": {
+    "usedBy": "Used by",
+    "agentsUnit": "agents",
+    "pullFrequency": "Pull frequency",
+    "acceptRate": "Accept rate",
+    "findings30d": "Findings (30D)",
+    "agentsUsing": "Agents using this skill",
+    "open": "Open",
+    "findingsByCategory": "Findings by category",
+    "noAgentsTitle": "No agents yet",
+    "noAgentsBody": "Link this skill to an agent from the agent's Skills tab to see usage here.",
+    "noFindingsTitle": "No findings in the last 30 days",
+    "noFindingsBody": "Findings appear once this skill's agents review a pull request.",
+    "errorTitle": "Couldn't load stats",
+    "errorBody": "The skill statistics failed to load."
   },
   "config": {
     "title": "Configuration",

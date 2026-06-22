@@ -11,5 +11,11 @@ export default function SkillsPage() {
   const search = useSearchParams();
   const tab = search.get("tab") ?? "config";
   // No skill selected yet — selecting one navigates to /skills/:id.
-  return <SkillsWorkspace selectedId={null} tab={tab} onTab={(t) => router.replace(`/skills?tab=${t}`)} />;
+  return (
+    <SkillsWorkspace
+      selectedId={null}
+      tab={tab}
+      onTab={(t) => router.replace(`/skills?tab=${t}`, { scroll: false })}
+    />
+  );
 }

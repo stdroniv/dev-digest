@@ -1,9 +1,9 @@
-import { and, desc, eq, sql } from 'drizzle-orm';
+import { and, asc, desc, eq, gte, inArray, isNotNull, sql } from 'drizzle-orm';
 import type { Db } from '../../db/client.js';
 import * as t from '../../db/schema.js';
 import type { SkillSource, SkillType } from '@devdigest/shared';
 import { INITIAL_SKILL_VERSION } from './constants.js';
-import { isBodyChange } from './helpers.js';
+import { isBodyChange, type SkillStatsRaw } from './helpers.js';
 
 /**
  * A1 — skills data-access. Owns the `skills` table + its immutable `skill_versions`
@@ -132,6 +132,71 @@ export class SkillsRepository {
 
     if (writeSnapshot && row) await this.snapshotBody(row.id, nextVersion, row.body);
     return row;
+  }
+
+  /**
+   * Raw aggregates for one skill's Stats tab over a rolling window. Reads the
+   * `agent_skills` link (owned by the agents module) read-only — cross-module
+   * aggregation, like the pulls/reviews modules already do. The percentage math
+   * is left to `computeSkillStats` (pure); here we only count rows.
+   */
+  async getStats(workspaceId: string, skillId: string, windowDays: number): Promise<SkillStatsRaw> {
+    const windowStart = sql`now() - (${windowDays} * interval '1 day')`;
+
+    // Agents linked to this skill (workspace-scoped), ordered for display.
+    const agents = await this.db
+      .select({ id: t.agents.id, name: t.agents.name })
+      .from(t.agentSkills)
+      .innerJoin(t.agents, eq(t.agents.id, t.agentSkills.agentId))
+      .where(and(eq(t.agentSkills.skillId, skillId), eq(t.agents.workspaceId, workspaceId)))
+      .orderBy(asc(t.agents.name));
+
+    const agentIds = agents.map((a) => a.id);
+    // Empty array → `inArray(col, [])` would emit invalid SQL; use a `false`
+    // predicate so the skill simply matches no reviews/findings.
+    const usesSkill = agentIds.length ? inArray(t.reviews.agentId, agentIds) : sql`false`;
+
+    // Pull frequency: in-window reviews by this skill's agents vs all in-window
+    // reviews with an agent. One pass with FILTER for the numerator.
+    const [pull] = await this.db
+      .select({
+        total: sql<number>`count(*)::int`,
+        forSkill: sql<number>`count(*) filter (where ${usesSkill})::int`,
+      })
+      .from(t.reviews)
+      .where(
+        and(
+          eq(t.reviews.workspaceId, workspaceId),
+          isNotNull(t.reviews.agentId),
+          gte(t.reviews.createdAt, windowStart),
+        ),
+      );
+
+    // In-window findings from this skill's agents (accept/dismiss state + category).
+    const findings = agentIds.length
+      ? await this.db
+          .select({
+            category: t.findings.category,
+            acceptedAt: t.findings.acceptedAt,
+            dismissedAt: t.findings.dismissedAt,
+          })
+          .from(t.findings)
+          .innerJoin(t.reviews, eq(t.reviews.id, t.findings.reviewId))
+          .where(
+            and(
+              eq(t.reviews.workspaceId, workspaceId),
+              inArray(t.reviews.agentId, agentIds),
+              gte(t.reviews.createdAt, windowStart),
+            ),
+          )
+      : [];
+
+    return {
+      agents,
+      reviewsInWindowTotal: pull?.total ?? 0,
+      reviewsInWindowForSkill: pull?.forSkill ?? 0,
+      findings,
+    };
   }
 
   private async snapshotBody(skillId: string, version: number, body: string): Promise<void> {

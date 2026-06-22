@@ -9,6 +9,7 @@ import type {
   Skill,
   SkillImportPreview,
   SkillSource,
+  SkillStats,
   SkillType,
   SkillVersion,
 } from "@devdigest/shared";
@@ -32,6 +33,15 @@ export function useSkillVersions(id: string | null | undefined) {
   return useQuery({
     queryKey: ["skill-versions", id],
     queryFn: () => api.get<SkillVersion[]>(`/skills/${id}/versions`),
+    enabled: !!id,
+  });
+}
+
+/** Usage statistics for the Stats tab (agents, pull %, accept %, findings). */
+export function useSkillStats(id: string | null | undefined) {
+  return useQuery({
+    queryKey: ["skill-stats", id],
+    queryFn: () => api.get<SkillStats>(`/skills/${id}/stats`),
     enabled: !!id,
   });
 }

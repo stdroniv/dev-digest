@@ -17,6 +17,7 @@ import { ImportError } from './import-parse.js';
  *   DELETE /skills/:id                   → delete
  *   GET    /skills/:id/versions          → body history (newest first)
  *   GET    /skills/:id/versions/:version → one body snapshot
+ *   GET    /skills/:id/stats             → usage stats (agents, pull%, accept%, findings)
  *   POST   /skills/import                → parse a file/archive into a PREVIEW
  *
  * The agent SIDE of the link table (`agent_skills`) is owned by the agents module
@@ -98,6 +99,13 @@ export default async function skillsRoutes(appBase: FastifyInstance) {
     const ok = await service.delete(workspaceId, req.params.id);
     if (!ok) throw new NotFoundError('Skill not found');
     return { ok: true };
+  });
+
+  app.get('/skills/:id/stats', { schema: { params: IdParams } }, async (req) => {
+    const { workspaceId } = await getContext(app.container, req);
+    const stats = await service.getStats(workspaceId, req.params.id);
+    if (!stats) throw new NotFoundError('Skill not found');
+    return stats;
   });
 
   app.get('/skills/:id/versions', { schema: { params: IdParams } }, async (req) => {

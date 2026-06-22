@@ -1,8 +1,16 @@
 import type { Container } from '../../platform/container.js';
-import type { Skill, SkillImportPreview, SkillSource, SkillType, SkillVersion } from '@devdigest/shared';
+import type {
+  Skill,
+  SkillImportPreview,
+  SkillSource,
+  SkillStats,
+  SkillType,
+  SkillVersion,
+} from '@devdigest/shared';
 import { ConflictError } from '../../platform/errors.js';
+import { SKILL_STATS_WINDOW_DAYS } from './constants.js';
 import { SkillsRepository } from './repository.js';
-import { toSkillDto, toSkillVersionDto, deriveSkillName } from './helpers.js';
+import { computeSkillStats, toSkillDto, toSkillVersionDto, deriveSkillName } from './helpers.js';
 import { ImportError, parseImport } from './import-parse.js';
 
 /**
@@ -105,6 +113,17 @@ export class SkillsService {
       ...(patch.enabled !== undefined ? { enabled: patch.enabled } : {}),
     });
     return row ? this.dto(row) : undefined;
+  }
+
+  /**
+   * Usage statistics for the Stats tab. Undefined when the skill isn't in the
+   * workspace (→ 404). The DTO is derived on read; nothing is persisted.
+   */
+  async getStats(workspaceId: string, id: string): Promise<SkillStats | undefined> {
+    const skill = await this.repo.getById(workspaceId, id);
+    if (!skill) return undefined;
+    const raw = await this.repo.getStats(workspaceId, id, SKILL_STATS_WINDOW_DAYS);
+    return computeSkillStats(id, SKILL_STATS_WINDOW_DAYS, raw);
   }
 
   /** Body version history, newest first. Undefined when the skill isn't in the workspace. */

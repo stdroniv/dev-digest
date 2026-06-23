@@ -81,6 +81,44 @@ cold; never edit or delete existing entries.
   write-up from a subagent (architecture maps, research digests), use `general-purpose`; reserve
   `Explore` for "find me where X is" fan-out.
 
+- Custom project subagents (`.claude/agents/*.md`, e.g. `researcher`, `planner`) **auto-load the
+  CLAUDE.md hierarchy** for their CWD — unlike the built-in `Explore`/`Plan` agents, which skip it.
+  Two consequences when writing an agent body: (a) do **not** instruct it to re-read root
+  `CLAUDE.md` — it's already in context, so that just burns tokens; (b) module-level docs
+  (`server/CLAUDE.md`, `<module>/INSIGHTS.md`, `docs/*`) are **not** auto-loaded unless the CWD is
+  in that module, so the agent must read those on demand. The efficient pattern is to embed the
+  small "what files exist" map (the root CLAUDE.md "Read when…" routing table + skill list) directly
+  in the agent body and let it `Read` the details only when relevant — discovery-every-run is the
+  context-blowout failure mode.
+
+- Subagent frontmatter `tools:` has **no per-path granularity** — you cannot grant "write only to
+  `docs/plans/`". For a planning/read-only agent that must still save one artifact, the only option
+  is to grant `Write` and enforce the path constraint in the **prompt body** (e.g. `planner.md`:
+  "Write exactly one file, only under `docs/plans/`; you have no Edit tool"). Treat that as a
+  soft guarantee, not an engine-enforced one. Also: new/edited `.claude/agents/*.md` files only
+  become invokable after a **session restart** (or via the `/agents` UI) — they're loaded at session
+  start — and subagents cannot call `AskUserQuestion`/`ExitPlanMode` even if those are listed, so an
+  agent that hits ambiguity must state an assumption rather than ask.
+
+- Project convention for code-acting/planning subagents (`planner.md`, `implementer.md`): route to
+  skills by having the body carry a **module → skill table** and instruct the agent to `Read` only the
+  1–2 relevant `.claude/skills/<name>/SKILL.md` files on demand. Do **not** use the subagent
+  `skills:` frontmatter field for this — it *preloads every listed skill* into context at startup,
+  which defeats the just-in-time loading the whole "embed the map, read details on demand" pattern
+  exists to achieve. Reserve `skills:` frontmatter for a skill the agent needs on literally every run.
+- The agent roster forms a pipeline: `planner` (opus, read-only) writes a plan to
+  `docs/plans/<feature-slug>.md`; `implementer` (sonnet) reads that path and executes it. When adding
+  a stage, keep the handoff artifact a file under `docs/plans/` so each agent stays stateless across
+  the boundary (a subagent gets no parent conversation history — the file *is* the contract).
+- Validating newly-authored `.claude/` tooling **in the same session** exploits a load asymmetry: a
+  new **skill** (`SKILL.md`) loads on-demand immediately and the harness echoes its `description` back
+  in a `system-reminder` (the available-skills list) the moment the frontmatter parses — treat that
+  echo as a free YAML-validity check. A new **agent** (`.claude/agents/*.md`) does **not** load until a
+  session restart, so you cannot runtime-verify it; validate its frontmatter **structurally** instead
+  (keys at column 0, folded `description: >` continuation at 2-space indent — mirror `planner.md`).
+  This sandbox has **no `pip` network and no PyYAML**, and macOS `cat -A` is unavailable (BSD cat), so
+  inspect whitespace with `sed 's/ /·/g'` rather than reaching for a YAML parser.
+
 ## Recurring Errors & Fixes
 
 ## Session Notes

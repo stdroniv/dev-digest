@@ -17,10 +17,12 @@ import { rowToDraft, toConventionDto } from './helpers.js';
 /**
  * Conventions Extractor service.
  *
- * extract(): sample the repo BY CODE (top-ranked source files + lint/ts/prettier
- * configs), ask a CHEAP model for candidate conventions, then DROP every
- * candidate whose cited evidence can't be found in the sampled files (mechanical
- * grounding — no model). Survivors persist as `pending`.
+ * extract(): sample the repo BY CODE (top-ranked source files + lint/ts/prettier/
+ * biome/editorconfig configs), ask a CHEAP model for candidate conventions, DROP
+ * every candidate whose cited evidence can't be found in the sampled files
+ * (mechanical grounding — no model) AND every one below the confidence floor, then
+ * REPLACE the repo's prior non-accepted candidates with the survivors (`pending`),
+ * preserving any the user already accepted so re-scans don't pile up duplicates.
  *
  * The user accepts/rejects/edits candidates; buildSkillPreview() merges the
  * ACCEPTED ones into a single editable `repo-conventions` skill body (rejected
@@ -31,6 +33,8 @@ import { rowToDraft, toConventionDto } from './helpers.js';
 const SAMPLE_FILE_COUNT = 12;
 /** Per-file char budget so a huge file can't blow the prompt. */
 const MAX_SAMPLE_CHARS = 8000;
+/** Confidence floor — drop weakly-supported candidates before they reach the DB. */
+const MIN_CONFIDENCE = 0.6;
 
 /** Config files read directly — repo-intel's ranked sample junk-filters these out. */
 const CONFIG_FILES = [
@@ -45,6 +49,9 @@ const CONFIG_FILES = [
   '.prettierrc.json',
   '.prettierrc.js',
   'prettier.config.js',
+  'biome.json',
+  'biome.jsonc',
+  '.editorconfig',
   'package.json',
 ];
 
@@ -89,12 +96,18 @@ export class ConventionsService {
     const files = new Map(samples.map((s) => [s.path, s.content]));
     const { kept } = verifyConventions(drafts, files);
 
+    // Confidence gate: keep only well-supported candidates (a grounded but
+    // low-confidence rule is still noise for a reviewer to enforce).
+    const confident = kept.filter((d) => d.confidence > MIN_CONFIDENCE);
+
+    // Replace the repo's prior non-accepted candidates with this run, preserving
+    // any the user already accepted — re-scanning must not accumulate duplicates.
     const runId = randomUUID();
-    const rows = await this.repo.insertMany(
+    await this.repo.replaceForRepo(
       workspaceId,
       repoId,
       runId,
-      kept.map((d) => ({
+      confident.map((d) => ({
         category: d.category,
         rule: d.rule,
         evidencePath: d.evidence.file,
@@ -104,7 +117,10 @@ export class ConventionsService {
         confidence: d.confidence,
       })),
     );
-    return rows.map(toConventionDto);
+
+    // Return the full actionable set (accepted + this run's pending): the client
+    // overwrites its cached list with this response, so accepted cards must be in it.
+    return this.list(workspaceId, repoId);
   }
 
   /** Accept / reject / edit one candidate. */

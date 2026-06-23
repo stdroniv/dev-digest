@@ -1,4 +1,4 @@
-import { and, desc, eq, ne } from 'drizzle-orm';
+import { and, desc, eq, ne, sql } from 'drizzle-orm';
 import type { Db } from '../../db/client.js';
 import * as t from '../../db/schema.js';
 import type { ConventionRow } from '../../db/rows.js';
@@ -97,6 +97,24 @@ export class ConventionsRepository {
     return row;
   }
 
+  /** Map domain insert items to Drizzle row values (a run's candidates are `pending`). */
+  private toRows(workspaceId: string, repoId: string, runId: string, items: InsertConvention[]) {
+    return items.map((it) => ({
+      workspaceId,
+      repoId,
+      runId,
+      category: it.category,
+      rule: it.rule,
+      evidencePath: it.evidencePath,
+      evidenceSnippet: it.evidenceSnippet,
+      evidenceStartLine: it.evidenceStartLine,
+      evidenceEndLine: it.evidenceEndLine,
+      confidence: it.confidence,
+      status: 'pending' as const,
+      accepted: false,
+    }));
+  }
+
   /** Bulk-insert the VERIFIED candidates of one extraction run (status = pending). */
   async insertMany(
     workspaceId: string,
@@ -107,23 +125,43 @@ export class ConventionsRepository {
     if (items.length === 0) return [];
     return this.db
       .insert(t.conventions)
-      .values(
-        items.map((it) => ({
-          workspaceId,
-          repoId,
-          runId,
-          category: it.category,
-          rule: it.rule,
-          evidencePath: it.evidencePath,
-          evidenceSnippet: it.evidenceSnippet,
-          evidenceStartLine: it.evidenceStartLine,
-          evidenceEndLine: it.evidenceEndLine,
-          confidence: it.confidence,
-          status: 'pending' as const,
-          accepted: false,
-        })),
-      )
+      .values(this.toRows(workspaceId, repoId, runId, items))
       .returning();
+  }
+
+  /**
+   * Replace a repo's auto-extracted candidates with one fresh run while PRESERVING
+   * any the user already accepted: delete the prior non-accepted rows
+   * (pending/rejected), then insert this run's verified candidates — atomically.
+   * Without this, `extract()` only ever appended, so each re-scan piled up duplicate
+   * `pending` cards. A transaction-scoped advisory lock (keyed on the repo, released
+   * at COMMIT/ROLLBACK) serializes concurrent re-scans of the SAME repo so two
+   * interleaved delete-then-insert pairs can't both insert a batch and re-introduce
+   * the pile-up (there is no unique constraint on `(repo_id, rule)` to catch it).
+   */
+  async replaceForRepo(
+    workspaceId: string,
+    repoId: string,
+    runId: string,
+    items: InsertConvention[],
+  ): Promise<ConventionRow[]> {
+    return this.db.transaction(async (tx) => {
+      await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtext(${repoId}))`);
+      await tx
+        .delete(t.conventions)
+        .where(
+          and(
+            eq(t.conventions.workspaceId, workspaceId),
+            eq(t.conventions.repoId, repoId),
+            ne(t.conventions.status, 'accepted'),
+          ),
+        );
+      if (items.length === 0) return [];
+      return tx
+        .insert(t.conventions)
+        .values(this.toRows(workspaceId, repoId, runId, items))
+        .returning();
+    });
   }
 
   /** Accept / reject / edit one candidate. Keeps `accepted` in sync with `status`. */

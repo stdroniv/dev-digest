@@ -80,15 +80,25 @@ d('Conventions Extractor (Testcontainers pg)', () => {
     if (clonePath) await rm(clonePath, { recursive: true, force: true });
   });
 
-  const app = async () =>
+  const appWith = async (fx: unknown) =>
     buildApp({
       config: config(),
       db: pg.handle.db,
       overrides: {
-        llm: { openai: new MockLLMProvider('openai', { structured: fixture }) },
+        llm: { openai: new MockLLMProvider('openai', { structured: fx }) },
         repoIntel: { getConventionSamples: async () => ['src/users.ts'] } as unknown as RepoIntel,
       },
     });
+  const app = async () => appWith(fixture);
+
+  /** Insert a repo pointing at the shared clone, so a test gets its own candidate set. */
+  const makeRepo = async (slug: string) => {
+    const [repo] = await pg.handle.db
+      .insert(t.repos)
+      .values({ workspaceId, owner: 'acme', name: slug, fullName: `acme/${slug}`, clonePath })
+      .returning();
+    return repo!.id;
+  };
 
   it('extract persists ONLY the verified candidate (drops hallucinated evidence)', async () => {
     const a = await app();
@@ -187,5 +197,63 @@ d('Conventions Extractor (Testcontainers pg)', () => {
       id: string;
     }>;
     expect(after.some((c) => c.id === seeded!.id)).toBe(false);
+  });
+
+  it('re-scanning does NOT accumulate duplicate pending candidates', async () => {
+    const a = await app();
+    const repo = await makeRepo('conv-rescan');
+
+    // Three scans with no accept in between — the model returns the same candidate
+    // each time. Old behaviour (append-only insertMany) left 3 rows; the replace
+    // path must leave exactly 1.
+    for (let i = 0; i < 3; i++) {
+      await a.inject({ method: 'POST', url: `/repos/${repo}/conventions/extract` });
+    }
+    const list = (await a.inject({ method: 'GET', url: `/repos/${repo}/conventions` })).json() as unknown[];
+    expect(list).toHaveLength(1);
+  });
+
+  it('re-scan PRESERVES accepted candidates and returns them in the response', async () => {
+    const a = await app();
+    const repo = await makeRepo('conv-preserve');
+
+    const first = (await a.inject({ method: 'POST', url: `/repos/${repo}/conventions/extract` })).json() as Array<{
+      id: string;
+      status: string;
+    }>;
+    expect(first).toHaveLength(1);
+    await a.inject({ method: 'PATCH', url: `/conventions/${first[0]!.id}`, payload: { status: 'accepted' } });
+
+    // Re-scan: the accepted row must survive (same id) AND be present in the extract
+    // response, since the client overwrites its cached list with it.
+    const second = (await a.inject({ method: 'POST', url: `/repos/${repo}/conventions/extract` })).json() as Array<{
+      id: string;
+      status: string;
+    }>;
+    expect(second.some((c) => c.id === first[0]!.id && c.status === 'accepted')).toBe(true);
+  });
+
+  it('drops a grounded candidate whose confidence is <= 0.6', async () => {
+    // Snippet is real (passes the grounding gate) but confidence is below the floor.
+    const lowConf = {
+      conventions: [
+        {
+          category: 'Data access',
+          rule: 'Always await db calls',
+          evidence: {
+            file: 'src/users.ts',
+            start_line: 1,
+            end_line: 1,
+            snippet: 'const user = await db.users.find(id);',
+          },
+          confidence: 0.5,
+        },
+      ],
+    };
+    const a = await appWith(lowConf);
+    const repo = await makeRepo('conv-lowconf');
+    const res = await a.inject({ method: 'POST', url: `/repos/${repo}/conventions/extract` });
+    expect(res.statusCode).toBe(200);
+    expect(res.json() as unknown[]).toHaveLength(0);
   });
 });

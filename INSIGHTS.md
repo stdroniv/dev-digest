@@ -48,6 +48,19 @@ cold; never edit or delete existing entries.
   in `.claude/settings.json` (`PostToolUse` on `git commit` auto-invokes the skill; `PreToolUse`
   on `git push` runs `.claude/hooks/block-git-push.sh`). Honest escape hatch is always
   `git push --no-verify`.
+- The findings contract (`server/src/vendor/shared/contracts/findings.ts`) already encodes
+  an **LLM-security taxonomy** beyond plain severity — reuse it instead of inventing a parallel
+  scheme when building any security-review tooling (agent/skill/reviewer-core path). Concretely:
+  `FindingCategory` has a `security` member; `FindingKind` distinguishes `secret_leak` and
+  `lethal_trifecta` (alongside `finding`/`phantom`/`hook`); and `TrifectaComponent` names the
+  three legs of the lethal trifecta — `private_data_access`, `untrusted_input`, `exfil_path` —
+  with `TrifectaEvidence` carrying `file`+`line` per leg. DevDigest's own threat surface lights
+  all three up (imported PR diffs = untrusted input, `~/.devdigest/secrets.json` keys = private
+  data, the outbound OpenAI/Anthropic/OpenRouter call = exfil path), so a security reviewer should
+  flag the *convergence*, not just one leg. Note the repo's severity enum is
+  `CRITICAL/WARNING/SUGGESTION` (`Severity` in the same file), not High/Medium/Low — if a security
+  agent reports High/Medium/Low + confidence (a deliberate, finer-grained choice), state the mapping
+  so its output can still land on the existing contract/UI counters (`SeverityCounts`).
 - When severity-rating security findings in a review (esp. `pr-self-review`), apply
   DevDigest's actual threat model: it is **local-first, single-user, bound to localhost,
   with no auth on routes** (per root `CLAUDE.md`: "All local; outbound calls only to GitHub
@@ -118,6 +131,34 @@ cold; never edit or delete existing entries.
   (keys at column 0, folded `description: >` continuation at 2-space indent — mirror `planner.md`).
   This sandbox has **no `pip` network and no PyYAML**, and macOS `cat -A` is unavailable (BSD cat), so
   inspect whitespace with `sed 's/ /·/g'` rather than reaching for a YAML parser.
+
+- Converting a skill ⇄ agent is **not** a move/rename — the frontmatter and file shape differ. A skill
+  (`.claude/skills/<name>/SKILL.md`) uses `allowed-tools:`, may carry `metadata.version` + a sibling
+  `CHANGELOG.md`, and can have a `references/` subdir; an agent (`.claude/agents/<name>.md`) uses
+  **`tools:`** (no `allowed-tools`, no `metadata`, no versioning convention) and is a **single flat
+  file** with no `references/`. So a skill→agent conversion must: rename `allowed-tools:`→`tools:`,
+  add a `model:` alias, drop `metadata`/version/CHANGELOG, and **fold any `references/*.md` content
+  into the agent body** (the body is the entire system prompt — there is nowhere else for it to live).
+  Swap the skill's `Skill`-tool self-loading for the agent convention of `Read`-ing the target
+  `SKILL.md` on demand (see the module→skill routing entry above). Update both catalogs —
+  `.claude/skills/README.md` (remove the row) and `.claude/agents/README.md` (add the row + pipeline
+  diagram). Verify with `grep -rin <name> .claude/` (the root `README.md` may legitimately keep an
+  unrelated differently-cased mention, e.g. a course-lesson "Plan Verifier").
+
+- Subagents are **leaf workers**: no custom agent (`.claude/agents/*.md`) is granted the `Task`/`Agent`
+  tool, so **a subagent cannot spawn another subagent** — the `planner` can't itself "fire" the
+  `researcher`. All multi-agent orchestration (sequencing, parallel fan-out, loop-back) must run from
+  the **main session** or a `Workflow` script; agents stay leaves either way. The repo codifies its
+  feature pipeline as the **`ship-feature` skill** (a user-invocable skill, *not* an agent) precisely
+  because a skill injects its playbook into the main session — which *does* hold `Task` — so the skill
+  body is written as orchestrator instructions ("spawn `planner`, then …"). When wiring such a pipeline:
+  (a) parallelise only the independent read-only reviewers (`architecture-reviewer` ∥ `security-reviewer`
+  ∥ `plan-verifier`) by issuing their `Task` calls in **one message**; (b) pass each leaf its context
+  explicitly (plan path, diff base `main`, changed-file list, and on loop-back the exact findings) since
+  leaves get no parent history; (c) **`architecture-reviewer` has no `Bash`** (tools: Read/Grep/Glob), so
+  it cannot run `git diff` — the orchestrator must hand it the changed-file list, unlike
+  `security-reviewer`/`plan-verifier`, which can derive it themselves; (d) add a convergence guard (cap
+  rounds, stop on no-new-changes) so a disputed finding doesn't loop the implementer↔reviewers forever.
 
 ## Recurring Errors & Fixes
 

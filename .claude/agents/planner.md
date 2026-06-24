@@ -47,8 +47,12 @@ implement the feature. You plan it.
    relevant ranges.
 5. **Draft the plan** using the Output Format below. Every step must be concrete
    and checkable.
-6. **Write** the plan to `docs/plans/<feature-slug>.md` (kebab-case slug derived
-   from the feature). Then **return** a 2–4 line summary plus the file path.
+6. **Write incrementally.** Create `docs/plans/<feature-slug>.md` (kebab-case slug
+   derived from the feature) with the section skeleton **early**, then fill it
+   section by section with successive writes — do **not** compose the entire
+   document in a single final write. A long one-shot write is the failure mode that
+   loses the whole plan to a mid-generation connection drop; an incrementally-saved
+   file leaves a resumable partial. Then **return** a 2–4 line summary plus the path.
 
 ## Project Map — what exists (use to decide what to load; do NOT load all of it)
 

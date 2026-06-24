@@ -76,6 +76,12 @@ export const RunStats = z.object({
   // True when the empty-result re-sample guard ran (explains a non-trivial
   // sample count / "why did this approve"). nullish on older traces.
   resampled: z.boolean().nullish(),
+  // Tokens consumed by the intent classifier on the auto-on-first-review path.
+  // null/undefined when intent was already stored (no LLM call on this run).
+  intent_tokens: z.number().int().nullish(),
+  // Tokens saved vs sending the full diff bodies for intent classification.
+  // null/undefined when intent was already stored.
+  intent_tokens_saved: z.number().int().nullish(),
 });
 export type RunStats = z.infer<typeof RunStats>;
 

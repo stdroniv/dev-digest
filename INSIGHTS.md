@@ -72,6 +72,29 @@ cold; never edit or delete existing entries.
   remote-exposed service. Reserve CRITICAL (which trips the gate) for harm that crosses a
   real boundary; the rubric's "down-rank rather than over-block" exists precisely so the
   gate doesn't train `--no-verify`. Still fix the hardening — just don't block the merge on it.
+- The vendored shared contracts have **no canonical source or sync script in this repo** —
+  despite root `CLAUDE.md` calling `*/src/vendor/shared` "copied, not symlinked … treat as
+  generated" (which implies an upstream generator that isn't present). The vendored copies
+  **are** the local source of truth. Concretely, the feature-model registry
+  (`FEATURE_MODELS` / `FeatureModelId`, e.g. the `review_intent` slot) is **triplicated** and
+  must be hand-synced across `server/src/vendor/shared/contracts/platform.ts`,
+  `client/src/vendor/shared/contracts/platform.ts`, and the hand-maintained client mirror
+  `client/src/lib/feature-models.ts` (with `client/src/lib/types.ts` mirroring the
+  `FeatureModelId` enum). `reviewer-core` has **no** copy — its tsconfig aliases
+  `@devdigest/shared` → `../server/src/vendor/shared/*`. So changing any shared registry
+  value means editing multiple files identically, and the edit risks being clobbered by an
+  upstream re-vendor. **Prefer not to touch the vendored default at all**: feature models
+  resolve via `resolveFeatureModel(container, workspaceId, id)`
+  (`server/src/modules/settings/feature-models.ts`), which returns a per-workspace Settings
+  override OR the registry default — so change behavior through a **Settings → Feature Models
+  override**, not by editing the vendored registry.
+- "Looks greenfield, isn't": before building a feature, grep for its data layer — several
+  features ship **pre-stubbed but inert**. The Intent Layer's entire backend existed unused
+  before any work: the `pr_intent` table (`server/src/db/schema/reviews.ts`), the `Intent`
+  zod contract (`vendor/shared/contracts/brief.ts`), `upsertIntent`/`getIntent` repo helpers
+  (`server/src/modules/reviews/repository/pull.repo.ts`), and the `review_intent`
+  feature-model slot. Wire these up rather than re-creating tables/contracts (also explains
+  why CLAUDE.md says the schema "already contains EVERY table — don't delete them").
 
 ## Tool & Library Notes
 
@@ -161,6 +184,9 @@ cold; never edit or delete existing entries.
   rounds, stop on no-new-changes) so a disputed finding doesn't loop the implementer↔reviewers forever.
 
 ## Recurring Errors & Fixes
+
+- To measure sub-agent **token cost**, do NOT trust the `subagent_tokens` figure in a `Task` result — it reports only **output** tokens (~1% of real consumption). Cost is dominated by **cache-read** (each agent's context re-billed every turn ≈ 93% of total in a real ship-feature run). Ground truth lives in the per-agent transcript JSONL at `<session-tmp>/tasks/<agentId>.output` (path is in the Task tool result): each `type:"assistant"` line has `message.usage` with `input_tokens`, `cache_creation_input_tokens`, `cache_read_input_tokens`, `output_tokens` — sum those across lines per file. The actual model is in `message.model`. Doing this revealed the ship-feature agents' `model:` tiering is **already in effect** (explorers→`claude-haiku-4-5`, `implementer`/`test-writer`/`plan-verifier`→`claude-sonnet-4-6`, `planner`/`architecture-reviewer`/`security-reviewer`→`claude-opus-4-8`), so the real cost lever is **conversation length**, not model tier — don't "optimise" by downgrading models that are already tiered.
+- In this environment, BOTH `pnpm <script>` (e.g. `pnpm test`, `pnpm typecheck`) and even `pnpm exec <tool>` run a pre-flight deps-status check (`runDepsStatusCheck`) that does an implicit `pnpm install`, which HARD-FAILS with `ERR_PNPM_IGNORED_BUILDS` (esbuild build scripts unapproved) → exit 1, so the underlying tool never runs. Setting `npm_config_verify_deps_before_run=false` does NOT bypass it. Workaround that reliably runs typecheck/tests: invoke the package-local binary directly, skipping pnpm — `node_modules/.bin/tsc --noEmit` and `node_modules/.bin/vitest run [pattern]` (each of the 4 packages has its own `node_modules/.bin`). For server DB-backed it-tests, prefix `TESTCONTAINERS_RYUK_DISABLED=true` (Podman/rootless, per server/INSIGHTS.md). (`pnpm approve-builds` would also fix it but is interactive.)
 
 ## Session Notes
 

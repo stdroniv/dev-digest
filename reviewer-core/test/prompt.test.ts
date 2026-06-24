@@ -64,3 +64,46 @@ describe('assemblePrompt — ## PR description', () => {
     expect((assembly.pr_description as string).length).toBe(4000);
   });
 });
+
+describe('assemblePrompt — ## PR Intent', () => {
+  const INTENT_TEXT =
+    'Summary: Add rate limiting.\n\nIn scope:\n• /api routes\n\nOut of scope:\n• Auth changes';
+
+  it('renders the section with the rule and untrusted wrapper when prIntent is set', () => {
+    const user = userOf({ system: 'sys', diff: 'DIFF', prIntent: INTENT_TEXT });
+
+    expect(user).toContain('## PR Intent');
+    // Trusted scope-discipline rule (must be OUTSIDE the untrusted block).
+    // The rule must NOT allow scope to silence real defects — align with INJECTION_GUARD.
+    expect(user).toContain('frame finding rationale');
+    expect(user).toMatch(/can never\s+reduce the count or severity of real defects/i);
+    expect(user).toContain('report it regardless of stated scope');
+    // Intent content must be inside an untrusted wrapper
+    expect(user).toContain('<untrusted source="pr-intent">');
+    expect(user).toContain('Summary: Add rate limiting.');
+    expect(user).toContain('</untrusted>');
+  });
+
+  it('places the PR Intent section before the diff', () => {
+    const user = userOf({ system: 'sys', diff: 'DIFF', prIntent: INTENT_TEXT });
+    expect(user.indexOf('## PR Intent')).toBeLessThan(user.indexOf('## Diff to review'));
+  });
+
+  it('places the PR Intent section after the PR description', () => {
+    const user = userOf({
+      system: 'sys',
+      diff: 'DIFF',
+      prDescription: 'Some body',
+      prIntent: INTENT_TEXT,
+    });
+    expect(user.indexOf('## PR description')).toBeLessThan(user.indexOf('## PR Intent'));
+  });
+
+  it('omits the section when prIntent is undefined (no behaviour change)', () => {
+    expect(userOf({ system: 'sys', diff: 'DIFF' })).not.toContain('## PR Intent');
+  });
+
+  it('omits the section when prIntent is blank', () => {
+    expect(userOf({ system: 'sys', diff: 'DIFF', prIntent: '   ' })).not.toContain('## PR Intent');
+  });
+});

@@ -19,6 +19,13 @@ export {
   type AssembledPrompt,
 } from './prompt.js';
 
+// PR Intent classifier — pure, provider-injected.
+export {
+  classifyIntent,
+  type ClassifyIntentInput,
+  type ClassifyIntentResult,
+} from './intent/classify.js';
+
 // Citation grounding — the mandatory mechanical gate for diff findings.
 export { groundFindings, groundingSummary, type GroundingResult } from './grounding.js';
 

@@ -90,6 +90,15 @@ flowchart LR
   frontmatter field, which would preload every skill into context).
 - Custom project agents **auto-load the `CLAUDE.md` hierarchy** for their CWD; module
   docs (`<module>/CLAUDE.md`, `<module>/INSIGHTS.md`, `docs/*`) are read on demand.
+- **Cost discipline.** Real-run telemetry showed **cache-read ≈ 93% of all tokens** —
+  each agent's context re-billed every turn — so cost tracks **conversation length ×
+  context size**, not the model tier (tiers above are already tuned: reasoning-heavy
+  `planner`/`architecture-reviewer`/`security-reviewer` on `opus`, executors and
+  `plan-verifier` on `sonnet`, ad-hoc exploration on Haiku). Keep runs cheap by keeping
+  them short and lean: one-retry-then-DIY on a dropped agent, split a big build by
+  layer, hand agents exact file lists, scope re-validation to specific findings, and
+  don't poll background agents. The [`ship-feature`](../skills/ship-feature/SKILL.md)
+  skill's **"Cost & robustness discipline"** section is the authoritative playbook.
 
 ## Invoking
 

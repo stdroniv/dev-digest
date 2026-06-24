@@ -1,5 +1,5 @@
 import type { Container } from '../../platform/container.js';
-import type { Provider, Review, RunTrace, UnifiedDiff } from '@devdigest/shared';
+import type { Intent, Provider, Review, RunTrace, UnifiedDiff } from '@devdigest/shared';
 import { reviewPullRequest, countBlockers } from '@devdigest/reviewer-core';
 import { RunLogger } from '../../platform/run-logger.js';
 import * as schema from '../../db/schema.js';
@@ -13,6 +13,7 @@ import {
 } from './constants.js';
 import { taskLine } from './helpers.js';
 import { loadDiff } from './diff-loader.js';
+import { IntentService } from './intent.service.js';
 
 /** Thrown by a run when the user cancels it mid-flight (between map files). */
 export class RunCancelledError extends Error {
@@ -109,6 +110,31 @@ export class ReviewRunExecutor {
     }
     runLog.info(`Diff ready — ${diff.files.length} changed file(s); starting ${jobs.length} agent run(s)`);
 
+    // Auto-compute intent once for the whole batch (not per-agent).
+    // Non-fatal: if intent computation fails, reviews continue without it.
+    let sharedIntent: Intent | undefined;
+    let intentTokens: number | undefined;
+    let intentTokensSaved: number | undefined;
+    const intentService = new IntentService(this.container);
+    try {
+      const stored = await intentService.get(workspaceId, pull.id);
+      if (stored) {
+        sharedIntent = stored;
+        runLog.info(`intent: using stored intent for PR ${pull.number}`);
+      } else {
+        runLog.info(`intent: no stored intent — computing for PR ${pull.number}…`);
+        const computed = await intentService.compute(workspaceId, pull.id, logger);
+        sharedIntent = computed.intent;
+        intentTokens = computed.tokensIn;
+        intentTokensSaved = computed.savedTokens;
+        runLog.info(
+          `intent: model computed tokensIn=${computed.tokensIn} savedVsFullDiff=${computed.savedTokens}`,
+        );
+      }
+    } catch (err) {
+      runLog.info(`intent: computation failed (${(err as Error).message}) — continuing without intent`);
+    }
+
     for (const { agent, runId } of jobs) {
       const agentStart = Date.now();
       logger?.info(
@@ -116,7 +142,11 @@ export class ReviewRunExecutor {
         `review: agent "${agent.name}" started (${agent.provider}/${agent.model})`,
       );
       try {
-        const outcome = await this.runOneAgent(workspaceId, pull, repo, diff, agent, runId, runLog);
+        const outcome = await this.runOneAgent(workspaceId, pull, repo, diff, agent, runId, runLog, {
+          intent: sharedIntent,
+          intentTokens,
+          intentTokensSaved,
+        });
         logger?.info(
           {
             runId,
@@ -148,6 +178,7 @@ export class ReviewRunExecutor {
     agent: AgentRow,
     runId: string,
     parentLog: RunLogger,
+    intentCtx?: { intent?: Intent; intentTokens?: number; intentTokensSaved?: number },
   ): Promise<RunOutcome> {
     const start = Date.now();
     // Narrow the fanned-out pre-work logger to THIS run; the shared diff/intent
@@ -246,6 +277,9 @@ export class ReviewRunExecutor {
         // PR author's description/body — untrusted; assemblePrompt wraps +
         // truncates it. Omitted when the PR has no body.
         ...(pull.body ? { prDescription: pull.body } : {}),
+        // Inject the stored (or freshly computed) intent into the review prompt
+        // so the model stays on-topic. Omitted when intent is unavailable.
+        ...(intentCtx?.intent ? { intent: intentCtx.intent } : {}),
         task,
         sessionId: `${repo.owner}/${repo.name}#${pull.number}:${agent.name}`,
         onEvent: (e) => runLog.event(e.kind, e.msg, e.data),
@@ -317,6 +351,10 @@ export class ReviewRunExecutor {
           // review and whether the empty-result re-sample path ran.
           samples: outcome.samples,
           resampled: outcome.resampled,
+          // Intent classifier observability: only present when intent was freshly
+          // computed on this run (null when a stored intent was reused).
+          intent_tokens: intentCtx?.intentTokens ?? null,
+          intent_tokens_saved: intentCtx?.intentTokensSaved ?? null,
         },
         prompt_assembly: outcome.assembly,
         tool_calls: outcome.chunks.map((c) => ({

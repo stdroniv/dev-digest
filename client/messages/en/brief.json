@@ -15,5 +15,13 @@
     "blame": "blame",
     "noHistory": "No history available for this line.",
     "noCommits": "No commits found for this line."
+  },
+  "intent": {
+    "summary": "Summary",
+    "inScope": "In scope",
+    "outOfScope": "Out of scope",
+    "recalculate": "Recalculate",
+    "recalculating": "Recalculating…",
+    "empty": "No intent computed — click Recalculate to classify this PR."
   }
 }

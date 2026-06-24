@@ -4,6 +4,17 @@ All notable changes to the **ship-feature** skill are documented here.
 Format follows [Keep a Changelog](https://keepachangelog.com/); versioning is
 [SemVer](https://semver.org/).
 
+## [1.1.0] - 2026-06-24
+
+### Added
+- "Cost & robustness discipline" section, derived from a real run's telemetry
+  (cache-read was ~93% of tokens — cost scales with conversation length × context,
+  not model tier). Codifies: one-retry-then-DIY on a dropped agent (`planner`);
+  split a big implementation by layer above a >1-package / ~15-file threshold;
+  keep agent contexts lean (exact file lists, heavy verification as a final step);
+  scope re-validation to specific findings/files; consolidate exploration; don't
+  poll background agents; escalate `implementer` to Opus only on flagged-hard work.
+
 ## [1.0.0] - 2026-06-24
 
 ### Added

@@ -3,7 +3,7 @@ name: ship-feature
 description: "Run the full DevDigest feature-delivery pipeline end-to-end by orchestrating the project's subagents. Use whenever the user invokes `/ship-feature`, or asks to 'ship a feature', 'build this end to end', 'run the full agent pipeline', 'take this from plan to merge-ready', or hands over a sizable feature request they want implemented with planning + tests + review (not just a quick edit). It sequences researcher → planner (with a human approval gate on the plan) → implementer → test-writer, then runs architecture-reviewer + security-reviewer + plan-verifier in parallel, loops blocking findings back to the implementer until the change is clean, and optionally finishes with doc-writer. Use it even when the user just describes a substantial feature and wants it done 'properly' — orchestrating the agents in the right order, in parallel where safe, with the approval gate and the review loop, is the whole value. For a one-line quick fix a single agent is enough; this is for multi-step features worth the full pipeline."
 allowed-tools: Task, Read, Grep, Glob, Bash
 metadata:
-  version: 1.0.0
+  version: 1.1.0
   tags: pipeline, orchestration, subagents, feature-delivery, planner, implementer, reviewers, definition-of-done
   updated: 2026-06-24
 ---
@@ -149,6 +149,42 @@ Summarise the run so the outcome is reviewable:
 - **Honour each agent's read-only contract.** The reviewers never edit; only the
   implementer (and test-writer) write. If a reviewer "suggests a rewrite", that's a
   direction for the implementer, not a patch to apply yourself.
+
+## Cost & robustness discipline (keep the pipeline cheap)
+
+A real run's telemetry showed **cache-read is ~93% of all tokens** — i.e. each
+agent's context re-billed on *every* turn — so the cost driver is **conversation
+length × context size**, not the model tier (tiers are already set per agent:
+explorers→Haiku, executors→Sonnet, planner/reviewers→Opus). Optimise for *fewer,
+shorter, leaner* agent turns and *zero wasted runs*:
+
+- **One-retry-then-DIY on a dropped agent.** If a long single-shot agent (esp.
+  `planner`) drops its connection, resume it **at most once**. If it drops again,
+  write the artifact yourself from the context you already gathered — don't burn a
+  third resume (a real run wasted ~8.6M tokens / ~26 min doing exactly that).
+- **Split a big implementation by layer.** When a feature spans **more than one
+  package** (`reviewer-core`/`server`/`client`) or **~15+ files**, spawn focused
+  per-layer `implementer` tasks instead of one mega-run — cache-read grows
+  super-linearly with turn count, so three ~100-turn agents cost far less than one
+  ~300-turn agent. **Below that threshold, keep a single run** (splitting re-pays
+  base-context load + handoff per agent).
+- **Keep each agent's context lean.** Hand it the **exact file list / paths** (you
+  already compute the changed-file set) so it acts instead of rediscovering. Tell
+  `implementer`/`test-writer` to run the heaviest verification (full suites) as a
+  **final** step and not re-dump large tool output mid-run — every dumped log is
+  re-billed on all later turns.
+- **Scope re-validation tightly.** On loop-back, re-run each reviewer with "confirm
+  **only** these findings on these changed files," never a full re-review. (Scoped
+  re-checks finished in a handful of turns; an unscoped one rebuilt its whole matrix.)
+- **Lean exploration.** Prefer **1–2 broader explorers** (or pass a shared file list
+  so they don't each re-read the same files) over many overlapping ones. Lower
+  priority — explorers run on cheap Haiku.
+- **Don't poll background agents.** Completion notifications fire automatically;
+  avoid repeated status-checking and minimise main-session re-entries — the
+  orchestrator's own (large) context is the most expensive thing to re-bill.
+- **Escalate model only on purpose.** Per-agent `model:` is already tuned; override
+  via the `Task` `model` param only to bump `implementer` to `opus` when the plan
+  flags genuinely hard/ambiguous work — the default Sonnet handles mechanical edits.
 
 ## What this skill is NOT for
 

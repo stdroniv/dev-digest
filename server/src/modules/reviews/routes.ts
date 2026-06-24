@@ -6,6 +6,7 @@ import { getContext } from '../_shared/context.js';
 import { IdParams } from '../_shared/schemas.js';
 import { NotFoundError } from '../../platform/errors.js';
 import { ReviewService } from './service.js';
+import { IntentService } from './intent.service.js';
 
 /**
  * reviews module.
@@ -20,6 +21,7 @@ export default async function reviewsRoutes(appBase: FastifyInstance) {
   const app = appBase.withTypeProvider<ZodTypeProvider>();
   const { container } = app;
   const service = new ReviewService(container);
+  const intentService = new IntentService(container);
 
   // ---- Run a review (manual trigger) -------------------------------
   // Tight per-route limit: each call can fan out to expensive LLM runs.
@@ -41,6 +43,25 @@ export default async function reviewsRoutes(appBase: FastifyInstance) {
       req.log,
     );
     return { pr_id: req.params.id, runs, reviews };
+  });
+
+  // ---- Intent: (re)compute or read the PR's classified intent ---------------
+  // POST recomputes (same rate limit as the review trigger — each call is an
+  // LLM round-trip). GET is a lightweight read; no rate limit needed.
+  app.post(
+    '/pulls/:id/intent',
+    { schema: { params: IdParams }, config: { rateLimit: { max: 10, timeWindow: '1 minute' } } },
+    async (req) => {
+      const { workspaceId } = await getContext(container, req);
+      const result = await intentService.compute(workspaceId, req.params.id, req.log);
+      return result.intent;
+    },
+  );
+
+  app.get('/pulls/:id/intent', { schema: { params: IdParams } }, async (req) => {
+    const { workspaceId } = await getContext(container, req);
+    const intent = await intentService.get(workspaceId, req.params.id);
+    return intent ?? null;
   });
 
   // ---- SSE: live run events (replay buffer first, then live; ends on done) -

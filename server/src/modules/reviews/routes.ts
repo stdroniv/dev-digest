@@ -7,14 +7,18 @@ import { IdParams } from '../_shared/schemas.js';
 import { NotFoundError } from '../../platform/errors.js';
 import { ReviewService } from './service.js';
 import { IntentService } from './intent.service.js';
+import { SmartDiffService } from './smart-diff.service.js';
 
 /**
  * reviews module.
- *   POST   /pulls/:id/review  {agentId} | {all:true}  → run review(s); returns runs
- *   GET    /runs/:id/events                            → SSE stream of RunEvent (replay-first)
- *   GET    /runs/:id/trace                             → the single-document RunTrace
- *   GET    /pulls/:id/reviews                          → persisted reviews + findings for a PR
- *   POST   /findings/:id/(accept|dismiss)              → finding actions
+ *   POST   /pulls/:id/review      {agentId} | {all:true}  → run review(s); returns runs
+ *   POST   /pulls/:id/intent                               → compute/recompute PR intent (LLM)
+ *   GET    /pulls/:id/intent                               → read stored PR intent
+ *   GET    /pulls/:id/smart-diff                           → risk-ordered diff grouping (no LLM)
+ *   GET    /runs/:id/events                                → SSE stream of RunEvent (replay-first)
+ *   GET    /runs/:id/trace                                 → the single-document RunTrace
+ *   GET    /pulls/:id/reviews                              → persisted reviews + findings for a PR
+ *   POST   /findings/:id/(accept|dismiss)                  → finding actions
  */
 const FINDING_ACTIONS = ['accept', 'dismiss'] as const;
 export default async function reviewsRoutes(appBase: FastifyInstance) {
@@ -22,6 +26,7 @@ export default async function reviewsRoutes(appBase: FastifyInstance) {
   const { container } = app;
   const service = new ReviewService(container);
   const intentService = new IntentService(container);
+  const smartDiffService = new SmartDiffService(container);
 
   // ---- Run a review (manual trigger) -------------------------------
   // Tight per-route limit: each call can fan out to expensive LLM runs.
@@ -62,6 +67,12 @@ export default async function reviewsRoutes(appBase: FastifyInstance) {
     const { workspaceId } = await getContext(container, req);
     const intent = await intentService.get(workspaceId, req.params.id);
     return intent ?? null;
+  });
+
+  // ---- Smart Diff: risk-ordered diff grouping (deterministic, no LLM) ------
+  app.get('/pulls/:id/smart-diff', { schema: { params: IdParams } }, async (req) => {
+    const { workspaceId } = await getContext(container, req);
+    return smartDiffService.get(workspaceId, req.params.id);
   });
 
   // ---- SSE: live run events (replay buffer first, then live; ends on done) -

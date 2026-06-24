@@ -74,6 +74,10 @@ export default function PRDetailPage() {
     router.replace(`/repos/${repoId}/pulls/${number}${sp.toString() ? `?${sp.toString()}` : ""}`);
   };
   const setTab = (t: string) => setParam("tab", t);
+  const navigateToFinding = (findingId: string) => {
+    setFocusFindingId(findingId);
+    setTab("findings");
+  };
 
   // Reviews come newest-first; each is its own run (grouped into accordions).
   const runs = reviews ?? [];
@@ -176,8 +180,10 @@ export default function PRDetailPage() {
             filesCount={pr.files_count}
             files={pr.files}
             canComment={pr.status === "open"}
+            onNavigateToFinding={navigateToFinding}
           />
         )}
+
       </div>
 
       {prId && traceRunId && (

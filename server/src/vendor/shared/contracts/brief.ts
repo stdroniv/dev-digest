@@ -81,12 +81,22 @@ export type PrHistory = z.infer<typeof PrHistory>;
 export const SmartDiffRole = z.enum(['core', 'wiring', 'boilerplate']);
 export type SmartDiffRole = z.infer<typeof SmartDiffRole>;
 
+export const FindingAnnotationSeverity = z.enum(['critical', 'warning', 'suggestion']);
+export type FindingAnnotationSeverity = z.infer<typeof FindingAnnotationSeverity>;
+
+export const FindingAnnotation = z.object({
+  line: z.number().int(),
+  severity: FindingAnnotationSeverity,
+  finding_id: z.string(),
+});
+export type FindingAnnotation = z.infer<typeof FindingAnnotation>;
+
 export const SmartDiffFile = z.object({
   path: z.string(),
   pseudocode_summary: z.string().nullish(),
   additions: z.number().int(),
   deletions: z.number().int(),
-  finding_lines: z.array(z.number().int()),
+  finding_annotations: z.array(FindingAnnotation),
 });
 export type SmartDiffFile = z.infer<typeof SmartDiffFile>;
 

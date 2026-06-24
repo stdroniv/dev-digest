@@ -4,7 +4,7 @@
  * Acceptance (plan C1): given a sample patch, only path + hunk-header lines remain.
  */
 import { describe, it, expect } from 'vitest';
-import { buildHunkHeadersBlock, buildFullPatchText } from '../src/modules/reviews/intent-input.js';
+import { buildHunkHeadersBlock, buildFullPatchText, buildSpecDocsBlock, isDocFile } from '../src/modules/reviews/intent-input.js';
 
 const FILES = [
   {
@@ -44,6 +44,20 @@ const FILES = [
     deletions: 0,
     patch: undefined,
   },
+  {
+    path: 'docs/plans/rate-limit.md',
+    additions: 5,
+    deletions: 1,
+    patch:
+      '@@ -1,4 +1,8 @@\n' +
+      ' # Rate limit plan\n' +
+      '-Old intro line.\n' +
+      '+Updated intro line.\n' +
+      '+\n' +
+      '+## Goal\n' +
+      '+Add Redis-backed rate limiting to all public API routes.\n' +
+      '+Out of scope: auth changes.',
+  },
 ];
 
 describe('buildHunkHeadersBlock', () => {
@@ -78,6 +92,58 @@ describe('buildHunkHeadersBlock', () => {
     const noHunkFiles = [{ path: 'src/binary.bin', additions: 1, deletions: 0, patch: 'Binary file' }];
     const block = buildHunkHeadersBlock(noHunkFiles);
     expect(block).toBe('');
+  });
+
+  it('omits markdown doc files (those go to buildSpecDocsBlock instead)', () => {
+    const block = buildHunkHeadersBlock(FILES);
+    expect(block).not.toContain('docs/plans/rate-limit.md');
+    expect(block).not.toContain('Rate limit plan');
+  });
+});
+
+describe('isDocFile', () => {
+  it('matches .md, .mdx, .markdown', () => {
+    expect(isDocFile('docs/plans/foo.md')).toBe(true);
+    expect(isDocFile('README.mdx')).toBe(true);
+    expect(isDocFile('CHANGELOG.markdown')).toBe(true);
+  });
+
+  it('does not match code or other files', () => {
+    expect(isDocFile('src/foo.ts')).toBe(false);
+    expect(isDocFile('docs/image.png')).toBe(false);
+    expect(isDocFile('notes.txt')).toBe(false);
+  });
+});
+
+describe('buildSpecDocsBlock', () => {
+  it('includes path and reconstructed prose for markdown files', () => {
+    const block = buildSpecDocsBlock(FILES);
+    expect(block).toContain('docs/plans/rate-limit.md');
+    expect(block).toContain('Rate limit plan');
+    expect(block).toContain('Add Redis-backed rate limiting');
+    expect(block).toContain('Out of scope: auth changes');
+  });
+
+  it('includes updated and context lines, excludes removed lines', () => {
+    const block = buildSpecDocsBlock(FILES);
+    expect(block).toContain('Updated intro line.');
+    expect(block).not.toContain('Old intro line.');
+  });
+
+  it('excludes hunk headers from the prose', () => {
+    const block = buildSpecDocsBlock(FILES);
+    expect(block).not.toContain('@@ -1,4 +1,8 @@');
+  });
+
+  it('excludes non-doc files', () => {
+    const block = buildSpecDocsBlock(FILES);
+    expect(block).not.toContain('src/middleware/rate-limit.ts');
+    expect(block).not.toContain('src/app.ts');
+  });
+
+  it('returns empty string when no doc files are present', () => {
+    const nonDocFiles = FILES.filter((f) => !isDocFile(f.path));
+    expect(buildSpecDocsBlock(nonDocFiles)).toBe('');
   });
 });
 

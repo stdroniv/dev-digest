@@ -20,9 +20,15 @@ export interface ClassifyIntentInput {
    * Compact changed-files block: `path\n@@ … @@\n@@ … @@` per file, files
    * separated by blank lines. Contains ONLY hunk-header lines — never added/
    * removed code lines (those blow the token budget and are not needed for
-   * intent classification).
+   * intent classification). Markdown doc files are excluded (sent via specDocs).
    */
   changedFiles: string;
+  /**
+   * Reconstructed prose content of markdown doc/spec/plan files changed in
+   * this PR. Each entry is `path\n<text>`. Omit or pass empty string when
+   * there are no doc files in the diff.
+   */
+  specDocs?: string | null;
 }
 
 export interface ClassifyIntentResult {
@@ -34,12 +40,12 @@ export interface ClassifyIntentResult {
 
 const CLASSIFY_SYSTEM =
   'You are a PR intent classifier. Analyse the pull request title, description, ' +
-  'linked issue, and changed files (hunk headers only) to derive:\n' +
+  'linked issue, changed files (hunk headers only), and any attached plans or specs to derive:\n' +
   '  intent        — a single sentence summarising what this PR sets out to do\n' +
   '  in_scope      — bullet list of concerns/areas the PR explicitly covers\n' +
   '  out_of_scope  — bullet list of concerns/areas the PR deliberately leaves out\n' +
   'Be concise and factual. Focus on the stated purpose, not implementation details. ' +
-  'Infer out_of_scope from contrasts in the PR description or obvious gaps.\n\n' +
+  'Infer out_of_scope from contrasts in the PR description, plans/specs, or obvious gaps.\n\n' +
   INJECTION_GUARD;
 
 /**
@@ -73,6 +79,9 @@ export async function classifyIntent(input: ClassifyIntentInput): Promise<Classi
     }
   }
   parts.push(`Changed files (hunk headers only):\n${stripCodeLines(input.changedFiles)}`);
+  if (input.specDocs?.trim()) {
+    parts.push(`Plans / specs (markdown docs changed in this PR):\n${input.specDocs.trim()}`);
+  }
 
   const messages: ChatMessage[] = [
     { role: 'system', content: CLASSIFY_SYSTEM },

@@ -3,7 +3,7 @@ import type { Container } from '../../platform/container.js';
 import { classifyIntent } from '@devdigest/reviewer-core';
 import { resolveFeatureModel } from '../settings/feature-models.js';
 import { getPull, getRepo, getIntent, upsertIntent } from './repository/pull.repo.js';
-import { buildHunkHeadersBlock, buildFullPatchText } from './intent-input.js';
+import { buildHunkHeadersBlock, buildFullPatchText, buildSpecDocsBlock } from './intent-input.js';
 import { NotFoundError } from '../../platform/errors.js';
 
 export interface ComputeIntentResult {
@@ -67,6 +67,7 @@ export class IntentService {
     }
 
     const changedFiles = buildHunkHeadersBlock(files);
+    const specDocs = buildSpecDocsBlock(files);
     const fullPatch = buildFullPatchText(files);
 
     // Token savings: full patches vs lean hunk-headers block.
@@ -89,6 +90,7 @@ export class IntentService {
       body: freshBody,
       linkedIssue,
       changedFiles,
+      specDocs: specDocs || null,
     });
 
     logger?.info(

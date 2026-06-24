@@ -136,6 +136,41 @@ describe('classifyIntent', () => {
     expect(userMsg).toContain('Steps to reproduce...');
   });
 
+  it('includes specDocs prose in the prompt when provided', async () => {
+    const llm = new MockLLMProvider('openai', { structured: INTENT_FIXTURE });
+    await classifyIntent({
+      llm,
+      model: 'gpt-4.1',
+      title: 'Add rate limiting',
+      changedFiles: 'src/rate-limit.ts\n@@ -0,0 +1,5 @@',
+      specDocs: 'docs/plans/rate-limit.md\n# Rate limit plan\n\nAdd Redis-backed rate limiting.',
+    });
+
+    const call = llm.calls[0];
+    const req = call!.req as { messages: { role: string; content: string }[] };
+    const userMsg = req.messages.find((m) => m.role === 'user')?.content ?? '';
+
+    expect(userMsg).toContain('Plans / specs');
+    expect(userMsg).toContain('docs/plans/rate-limit.md');
+    expect(userMsg).toContain('Add Redis-backed rate limiting');
+  });
+
+  it('omits the Plans / specs section when specDocs is absent', async () => {
+    const llm = new MockLLMProvider('openai', { structured: INTENT_FIXTURE });
+    await classifyIntent({
+      llm,
+      model: 'gpt-4.1',
+      title: 'Some PR',
+      changedFiles: 'src/foo.ts\n@@ -1,1 +1,2 @@',
+    });
+
+    const call = llm.calls[0];
+    const req = call!.req as { messages: { role: string; content: string }[] };
+    const userMsg = req.messages.find((m) => m.role === 'user')?.content ?? '';
+
+    expect(userMsg).not.toContain('Plans / specs');
+  });
+
   it('wraps pr-derived content in untrusted delimiters', async () => {
     const llm = new MockLLMProvider('openai', { structured: INTENT_FIXTURE });
     await classifyIntent({

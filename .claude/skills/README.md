@@ -17,6 +17,7 @@ Reusable AI skills that provide specialized knowledge and workflows. Canonical l
 | [security](security/SKILL.md) | Full-stack | OWASP Top 10:2025, auth, injection, uploads, secrets |
 | [mermaid-diagram](mermaid-diagram/SKILL.md) | Shared | Mermaid diagrams in markdown (flowcharts, sequence, ERD, …) |
 | [engineering-insights](engineering-insights/SKILL.md) | Shared | Append hard-won, actionable lessons to the right module's INSIGHTS.md |
+| [ship-feature](ship-feature/SKILL.md) | Workflow | `/ship-feature` — orchestrate the full agent pipeline (plan → build → test → parallel review → loop-back) end-to-end |
 
 ## What Are Skills?
 

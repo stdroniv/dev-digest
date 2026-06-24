@@ -48,6 +48,19 @@ cold; never edit or delete existing entries.
   in `.claude/settings.json` (`PostToolUse` on `git commit` auto-invokes the skill; `PreToolUse`
   on `git push` runs `.claude/hooks/block-git-push.sh`). Honest escape hatch is always
   `git push --no-verify`.
+- The findings contract (`server/src/vendor/shared/contracts/findings.ts`) already encodes
+  an **LLM-security taxonomy** beyond plain severity — reuse it instead of inventing a parallel
+  scheme when building any security-review tooling (agent/skill/reviewer-core path). Concretely:
+  `FindingCategory` has a `security` member; `FindingKind` distinguishes `secret_leak` and
+  `lethal_trifecta` (alongside `finding`/`phantom`/`hook`); and `TrifectaComponent` names the
+  three legs of the lethal trifecta — `private_data_access`, `untrusted_input`, `exfil_path` —
+  with `TrifectaEvidence` carrying `file`+`line` per leg. DevDigest's own threat surface lights
+  all three up (imported PR diffs = untrusted input, `~/.devdigest/secrets.json` keys = private
+  data, the outbound OpenAI/Anthropic/OpenRouter call = exfil path), so a security reviewer should
+  flag the *convergence*, not just one leg. Note the repo's severity enum is
+  `CRITICAL/WARNING/SUGGESTION` (`Severity` in the same file), not High/Medium/Low — if a security
+  agent reports High/Medium/Low + confidence (a deliberate, finer-grained choice), state the mapping
+  so its output can still land on the existing contract/UI counters (`SeverityCounts`).
 - When severity-rating security findings in a review (esp. `pr-self-review`), apply
   DevDigest's actual threat model: it is **local-first, single-user, bound to localhost,
   with no auth on routes** (per root `CLAUDE.md`: "All local; outbound calls only to GitHub
@@ -59,6 +72,29 @@ cold; never edit or delete existing entries.
   remote-exposed service. Reserve CRITICAL (which trips the gate) for harm that crosses a
   real boundary; the rubric's "down-rank rather than over-block" exists precisely so the
   gate doesn't train `--no-verify`. Still fix the hardening — just don't block the merge on it.
+- The vendored shared contracts have **no canonical source or sync script in this repo** —
+  despite root `CLAUDE.md` calling `*/src/vendor/shared` "copied, not symlinked … treat as
+  generated" (which implies an upstream generator that isn't present). The vendored copies
+  **are** the local source of truth. Concretely, the feature-model registry
+  (`FEATURE_MODELS` / `FeatureModelId`, e.g. the `review_intent` slot) is **triplicated** and
+  must be hand-synced across `server/src/vendor/shared/contracts/platform.ts`,
+  `client/src/vendor/shared/contracts/platform.ts`, and the hand-maintained client mirror
+  `client/src/lib/feature-models.ts` (with `client/src/lib/types.ts` mirroring the
+  `FeatureModelId` enum). `reviewer-core` has **no** copy — its tsconfig aliases
+  `@devdigest/shared` → `../server/src/vendor/shared/*`. So changing any shared registry
+  value means editing multiple files identically, and the edit risks being clobbered by an
+  upstream re-vendor. **Prefer not to touch the vendored default at all**: feature models
+  resolve via `resolveFeatureModel(container, workspaceId, id)`
+  (`server/src/modules/settings/feature-models.ts`), which returns a per-workspace Settings
+  override OR the registry default — so change behavior through a **Settings → Feature Models
+  override**, not by editing the vendored registry.
+- "Looks greenfield, isn't": before building a feature, grep for its data layer — several
+  features ship **pre-stubbed but inert**. The Intent Layer's entire backend existed unused
+  before any work: the `pr_intent` table (`server/src/db/schema/reviews.ts`), the `Intent`
+  zod contract (`vendor/shared/contracts/brief.ts`), `upsertIntent`/`getIntent` repo helpers
+  (`server/src/modules/reviews/repository/pull.repo.ts`), and the `review_intent`
+  feature-model slot. Wire these up rather than re-creating tables/contracts (also explains
+  why CLAUDE.md says the schema "already contains EVERY table — don't delete them").
 
 ## Tool & Library Notes
 
@@ -81,7 +117,76 @@ cold; never edit or delete existing entries.
   write-up from a subagent (architecture maps, research digests), use `general-purpose`; reserve
   `Explore` for "find me where X is" fan-out.
 
+- Custom project subagents (`.claude/agents/*.md`, e.g. `researcher`, `planner`) **auto-load the
+  CLAUDE.md hierarchy** for their CWD — unlike the built-in `Explore`/`Plan` agents, which skip it.
+  Two consequences when writing an agent body: (a) do **not** instruct it to re-read root
+  `CLAUDE.md` — it's already in context, so that just burns tokens; (b) module-level docs
+  (`server/CLAUDE.md`, `<module>/INSIGHTS.md`, `docs/*`) are **not** auto-loaded unless the CWD is
+  in that module, so the agent must read those on demand. The efficient pattern is to embed the
+  small "what files exist" map (the root CLAUDE.md "Read when…" routing table + skill list) directly
+  in the agent body and let it `Read` the details only when relevant — discovery-every-run is the
+  context-blowout failure mode.
+
+- Subagent frontmatter `tools:` has **no per-path granularity** — you cannot grant "write only to
+  `docs/plans/`". For a planning/read-only agent that must still save one artifact, the only option
+  is to grant `Write` and enforce the path constraint in the **prompt body** (e.g. `planner.md`:
+  "Write exactly one file, only under `docs/plans/`; you have no Edit tool"). Treat that as a
+  soft guarantee, not an engine-enforced one. Also: new/edited `.claude/agents/*.md` files only
+  become invokable after a **session restart** (or via the `/agents` UI) — they're loaded at session
+  start — and subagents cannot call `AskUserQuestion`/`ExitPlanMode` even if those are listed, so an
+  agent that hits ambiguity must state an assumption rather than ask.
+
+- Project convention for code-acting/planning subagents (`planner.md`, `implementer.md`): route to
+  skills by having the body carry a **module → skill table** and instruct the agent to `Read` only the
+  1–2 relevant `.claude/skills/<name>/SKILL.md` files on demand. Do **not** use the subagent
+  `skills:` frontmatter field for this — it *preloads every listed skill* into context at startup,
+  which defeats the just-in-time loading the whole "embed the map, read details on demand" pattern
+  exists to achieve. Reserve `skills:` frontmatter for a skill the agent needs on literally every run.
+- The agent roster forms a pipeline: `planner` (opus, read-only) writes a plan to
+  `docs/plans/<feature-slug>.md`; `implementer` (sonnet) reads that path and executes it. When adding
+  a stage, keep the handoff artifact a file under `docs/plans/` so each agent stays stateless across
+  the boundary (a subagent gets no parent conversation history — the file *is* the contract).
+- Validating newly-authored `.claude/` tooling **in the same session** exploits a load asymmetry: a
+  new **skill** (`SKILL.md`) loads on-demand immediately and the harness echoes its `description` back
+  in a `system-reminder` (the available-skills list) the moment the frontmatter parses — treat that
+  echo as a free YAML-validity check. A new **agent** (`.claude/agents/*.md`) does **not** load until a
+  session restart, so you cannot runtime-verify it; validate its frontmatter **structurally** instead
+  (keys at column 0, folded `description: >` continuation at 2-space indent — mirror `planner.md`).
+  This sandbox has **no `pip` network and no PyYAML**, and macOS `cat -A` is unavailable (BSD cat), so
+  inspect whitespace with `sed 's/ /·/g'` rather than reaching for a YAML parser.
+
+- Converting a skill ⇄ agent is **not** a move/rename — the frontmatter and file shape differ. A skill
+  (`.claude/skills/<name>/SKILL.md`) uses `allowed-tools:`, may carry `metadata.version` + a sibling
+  `CHANGELOG.md`, and can have a `references/` subdir; an agent (`.claude/agents/<name>.md`) uses
+  **`tools:`** (no `allowed-tools`, no `metadata`, no versioning convention) and is a **single flat
+  file** with no `references/`. So a skill→agent conversion must: rename `allowed-tools:`→`tools:`,
+  add a `model:` alias, drop `metadata`/version/CHANGELOG, and **fold any `references/*.md` content
+  into the agent body** (the body is the entire system prompt — there is nowhere else for it to live).
+  Swap the skill's `Skill`-tool self-loading for the agent convention of `Read`-ing the target
+  `SKILL.md` on demand (see the module→skill routing entry above). Update both catalogs —
+  `.claude/skills/README.md` (remove the row) and `.claude/agents/README.md` (add the row + pipeline
+  diagram). Verify with `grep -rin <name> .claude/` (the root `README.md` may legitimately keep an
+  unrelated differently-cased mention, e.g. a course-lesson "Plan Verifier").
+
+- Subagents are **leaf workers**: no custom agent (`.claude/agents/*.md`) is granted the `Task`/`Agent`
+  tool, so **a subagent cannot spawn another subagent** — the `planner` can't itself "fire" the
+  `researcher`. All multi-agent orchestration (sequencing, parallel fan-out, loop-back) must run from
+  the **main session** or a `Workflow` script; agents stay leaves either way. The repo codifies its
+  feature pipeline as the **`ship-feature` skill** (a user-invocable skill, *not* an agent) precisely
+  because a skill injects its playbook into the main session — which *does* hold `Task` — so the skill
+  body is written as orchestrator instructions ("spawn `planner`, then …"). When wiring such a pipeline:
+  (a) parallelise only the independent read-only reviewers (`architecture-reviewer` ∥ `security-reviewer`
+  ∥ `plan-verifier`) by issuing their `Task` calls in **one message**; (b) pass each leaf its context
+  explicitly (plan path, diff base `main`, changed-file list, and on loop-back the exact findings) since
+  leaves get no parent history; (c) **`architecture-reviewer` has no `Bash`** (tools: Read/Grep/Glob), so
+  it cannot run `git diff` — the orchestrator must hand it the changed-file list, unlike
+  `security-reviewer`/`plan-verifier`, which can derive it themselves; (d) add a convergence guard (cap
+  rounds, stop on no-new-changes) so a disputed finding doesn't loop the implementer↔reviewers forever.
+
 ## Recurring Errors & Fixes
+
+- To measure sub-agent **token cost**, do NOT trust the `subagent_tokens` figure in a `Task` result — it reports only **output** tokens (~1% of real consumption). Cost is dominated by **cache-read** (each agent's context re-billed every turn ≈ 93% of total in a real ship-feature run). Ground truth lives in the per-agent transcript JSONL at `<session-tmp>/tasks/<agentId>.output` (path is in the Task tool result): each `type:"assistant"` line has `message.usage` with `input_tokens`, `cache_creation_input_tokens`, `cache_read_input_tokens`, `output_tokens` — sum those across lines per file. The actual model is in `message.model`. Doing this revealed the ship-feature agents' `model:` tiering is **already in effect** (explorers→`claude-haiku-4-5`, `implementer`/`test-writer`/`plan-verifier`→`claude-sonnet-4-6`, `planner`/`architecture-reviewer`/`security-reviewer`→`claude-opus-4-8`), so the real cost lever is **conversation length**, not model tier — don't "optimise" by downgrading models that are already tiered.
+- In this environment, BOTH `pnpm <script>` (e.g. `pnpm test`, `pnpm typecheck`) and even `pnpm exec <tool>` run a pre-flight deps-status check (`runDepsStatusCheck`) that does an implicit `pnpm install`, which HARD-FAILS with `ERR_PNPM_IGNORED_BUILDS` (esbuild build scripts unapproved) → exit 1, so the underlying tool never runs. Setting `npm_config_verify_deps_before_run=false` does NOT bypass it. Workaround that reliably runs typecheck/tests: invoke the package-local binary directly, skipping pnpm — `node_modules/.bin/tsc --noEmit` and `node_modules/.bin/vitest run [pattern]` (each of the 4 packages has its own `node_modules/.bin`). For server DB-backed it-tests, prefix `TESTCONTAINERS_RYUK_DISABLED=true` (Podman/rootless, per server/INSIGHTS.md). (`pnpm approve-builds` would also fix it but is interactive.)
 
 ## Session Notes
 

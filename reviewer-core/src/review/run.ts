@@ -1,5 +1,6 @@
 import type {
   Finding,
+  Intent,
   LLMProvider,
   PromptAssembly,
   Review,
@@ -71,6 +72,13 @@ export interface ReviewInput {
   /** PR author's description/body (untrusted; truncated + delimiter-wrapped in
       the prompt). Empty/undefined → section omitted. */
   prDescription?: string;
+  /**
+   * Pre-classified PR intent (the stored Intent row for this PR). When set,
+   * formatted into a compact text block and injected into the prompt via the
+   * `prIntent` slot in assemblePrompt (with a scope-discipline rule).
+   * Omitted → no intent section in the prompt (identical to pre-intent behavior).
+   */
+  intent?: Intent;
   /** Task framing line, e.g. "Review PR #482 …". */
   task?: string;
   /** Override the structured-output retry budget. */
@@ -139,6 +147,18 @@ export interface ReviewOutcome {
   resampled: boolean;
 }
 
+/** Format an Intent into the compact plain-text block injected via prIntent. */
+function formatIntent(intent: Intent): string {
+  const lines: string[] = [`Summary: ${intent.intent}`];
+  if (intent.in_scope.length > 0) {
+    lines.push(`In scope:\n${intent.in_scope.map((s) => `• ${s}`).join('\n')}`);
+  }
+  if (intent.out_of_scope.length > 0) {
+    lines.push(`Out of scope:\n${intent.out_of_scope.map((s) => `• ${s}`).join('\n')}`);
+  }
+  return lines.join('\n\n');
+}
+
 function selectMode(strategy: ReviewStrategy, diff: UnifiedDiff, threshold: number): ReviewMode {
   if (strategy === 'single-pass') return 'single-pass';
   if (strategy === 'map-reduce') return diff.files.length > 1 ? 'map-reduce' : 'single-pass';
@@ -162,6 +182,7 @@ export async function reviewPullRequest(input: ReviewInput): Promise<ReviewOutco
     callers: input.callers,
     repoMap: input.repoMap,
     prDescription: input.prDescription,
+    prIntent: input.intent ? formatIntent(input.intent) : undefined,
     task: input.task,
   };
 

@@ -86,6 +86,7 @@ export type FindingAnnotationSeverity = z.infer<typeof FindingAnnotationSeverity
 
 export const FindingAnnotation = z.object({
   line: z.number().int(),
+  end_line: z.number().int().nullish(),
   severity: FindingAnnotationSeverity,
   finding_id: z.string(),
 });

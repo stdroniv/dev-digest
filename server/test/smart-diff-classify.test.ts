@@ -148,7 +148,7 @@ describe('assembleSmartDiff', () => {
         'src/service.ts',
         [
           { line: 30, severity: 'warning' as const, finding_id: 'f1' },
-          { line: 10, severity: 'critical' as const, finding_id: 'f2' },
+          { line: 10, end_line: 15, severity: 'critical' as const, finding_id: 'f2' },
           { line: 20, severity: 'suggestion' as const, finding_id: 'f3' },
         ],
       ],
@@ -156,7 +156,7 @@ describe('assembleSmartDiff', () => {
     const result = assembleSmartDiff(files, annotationsByPath);
     const coreFile = result.groups[0]!.files[0]!;
     expect(coreFile.finding_annotations.map((a) => a.line)).toEqual([10, 20, 30]);
-    expect(coreFile.finding_annotations[0]).toMatchObject({ line: 10, severity: 'critical', finding_id: 'f2' });
+    expect(coreFile.finding_annotations[0]).toMatchObject({ line: 10, end_line: 15, severity: 'critical', finding_id: 'f2' });
     expect(coreFile.finding_annotations[1]).toMatchObject({ line: 20, severity: 'suggestion', finding_id: 'f3' });
     expect(coreFile.finding_annotations[2]).toMatchObject({ line: 30, severity: 'warning', finding_id: 'f1' });
   });
@@ -229,6 +229,62 @@ describe('assembleSmartDiff', () => {
         [
           { line: 5, severity: 'warning' as const, finding_id: 'fa' },
           { line: 12, severity: 'critical' as const, finding_id: 'fb' },
+        ],
+      ],
+    ]);
+    const result = assembleSmartDiff(files, annotationsByPath);
+    expect(() => SmartDiff.parse(result)).not.toThrow();
+  });
+
+  // ---- end_line passthrough -------------------------------------------------
+
+  it('passes end_line unchanged for a single-line finding (end_line === line)', () => {
+    const files = [{ path: 'src/service.ts', additions: 5, deletions: 1 }];
+    const annotationsByPath = new Map([
+      [
+        'src/service.ts',
+        [{ line: 7, end_line: 7, severity: 'critical' as const, finding_id: 'f-single' }],
+      ],
+    ]);
+    const result = assembleSmartDiff(files, annotationsByPath);
+    const a = result.groups[0]!.files[0]!.finding_annotations[0]!;
+    expect(a.line).toBe(7);
+    expect(a.end_line).toBe(7);
+  });
+
+  it('passes end_line: null unchanged', () => {
+    const files = [{ path: 'src/service.ts', additions: 3, deletions: 0 }];
+    const annotationsByPath = new Map([
+      [
+        'src/service.ts',
+        [{ line: 5, end_line: null, severity: 'suggestion' as const, finding_id: 'f-null' }],
+      ],
+    ]);
+    const result = assembleSmartDiff(files, annotationsByPath);
+    expect(result.groups[0]!.files[0]!.finding_annotations[0]!.end_line).toBeNull();
+  });
+
+  it('preserves end_line as undefined when the field is omitted', () => {
+    const files = [{ path: 'src/service.ts', additions: 3, deletions: 0 }];
+    const annotationsByPath = new Map([
+      [
+        'src/service.ts',
+        [{ line: 5, severity: 'suggestion' as const, finding_id: 'f-undef' }],
+      ],
+    ]);
+    const result = assembleSmartDiff(files, annotationsByPath);
+    expect(result.groups[0]!.files[0]!.finding_annotations[0]!.end_line).toBeUndefined();
+  });
+
+  it('result satisfies SmartDiff.parse with null, explicit equal, and missing end_line values', () => {
+    const files = [{ path: 'src/svc.ts', additions: 5, deletions: 1 }];
+    const annotationsByPath = new Map([
+      [
+        'src/svc.ts',
+        [
+          { line: 3, end_line: 3, severity: 'critical' as const, finding_id: 'fa' },
+          { line: 5, end_line: null, severity: 'warning' as const, finding_id: 'fb' },
+          { line: 8, severity: 'suggestion' as const, finding_id: 'fc' },
         ],
       ],
     ]);

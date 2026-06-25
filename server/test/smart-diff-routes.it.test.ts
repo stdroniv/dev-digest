@@ -284,7 +284,12 @@ d('Smart Diff routes — DB-backed (Testcontainers pg)', () => {
     expect(coreFile).toBeDefined();
     expect(
       coreFile!.finding_annotations.some(
-        (a) => a.line === FINDING_START_LINE && a.severity === 'warning' && typeof a.finding_id === 'string' && a.finding_id.length > 0,
+        (a) =>
+          a.line === FINDING_START_LINE &&
+          a.end_line === FINDING_START_LINE + 2 &&
+          a.severity === 'warning' &&
+          typeof a.finding_id === 'string' &&
+          a.finding_id.length > 0,
       ),
     ).toBe(true);
 
@@ -319,7 +324,11 @@ d('Smart Diff routes — DB-backed (Testcontainers pg)', () => {
     expect(fileA).toBeDefined();
     expect(
       fileA!.finding_annotations.some(
-        (a) => a.line === FINDING_LINE_A && a.severity === 'warning' && typeof a.finding_id === 'string',
+        (a) =>
+          a.line === FINDING_LINE_A &&
+          a.end_line === FINDING_LINE_A + 2 &&
+          a.severity === 'warning' &&
+          typeof a.finding_id === 'string',
       ),
     ).toBe(true);
 
@@ -327,7 +336,11 @@ d('Smart Diff routes — DB-backed (Testcontainers pg)', () => {
     expect(fileB).toBeDefined();
     expect(
       fileB!.finding_annotations.some(
-        (a) => a.line === FINDING_LINE_B && a.severity === 'critical' && typeof a.finding_id === 'string',
+        (a) =>
+          a.line === FINDING_LINE_B &&
+          a.end_line === FINDING_LINE_B + 2 &&
+          a.severity === 'critical' &&
+          typeof a.finding_id === 'string',
       ),
     ).toBe(true);
 

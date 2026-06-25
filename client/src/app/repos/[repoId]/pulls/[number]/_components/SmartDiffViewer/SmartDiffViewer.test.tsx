@@ -87,6 +87,15 @@ function renderViewer(
   fetchImpl: () => Promise<Response>,
   onNavigateToFinding?: (findingId: string) => void,
 ) {
+  return renderViewerWith(prId, PR_FILES, fetchImpl, onNavigateToFinding);
+}
+
+function renderViewerWith(
+  prId: string | null,
+  files: PrFile[],
+  fetchImpl: () => Promise<Response>,
+  onNavigateToFinding?: (findingId: string) => void,
+) {
   global.fetch = vi.fn(fetchImpl) as unknown as typeof fetch;
   const qc = new QueryClient({
     defaultOptions: { queries: { retry: false } },
@@ -94,11 +103,56 @@ function renderViewer(
   return render(
     <QueryClientProvider client={qc}>
       <NextIntlClientProvider locale="en" messages={{ brief: briefMessages }}>
-        <SmartDiffViewer prId={prId} files={PR_FILES} onNavigateToFinding={onNavigateToFinding} />
+        <SmartDiffViewer prId={prId} files={files} onNavigateToFinding={onNavigateToFinding} />
       </NextIntlClientProvider>
     </QueryClientProvider>,
   );
 }
+
+// ---- Additional fixtures for bug-regression tests --------------------------
+
+/** Bug 1: file has annotations but the PR file has no patch (null). */
+const SMART_DIFF_NO_PATCH: SmartDiff = {
+  groups: [
+    {
+      role: "core",
+      files: [
+        {
+          path: "src/no-patch.ts",
+          additions: 5,
+          deletions: 2,
+          finding_annotations: [{ line: 3, severity: "warning", finding_id: "phantom-1" }],
+          pseudocode_summary: null,
+        },
+      ],
+    },
+  ],
+  split_suggestion: { too_big: false, total_lines: 7, proposed_splits: [] },
+};
+
+/** PR_FILES entry with no patch for the no-patch file. */
+const PR_FILES_NO_PATCH: PrFile[] = [
+  { path: "src/no-patch.ts", additions: 5, deletions: 2, patch: null },
+];
+
+/** Bug 2: annotation covers a range (lines 11–13) in SOURCE_FILE_PATCH. */
+const SMART_DIFF_RANGE: SmartDiff = {
+  groups: [
+    {
+      role: "core",
+      files: [
+        {
+          path: "src/service.ts",
+          additions: 1,
+          deletions: 1,
+          finding_annotations: [{ line: 11, end_line: 13, severity: "warning", finding_id: "range-1" }],
+          pseudocode_summary: null,
+        },
+      ],
+    },
+  ],
+  split_suggestion: { too_big: false, total_lines: 2, proposed_splits: [] },
+};
 
 // ---- Tests -----------------------------------------------------------------
 
@@ -189,5 +243,216 @@ describe("SmartDiffViewer — per-line pill click calls onNavigateToFinding", ()
 
     expect(spy).toHaveBeenCalledTimes(1);
     expect(spy).toHaveBeenCalledWith("find-1");
+  });
+});
+
+// ---- Additional fixtures for edge-case tests --------------------------------
+
+/** Test: end_line equals line — only the single annotated line should be highlighted. */
+const SMART_DIFF_SINGLE_LINE: SmartDiff = {
+  groups: [
+    {
+      role: "core",
+      files: [
+        {
+          path: "src/service.ts",
+          additions: 1,
+          deletions: 1,
+          // Critical severity → renders as "blocker" pill
+          finding_annotations: [{ line: 12, end_line: 12, severity: "critical", finding_id: "single-1" }],
+          pseudocode_summary: null,
+        },
+      ],
+    },
+  ],
+  split_suggestion: { too_big: false, total_lines: 2, proposed_splits: [] },
+};
+
+/** Test: end_line extends far beyond the patch boundary. */
+const SMART_DIFF_END_BEYOND: SmartDiff = {
+  groups: [
+    {
+      role: "core",
+      files: [
+        {
+          path: "src/service.ts",
+          additions: 1,
+          deletions: 1,
+          finding_annotations: [{ line: 12, end_line: 99, severity: "warning", finding_id: "beyond-1" }],
+          pseudocode_summary: null,
+        },
+      ],
+    },
+  ],
+  split_suggestion: { too_big: false, total_lines: 2, proposed_splits: [] },
+};
+
+/** Test: two annotations whose line ranges fully overlap. */
+const SMART_DIFF_OVERLAP: SmartDiff = {
+  groups: [
+    {
+      role: "core",
+      files: [
+        {
+          path: "src/service.ts",
+          additions: 1,
+          deletions: 1,
+          finding_annotations: [
+            { line: 11, end_line: 13, severity: "critical", finding_id: "overlap-crit" },
+            { line: 11, end_line: 13, severity: "warning", finding_id: "overlap-warn" },
+          ],
+          pseudocode_summary: null,
+        },
+      ],
+    },
+  ],
+  split_suggestion: { too_big: false, total_lines: 2, proposed_splits: [] },
+};
+
+/** Test: annotation at a line far outside SOURCE_FILE_PATCH (lines 10-13). */
+const SMART_DIFF_FAR_ANNOTATION: SmartDiff = {
+  groups: [
+    {
+      role: "core",
+      files: [
+        {
+          path: "src/service.ts",
+          additions: 1,
+          deletions: 1,
+          finding_annotations: [{ line: 99, severity: "critical", finding_id: "far-1" }],
+          pseudocode_summary: null,
+        },
+      ],
+    },
+  ],
+  split_suggestion: { too_big: false, total_lines: 2, proposed_splits: [] },
+};
+
+// ---- Bug regression tests --------------------------------------------------
+
+describe("SmartDiffViewer — Bug 1: no phantom badge when patch is null", () => {
+  it("does NOT render the findings badge when the file has no patch", async () => {
+    renderViewerWith(PR_ID, PR_FILES_NO_PATCH, () => Promise.resolve(jsonResp(SMART_DIFF_NO_PATCH)));
+
+    // Wait for groups to load
+    await waitFor(() => expect(screen.getByText(/Core logic/i)).toBeInTheDocument());
+
+    // Badge must not appear: no patch → no rendered lines → annotation not visible
+    expect(screen.queryByText(/finding/i)).not.toBeInTheDocument();
+    // No severity pill either
+    expect(screen.queryByText(/^warning$/i)).not.toBeInTheDocument();
+  });
+});
+
+describe("SmartDiffViewer — Bug 2: full range highlighted, badge only on first line", () => {
+  it("renders the badge pill only on the first line of a multi-line annotation", async () => {
+    renderViewerWith(PR_ID, [{ path: "src/service.ts", additions: 1, deletions: 1, patch: SOURCE_FILE_PATCH }], () =>
+      Promise.resolve(jsonResp(SMART_DIFF_RANGE)),
+    );
+
+    // Wait for the core group and diff to render
+    await waitFor(() => expect(screen.getByText(/Core logic/i)).toBeInTheDocument());
+
+    // Annotation covers lines 11–13. SOURCE_FILE_PATCH has line 11 as a single context
+    // line → exactly 1 warning badge pill rendered (only the start line gets the badge).
+    const pills = screen.getAllByText(/^warning$/i);
+    expect(pills).toHaveLength(1);
+  });
+});
+
+// ---- Edge-case tests -------------------------------------------------------
+
+describe("SmartDiffViewer — single-line annotation (end_line === line)", () => {
+  it("shows 1 finding badge and renders pills only for the annotated line", async () => {
+    renderViewerWith(
+      PR_ID,
+      [{ path: "src/service.ts", additions: 1, deletions: 1, patch: SOURCE_FILE_PATCH }],
+      () => Promise.resolve(jsonResp(SMART_DIFF_SINGLE_LINE)),
+    );
+
+    await waitFor(() => expect(screen.getByText(/1 finding/i)).toBeInTheDocument());
+
+    // Critical severity → "blocker" label in the i18n messages.
+    // The del and add rows at line 12 both resolve to lineNo=12, which is the annotation's
+    // start line → badgeAnnotationsByLine has line 12 → both rows get a pill. 2 total.
+    const pills = screen.getAllByText(/^blocker$/i);
+    expect(pills).toHaveLength(2);
+
+    // Lines outside [12, 12] must not get a pill
+    expect(screen.queryByText(/^warning$/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/^suggestion$/i)).not.toBeInTheDocument();
+  });
+});
+
+describe("SmartDiffViewer — annotation end_line extends beyond the patch boundary", () => {
+  it("shows badge only on the start line even when end_line is beyond the patch", async () => {
+    renderViewerWith(
+      PR_ID,
+      [{ path: "src/service.ts", additions: 1, deletions: 1, patch: SOURCE_FILE_PATCH }],
+      () => Promise.resolve(jsonResp(SMART_DIFF_END_BEYOND)),
+    );
+
+    await waitFor(() => expect(screen.getByText(/1 finding/i)).toBeInTheDocument());
+
+    // Annotation range is [12, 99]. badgeAnnotationsByLine only registers line 12.
+    // The del and add rows both resolve to lineNo=12 → exactly 2 warning pills.
+    const pills = screen.getAllByText(/^warning$/i);
+    expect(pills).toHaveLength(2);
+  });
+});
+
+describe("SmartDiffViewer — multiple overlapping findings on the same line range", () => {
+  it("shows 2 findings badge and a single badge pill on the shared start line", async () => {
+    renderViewerWith(
+      PR_ID,
+      [{ path: "src/service.ts", additions: 1, deletions: 1, patch: SOURCE_FILE_PATCH }],
+      () => Promise.resolve(jsonResp(SMART_DIFF_OVERLAP)),
+    );
+
+    // 2 visible annotations → "2 findings"
+    await waitFor(() => expect(screen.getByText(/2 findings/i)).toBeInTheDocument());
+
+    // Both annotations share start line 11 (a context line, appears once in DOM).
+    // badgeAnnotationsByLine maps 11 → [critical, warning]; topBadgeAnnotation = critical.
+    // → exactly 1 "blocker" pill at line 11.
+    const pills = screen.getAllByText(/^blocker$/i);
+    expect(pills).toHaveLength(1);
+
+    // No warning pill — critical wins
+    expect(screen.queryByText(/^warning$/i)).not.toBeInTheDocument();
+  });
+});
+
+describe("SmartDiffViewer — prFile present but patch is empty string", () => {
+  it("does not show badge or pills when the patch is an empty string", async () => {
+    // Empty patch → parsePatch('') returns [] → no rendered lines →
+    // visibleAnnotations is empty even though the SmartDiff has an annotation.
+    renderViewerWith(
+      PR_ID,
+      [{ path: "src/service.ts", additions: 1, deletions: 1, patch: "" }],
+      () => Promise.resolve(jsonResp(SMART_DIFF)),
+    );
+
+    await waitFor(() => expect(screen.getByText(/Core logic/i)).toBeInTheDocument());
+
+    expect(screen.queryByText(/finding/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/^warning$/i)).not.toBeInTheDocument();
+  });
+});
+
+describe("SmartDiffViewer — valid patch but zero matching annotations", () => {
+  it("does not show badge when the annotation line is not in the rendered patch", async () => {
+    // SOURCE_FILE_PATCH renders lines 10-13; annotation is at line 99.
+    // renderedLineNos does not include 99 → visibleAnnotations is empty → no badge.
+    renderViewerWith(
+      PR_ID,
+      [{ path: "src/service.ts", additions: 1, deletions: 1, patch: SOURCE_FILE_PATCH }],
+      () => Promise.resolve(jsonResp(SMART_DIFF_FAR_ANNOTATION)),
+    );
+
+    await waitFor(() => expect(screen.getByText(/Core logic/i)).toBeInTheDocument());
+
+    expect(screen.queryByText(/finding/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/^blocker$/i)).not.toBeInTheDocument();
   });
 });

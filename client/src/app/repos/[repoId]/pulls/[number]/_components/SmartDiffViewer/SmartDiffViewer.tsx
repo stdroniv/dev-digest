@@ -187,21 +187,57 @@ function SmartFileCard({
   const [open, setOpen] = React.useState(defaultOpen);
   const lines = React.useMemo(() => parsePatch(prFile?.patch), [prFile?.patch]);
 
+  // Set of line numbers that are actually rendered in this file's diff patch.
+  const renderedLineNos = React.useMemo(() => {
+    const s = new Set<number>();
+    for (const ln of lines) {
+      const no = ln.newNo ?? ln.oldNo;
+      if (no != null) s.add(no);
+    }
+    return s;
+  }, [lines]);
+
+  // Annotations whose start..end range intersects at least one rendered line.
+  const visibleAnnotations = React.useMemo(() => {
+    return smartFile.finding_annotations.filter((a) => {
+      const end = a.end_line ?? a.line;
+      for (let n = a.line; n <= end; n++) {
+        if (renderedLineNos.has(n)) return true;
+      }
+      return false;
+    });
+  }, [smartFile.finding_annotations, renderedLineNos]);
+
+  // Map each visible annotation under every line number in its inclusive range (used for highlight).
   const annotationsByLine = React.useMemo(() => {
     const m = new Map<number, FindingAnnotation[]>();
-    for (const a of smartFile.finding_annotations) {
+    for (const a of visibleAnnotations) {
+      const end = a.end_line ?? a.line;
+      for (let n = a.line; n <= end; n++) {
+        const existing = m.get(n) ?? [];
+        existing.push(a);
+        m.set(n, existing);
+      }
+    }
+    return m;
+  }, [visibleAnnotations]);
+
+  // Map each visible annotation only under its first line (used for the badge button).
+  const badgeAnnotationsByLine = React.useMemo(() => {
+    const m = new Map<number, FindingAnnotation[]>();
+    for (const a of visibleAnnotations) {
       const existing = m.get(a.line) ?? [];
       existing.push(a);
       m.set(a.line, existing);
     }
     return m;
-  }, [smartFile.finding_annotations]);
+  }, [visibleAnnotations]);
 
   const handleFindingsBadgeClick = (e: React.MouseEvent) => {
     e.stopPropagation();
     if (!open) setOpen(true);
 
-    const firstAnnotation = smartFile.finding_annotations[0];
+    const firstAnnotation = visibleAnnotations[0];
     if (firstAnnotation == null) return;
     const elemId = lineDomId(smartFile.path, firstAnnotation.line);
     // Wait one tick for the body to mount if we just opened the file
@@ -210,7 +246,7 @@ function SmartFileCard({
     }, 0);
   };
 
-  const hasFinding = smartFile.finding_annotations.length > 0;
+  const hasFinding = visibleAnnotations.length > 0;
   const chevronStyle: React.CSSProperties = {
     color: "var(--text-muted)",
     transform: open ? "rotate(90deg)" : "none",
@@ -251,7 +287,7 @@ function SmartFileCard({
             }}
           >
             <Icon.AlertTriangle size={11} />
-            {t("smartDiff.findings", { count: smartFile.finding_annotations.length })}
+            {t("smartDiff.findings", { count: visibleAnnotations.length })}
           </button>
         )}
       </div>
@@ -270,6 +306,7 @@ function SmartFileCard({
                 ln={ln}
                 path={smartFile.path}
                 annotationsByLine={annotationsByLine}
+                badgeAnnotationsByLine={badgeAnnotationsByLine}
                 onNavigateToFinding={onNavigateToFinding}
                 t={t}
               />
@@ -287,12 +324,14 @@ function DiffLine({
   ln,
   path,
   annotationsByLine,
+  badgeAnnotationsByLine,
   onNavigateToFinding,
   t,
 }: {
   ln: Line;
   path: string;
   annotationsByLine: Map<number, FindingAnnotation[]>;
+  badgeAnnotationsByLine: Map<number, FindingAnnotation[]>;
   onNavigateToFinding?: (findingId: string) => void;
   t: ReturnType<typeof useTranslations<"brief">>;
 }) {
@@ -306,9 +345,16 @@ function DiffLine({
 
   const lineNo = ln.newNo ?? ln.oldNo;
   const annotations = lineNo != null ? (annotationsByLine.get(lineNo) ?? []) : [];
+  const badgeAnnotations = lineNo != null ? (badgeAnnotationsByLine.get(lineNo) ?? []) : [];
 
-  // Pick the most-severe annotation (lowest rank wins).
+  // Pick the most-severe annotation for the left-border highlight (all lines in range).
   const topAnnotation = annotations.reduce<FindingAnnotation | null>((best, a) => {
+    if (best === null) return a;
+    return SEV_RANK[a.severity] < SEV_RANK[best.severity] ? a : best;
+  }, null);
+
+  // Pick the most-severe annotation for the badge (first line of range only).
+  const topBadgeAnnotation = badgeAnnotations.reduce<FindingAnnotation | null>((best, a) => {
     if (best === null) return a;
     return SEV_RANK[a.severity] < SEV_RANK[best.severity] ? a : best;
   }, null);
@@ -329,6 +375,7 @@ function DiffLine({
         : "transparent";
 
   const sevToken = topAnnotation ? SEV_TOKEN[topAnnotation.severity] : null;
+  const badgeSevToken = topBadgeAnnotation ? SEV_TOKEN[topBadgeAnnotation.severity] : null;
 
   const rowStyle: React.CSSProperties = {
     display: "flex",
@@ -355,12 +402,12 @@ function DiffLine({
       <span className="mono" style={s.lineText}>
         {ln.text || " "}
       </span>
-      {topAnnotation && sevToken && (
+      {topBadgeAnnotation && badgeSevToken && (
         <button
           type="button"
           onClick={(e) => {
             e.stopPropagation();
-            onNavigateToFinding?.(topAnnotation.finding_id);
+            onNavigateToFinding?.(topBadgeAnnotation.finding_id);
           }}
           style={{
             marginLeft: "auto",
@@ -372,17 +419,17 @@ function DiffLine({
             fontSize: 11,
             fontWeight: 600,
             cursor: "pointer",
-            color: sevToken.color,
-            background: sevToken.bg,
+            color: badgeSevToken.color,
+            background: badgeSevToken.bg,
             borderStyle: "solid",
             borderWidth: 1,
-            borderColor: sevToken.color,
+            borderColor: badgeSevToken.color,
             flexShrink: 0,
             marginRight: 8,
             whiteSpace: "nowrap" as const,
           }}
         >
-          {t(sevToken.labelKey)}
+          {t(badgeSevToken.labelKey)}
         </button>
       )}
     </div>

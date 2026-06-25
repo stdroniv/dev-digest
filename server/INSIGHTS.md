@@ -67,4 +67,6 @@ under one section; keep it actionable cold; never edit or delete existing entrie
 
 ## Session Notes
 
+- `SmartDiffService` (`modules/reviews/smart-diff.service.ts`) is NOT unit-testable without either a real DB or method-level prototype spies: its constructor creates `ReviewRepository` directly (`this.repo = new ReviewRepository(container.db)`), leaving no injection seam. The only hermetic unit-test approach short of refactoring is `vi.spyOn(ReviewRepository.prototype, 'getPull').mockResolvedValue(…)` etc., which violates the "never mock internal modules" principle but is the narrowest possible interception (prototype-level, assertion on output only, not on mock call count). If the service grows complex branching logic that needs targeted unit tests, extract a seam — e.g. accept `ReviewRepository` as an optional constructor parameter. Until then, DB-backed behaviour is covered by `smart-diff-routes.it.test.ts`; the service test (`smart-diff-service.test.ts`) uses prototype spies to cover the field-mapping and filter logic.
+
 ## Open Questions

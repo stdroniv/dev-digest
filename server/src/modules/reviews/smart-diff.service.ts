@@ -63,6 +63,7 @@ export class SmartDiffService {
         const bucket = annotationsByPath.get(finding.file) ?? [];
         bucket.push({
           line: finding.startLine,
+          end_line: finding.endLine,
           severity: SEVERITY_TO_ANNOTATION[finding.severity] ?? 'suggestion',
           finding_id: finding.id,
         });

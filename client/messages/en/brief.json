@@ -36,6 +36,6 @@
     "splitSuggestion": "This PR is large — consider splitting it.",
     "smartOrder": "Smart order",
     "originalOrder": "Original order",
-    "annotation": { "blocker": "blocker", "warning": "warning", "suggestion": "suggestion" }
+    "annotation": { "blocker": "blocker", "warning": "warning", "suggestion": "suggestion", "line": "line {line}", "lineRange": "lines {start}–{end}", "findingsOnLine": "{count} findings on line {line}" }
   }
 }

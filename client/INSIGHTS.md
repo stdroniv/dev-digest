@@ -61,6 +61,10 @@ it actionable cold; never edit or delete existing entries.
 
 - To highlight the **full line range** of a multi-line finding annotation in `SmartDiffViewer`, the `annotationsByLine` map must register the annotation under EVERY line number in `[a.line, a.end_line ?? a.line]`, not only `a.line`. The wire contract now carries `end_line: z.number().int().nullish()` on `FindingAnnotation` (both vendored copies); the service sets it from `finding.endLine`; the client loops `for (let n = a.line; n <= (a.end_line ?? a.line); n++)` when building the map. Only `visibleAnnotations` are expanded this way (using the intersection check above), so annotations outside the rendered diff are silently skipped.
 
+- When a per-line badge in `SmartDiffViewer` covers ≥2 findings, use a **count badge** (`MultiFindingBadge`) that opens a `role="dialog"` popover (`FindingsPopover`). The popover is `position: absolute` inside a `position: relative` wrapper span — it scrolls with content instead of detaching like `position: fixed` would. If visual clipping occurs (the parent `s.fileCard` has `overflow: hidden`), switch `FindingsPopover` to `createPortal(node, document.body)` with `position: fixed` coords from `getBoundingClientRect()` plus `scroll`/`resize` dismiss. RTL tests for multi-badge: query the count badge by `getByRole("button", { name: /N findings on line M/i })` (its `aria-label`) to avoid collision with the file-level "N findings" chip; target popover rows with `within(getByRole("dialog"))`.
+
+- The `MultiFindingBadge` click-outside listener uses `mousedown` (not `click`) so the popover dismisses BEFORE any row `click` within it lands. The listener is guarded on `open` inside `useEffect([open])` so it's only attached while the popover is visible — the opening `click` itself does not trigger dismissal because the listener is added after the state flip.
+
 ## Session Notes
 
 ## Open Questions

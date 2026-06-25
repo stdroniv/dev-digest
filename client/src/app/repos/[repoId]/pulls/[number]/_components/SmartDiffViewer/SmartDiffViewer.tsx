@@ -318,6 +318,181 @@ function SmartFileCard({
   );
 }
 
+// ---- FindingsPopover -------------------------------------------------------
+
+function FindingsPopover({
+  annotations,
+  onNavigate,
+  t,
+}: {
+  annotations: FindingAnnotation[];
+  onNavigate: (findingId: string) => void;
+  t: ReturnType<typeof useTranslations<"brief">>;
+}) {
+  return (
+    <div
+      role="dialog"
+      style={{
+        position: "absolute",
+        top: "calc(100% + 4px)",
+        right: 0,
+        zIndex: 20,
+        minWidth: 200,
+        maxWidth: 320,
+        borderWidth: 1,
+        borderStyle: "solid",
+        borderColor: "var(--border)",
+        background: "var(--bg-elevated)",
+        boxShadow: "0 4px 12px rgba(0,0,0,0.12)",
+        borderRadius: 6,
+        display: "flex",
+        flexDirection: "column",
+        gap: 2,
+        padding: 6,
+      }}
+    >
+      {annotations.map((a) => {
+        const token = SEV_TOKEN[a.severity];
+        const end = a.end_line ?? a.line;
+        const rangeLabel =
+          end > a.line
+            ? t("smartDiff.annotation.lineRange", { start: a.line, end })
+            : t("smartDiff.annotation.line", { line: a.line });
+        return (
+          <button
+            key={a.finding_id}
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation();
+              onNavigate(a.finding_id);
+            }}
+            style={{
+              display: "flex",
+              alignItems: "center",
+              gap: 6,
+              width: "100%",
+              textAlign: "left",
+              padding: "4px 6px",
+              borderRadius: 4,
+              borderWidth: 0,
+              borderStyle: "solid",
+              borderColor: "transparent",
+              background: "transparent",
+              cursor: "pointer",
+              fontSize: 12,
+            }}
+          >
+            <span
+              style={{
+                width: 8,
+                height: 8,
+                borderRadius: 2,
+                background: token.color,
+                flexShrink: 0,
+              }}
+            />
+            <span style={{ color: token.color, fontWeight: 600 }}>
+              {t(token.labelKey)}
+            </span>
+            <span style={{ marginLeft: "auto", color: "var(--text-muted)", fontSize: 11 }}>
+              {rangeLabel}
+            </span>
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
+// ---- MultiFindingBadge -----------------------------------------------------
+
+function MultiFindingBadge({
+  annotations,
+  onNavigateToFinding,
+  t,
+}: {
+  annotations: FindingAnnotation[];
+  onNavigateToFinding?: (findingId: string) => void;
+  t: ReturnType<typeof useTranslations<"brief">>;
+}) {
+  const [open, setOpen] = React.useState(false);
+  const wrapRef = React.useRef<HTMLSpanElement>(null);
+  const sorted = React.useMemo(
+    () => [...annotations].sort((a, b) => SEV_RANK[a.severity] - SEV_RANK[b.severity]),
+    [annotations],
+  );
+
+  React.useEffect(() => {
+    if (!open) return;
+    const onDown = (e: MouseEvent) => {
+      if (wrapRef.current && !wrapRef.current.contains(e.target as Node)) setOpen(false);
+    };
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setOpen(false);
+    };
+    document.addEventListener("mousedown", onDown);
+    document.addEventListener("keydown", onKey);
+    return () => {
+      document.removeEventListener("mousedown", onDown);
+      document.removeEventListener("keydown", onKey);
+    };
+  }, [open]);
+
+  return (
+    <span
+      ref={wrapRef}
+      style={{
+        position: "relative",
+        marginLeft: "auto",
+        alignSelf: "center",
+        flexShrink: 0,
+        marginRight: 8,
+      }}
+    >
+      <button
+        type="button"
+        aria-haspopup="dialog"
+        aria-expanded={open}
+        aria-label={t("smartDiff.annotation.findingsOnLine", {
+          count: annotations.length,
+          line: sorted[0]!.line,
+        })}
+        onClick={(e) => {
+          e.stopPropagation();
+          setOpen((o) => !o);
+        }}
+        style={{
+          display: "inline-flex",
+          alignItems: "center",
+          padding: "1px 6px",
+          borderRadius: 4,
+          fontSize: 11,
+          fontWeight: 600,
+          cursor: "pointer",
+          whiteSpace: "nowrap" as const,
+          color: "var(--text-secondary)",
+          background: "var(--bg-elevated)",
+          borderStyle: "solid",
+          borderWidth: 1,
+          borderColor: "var(--border)",
+        }}
+      >
+        {t("smartDiff.findings", { count: annotations.length })}
+      </button>
+      {open && (
+        <FindingsPopover
+          annotations={sorted}
+          onNavigate={(id) => {
+            onNavigateToFinding?.(id);
+            setOpen(false);
+          }}
+          t={t}
+        />
+      )}
+    </span>
+  );
+}
+
 // ---- Individual diff line --------------------------------------------------
 
 function DiffLine({
@@ -402,35 +577,43 @@ function DiffLine({
       <span className="mono" style={s.lineText}>
         {ln.text || " "}
       </span>
-      {topBadgeAnnotation && badgeSevToken && (
-        <button
-          type="button"
-          onClick={(e) => {
-            e.stopPropagation();
-            onNavigateToFinding?.(topBadgeAnnotation.finding_id);
-          }}
-          style={{
-            marginLeft: "auto",
-            alignSelf: "center",
-            display: "inline-flex",
-            alignItems: "center",
-            padding: "1px 6px",
-            borderRadius: 4,
-            fontSize: 11,
-            fontWeight: 600,
-            cursor: "pointer",
-            color: badgeSevToken.color,
-            background: badgeSevToken.bg,
-            borderStyle: "solid",
-            borderWidth: 1,
-            borderColor: badgeSevToken.color,
-            flexShrink: 0,
-            marginRight: 8,
-            whiteSpace: "nowrap" as const,
-          }}
-        >
-          {t(badgeSevToken.labelKey)}
-        </button>
+      {badgeAnnotations.length >= 2 ? (
+        <MultiFindingBadge
+          annotations={badgeAnnotations}
+          onNavigateToFinding={onNavigateToFinding}
+          t={t}
+        />
+      ) : (
+        topBadgeAnnotation && badgeSevToken && (
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation();
+              onNavigateToFinding?.(topBadgeAnnotation.finding_id);
+            }}
+            style={{
+              marginLeft: "auto",
+              alignSelf: "center",
+              display: "inline-flex",
+              alignItems: "center",
+              padding: "1px 6px",
+              borderRadius: 4,
+              fontSize: 11,
+              fontWeight: 600,
+              cursor: "pointer",
+              color: badgeSevToken.color,
+              background: badgeSevToken.bg,
+              borderStyle: "solid",
+              borderWidth: 1,
+              borderColor: badgeSevToken.color,
+              flexShrink: 0,
+              marginRight: 8,
+              whiteSpace: "nowrap" as const,
+            }}
+          >
+            {t(badgeSevToken.labelKey)}
+          </button>
+        )
       )}
     </div>
   );

@@ -8,7 +8,7 @@
  */
 import React from "react";
 import { describe, it, expect, afterEach, vi, beforeEach } from "vitest";
-import { render, screen, fireEvent, cleanup, waitFor } from "@testing-library/react";
+import { render, screen, fireEvent, cleanup, waitFor, within } from "@testing-library/react";
 import { NextIntlClientProvider } from "next-intl";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import briefMessages from "../../../../../../../../messages/en/brief.json";
@@ -328,6 +328,20 @@ const SMART_DIFF_FAR_ANNOTATION: SmartDiff = {
   split_suggestion: { too_big: false, total_lines: 2, proposed_splits: [] },
 };
 
+/** Test: three findings all sharing start line 11 → MultiFindingBadge. */
+const SMART_DIFF_MULTI: SmartDiff = {
+  groups: [{ role: "core", files: [{
+    path: "src/service.ts", additions: 1, deletions: 1,
+    finding_annotations: [
+      { line: 11, severity: "suggestion", finding_id: "multi-sugg" },
+      { line: 11, end_line: 13, severity: "critical", finding_id: "multi-crit" },
+      { line: 11, severity: "warning", finding_id: "multi-warn" },
+    ],
+    pseudocode_summary: null,
+  }]}],
+  split_suggestion: { too_big: false, total_lines: 2, proposed_splits: [] },
+};
+
 // ---- Bug regression tests --------------------------------------------------
 
 describe("SmartDiffViewer — Bug 1: no phantom badge when patch is null", () => {
@@ -402,24 +416,179 @@ describe("SmartDiffViewer — annotation end_line extends beyond the patch bound
 });
 
 describe("SmartDiffViewer — multiple overlapping findings on the same line range", () => {
-  it("shows 2 findings badge and a single badge pill on the shared start line", async () => {
+  it("shows a count badge for 2 findings on line 11 and lists them in the popover", async () => {
+    const spy = vi.fn();
     renderViewerWith(
       PR_ID,
       [{ path: "src/service.ts", additions: 1, deletions: 1, patch: SOURCE_FILE_PATCH }],
       () => Promise.resolve(jsonResp(SMART_DIFF_OVERLAP)),
+      spy,
     );
 
-    // 2 visible annotations → "2 findings"
-    await waitFor(() => expect(screen.getByText(/2 findings/i)).toBeInTheDocument());
+    // Wait for data to load
+    await waitFor(() => expect(screen.getByText(/Core logic/i)).toBeInTheDocument());
 
-    // Both annotations share start line 11 (a context line, appears once in DOM).
-    // badgeAnnotationsByLine maps 11 → [critical, warning]; topBadgeAnnotation = critical.
-    // → exactly 1 "blocker" pill at line 11.
-    const pills = screen.getAllByText(/^blocker$/i);
-    expect(pills).toHaveLength(1);
+    // Per-line count badge — not the file-level "2 findings" chip
+    const countBadge = screen.getByRole("button", { name: /2 findings on line 11/i });
+    expect(countBadge).toBeInTheDocument();
 
-    // No warning pill — critical wins
+    // No single severity pill visible before opening the popover
+    expect(screen.queryByText(/^blocker$/i)).not.toBeInTheDocument();
     expect(screen.queryByText(/^warning$/i)).not.toBeInTheDocument();
+
+    // Open the popover
+    fireEvent.click(countBadge);
+    const dialog = screen.getByRole("dialog");
+    expect(dialog).toBeInTheDocument();
+
+    // Both rows visible: critical → "blocker", warning → "warning"
+    expect(within(dialog).getByText(/^blocker$/i)).toBeInTheDocument();
+    expect(within(dialog).getByText(/^warning$/i)).toBeInTheDocument();
+
+    // Both annotations share the same range 11–13
+    const rangeLabels = within(dialog).getAllByText(/lines 11/i);
+    expect(rangeLabels.length).toBeGreaterThanOrEqual(1);
+
+    // Click the blocker row → spy called with the critical finding_id
+    fireEvent.click(within(dialog).getByRole("button", { name: /blocker/i }));
+    expect(spy).toHaveBeenCalledWith("overlap-crit");
+
+    // Popover closes after navigating
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+  });
+});
+
+// ---- MultiFindingBadge tests ------------------------------------------------
+
+describe("SmartDiffViewer — count badge renders when ≥2 findings on the same line", () => {
+  it("shows a count badge and no single severity pill for 3 findings on line 11", async () => {
+    renderViewerWith(
+      PR_ID,
+      [{ path: "src/service.ts", additions: 1, deletions: 1, patch: SOURCE_FILE_PATCH }],
+      () => Promise.resolve(jsonResp(SMART_DIFF_MULTI)),
+    );
+
+    await waitFor(() => expect(screen.getByText(/Core logic/i)).toBeInTheDocument());
+
+    // Count badge is present (line 11 is a context line — appears once)
+    expect(screen.getByRole("button", { name: /3 findings on line 11/i })).toBeInTheDocument();
+
+    // No single-severity pill (the count badge replaced it)
+    expect(screen.queryByText(/^blocker$/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/^warning$/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/^suggestion$/i)).not.toBeInTheDocument();
+  });
+});
+
+describe("SmartDiffViewer — popover opens and lists sorted rows with correct ranges", () => {
+  it("lists severity-sorted rows with line/range labels", async () => {
+    renderViewerWith(
+      PR_ID,
+      [{ path: "src/service.ts", additions: 1, deletions: 1, patch: SOURCE_FILE_PATCH }],
+      () => Promise.resolve(jsonResp(SMART_DIFF_MULTI)),
+    );
+
+    await waitFor(() => expect(screen.getByText(/Core logic/i)).toBeInTheDocument());
+
+    const countBadge = screen.getByRole("button", { name: /3 findings on line 11/i });
+    fireEvent.click(countBadge);
+
+    const dialog = screen.getByRole("dialog");
+    expect(dialog).toBeInTheDocument();
+
+    // All three severity labels present (critical → "blocker")
+    expect(within(dialog).getByText(/^blocker$/i)).toBeInTheDocument();
+    expect(within(dialog).getByText(/^warning$/i)).toBeInTheDocument();
+    expect(within(dialog).getByText(/^suggestion$/i)).toBeInTheDocument();
+
+    // Critical has range 11–13
+    expect(within(dialog).getByText(/lines 11/i)).toBeInTheDocument();
+    // Warning and suggestion are single-line → "line 11"
+    const singleLineLabels = within(dialog).getAllByText(/^line 11$/i);
+    expect(singleLineLabels).toHaveLength(2);
+
+    // Sort order: blocker (critical) → warning → suggestion
+    const rows = within(dialog).getAllByRole("button");
+    expect(rows[0]!.textContent).toMatch(/blocker/i);
+    expect(rows[1]!.textContent).toMatch(/warning/i);
+    expect(rows[2]!.textContent).toMatch(/suggestion/i);
+  });
+});
+
+describe("SmartDiffViewer — each popover row navigates to its own finding_id", () => {
+  it("clicking a row calls onNavigateToFinding with the correct id and closes the popover", async () => {
+    const spy = vi.fn();
+    renderViewerWith(
+      PR_ID,
+      [{ path: "src/service.ts", additions: 1, deletions: 1, patch: SOURCE_FILE_PATCH }],
+      () => Promise.resolve(jsonResp(SMART_DIFF_MULTI)),
+      spy,
+    );
+
+    await waitFor(() => expect(screen.getByText(/Core logic/i)).toBeInTheDocument());
+
+    // Open popover and click the blocker (critical) row
+    fireEvent.click(screen.getByRole("button", { name: /3 findings on line 11/i }));
+    const dialog = screen.getByRole("dialog");
+    fireEvent.click(within(dialog).getByRole("button", { name: /blocker/i }));
+
+    expect(spy).toHaveBeenCalledWith("multi-crit");
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+
+    // Re-open and click the warning row
+    fireEvent.click(screen.getByRole("button", { name: /3 findings on line 11/i }));
+    const dialog2 = screen.getByRole("dialog");
+    fireEvent.click(within(dialog2).getByRole("button", { name: /warning/i }));
+
+    expect(spy).toHaveBeenCalledWith("multi-warn");
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+  });
+});
+
+describe("SmartDiffViewer — popover closes on outside click and Esc", () => {
+  it("closes the popover when clicking outside", async () => {
+    renderViewerWith(
+      PR_ID,
+      [{ path: "src/service.ts", additions: 1, deletions: 1, patch: SOURCE_FILE_PATCH }],
+      () => Promise.resolve(jsonResp(SMART_DIFF_MULTI)),
+    );
+
+    await waitFor(() => expect(screen.getByText(/Core logic/i)).toBeInTheDocument());
+
+    fireEvent.click(screen.getByRole("button", { name: /3 findings on line 11/i }));
+    expect(screen.getByRole("dialog")).toBeInTheDocument();
+
+    fireEvent.mouseDown(document.body);
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+  });
+
+  it("closes the popover on Esc key", async () => {
+    renderViewerWith(
+      PR_ID,
+      [{ path: "src/service.ts", additions: 1, deletions: 1, patch: SOURCE_FILE_PATCH }],
+      () => Promise.resolve(jsonResp(SMART_DIFF_MULTI)),
+    );
+
+    await waitFor(() => expect(screen.getByText(/Core logic/i)).toBeInTheDocument());
+
+    fireEvent.click(screen.getByRole("button", { name: /3 findings on line 11/i }));
+    expect(screen.getByRole("dialog")).toBeInTheDocument();
+
+    fireEvent.keyDown(document, { key: "Escape" });
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+  });
+});
+
+describe("SmartDiffViewer — single-finding lines unchanged (regression)", () => {
+  it("does not render a count badge or popover for a single finding", async () => {
+    renderViewer(PR_ID, () => Promise.resolve(jsonResp(SMART_DIFF)));
+
+    await waitFor(() => expect(screen.getByText(/Core logic/i)).toBeInTheDocument());
+
+    // No count badge
+    expect(screen.queryByRole("button", { name: /findings on line/i })).not.toBeInTheDocument();
+    // No dialog
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
   });
 });
 
@@ -454,5 +623,178 @@ describe("SmartDiffViewer — valid patch but zero matching annotations", () => 
 
     expect(screen.queryByText(/finding/i)).not.toBeInTheDocument();
     expect(screen.queryByText(/^blocker$/i)).not.toBeInTheDocument();
+  });
+});
+
+// ---- New fixtures for additional coverage ----------------------------------
+
+/** Empty groups response — triggers the "no changed files" empty state. */
+const SMART_DIFF_EMPTY: SmartDiff = {
+  groups: [],
+  split_suggestion: { too_big: false, total_lines: 0, proposed_splits: [] },
+};
+
+/** Split-too-big flag set — triggers the split suggestion banner. */
+const SMART_DIFF_SPLIT_TOO_BIG: SmartDiff = {
+  groups: [
+    {
+      role: "core",
+      files: [
+        {
+          path: "src/service.ts",
+          additions: 1,
+          deletions: 1,
+          finding_annotations: [],
+          pseudocode_summary: null,
+        },
+      ],
+    },
+  ],
+  split_suggestion: { too_big: true, total_lines: 200, proposed_splits: [] },
+};
+
+// ---- hideHeader prop -------------------------------------------------------
+
+describe("SmartDiffViewer — hideHeader prop controls SectionLabel visibility", () => {
+  it("renders the 'Smart Diff' section label when hideHeader is not set", async () => {
+    renderViewer(PR_ID, () => Promise.resolve(jsonResp(SMART_DIFF)));
+    await waitFor(() => expect(screen.getByText(/Core logic/i)).toBeInTheDocument());
+    // SectionLabel renders its children text into a <span>
+    expect(screen.getByText("Smart Diff")).toBeInTheDocument();
+  });
+
+  it("does not render the 'Smart Diff' section label when hideHeader is true", async () => {
+    global.fetch = vi.fn(() => Promise.resolve(jsonResp(SMART_DIFF))) as unknown as typeof fetch;
+    const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    render(
+      <QueryClientProvider client={qc}>
+        <NextIntlClientProvider locale="en" messages={{ brief: briefMessages }}>
+          <SmartDiffViewer prId={PR_ID} files={PR_FILES} hideHeader={true} />
+        </NextIntlClientProvider>
+      </QueryClientProvider>,
+    );
+    await waitFor(() => expect(screen.getByText(/Core logic/i)).toBeInTheDocument());
+    expect(screen.queryByText("Smart Diff")).not.toBeInTheDocument();
+  });
+});
+
+// ---- Empty state -----------------------------------------------------------
+
+describe("SmartDiffViewer — empty state when API returns no groups", () => {
+  it("renders the empty-state message when groups array is empty", async () => {
+    renderViewer(PR_ID, () => Promise.resolve(jsonResp(SMART_DIFF_EMPTY)));
+    await waitFor(() =>
+      expect(screen.getByText("No changed files to show.")).toBeInTheDocument(),
+    );
+    // No group labels or file paths should be present
+    expect(screen.queryByText(/Core logic/i)).not.toBeInTheDocument();
+  });
+});
+
+// ---- Split suggestion banner -----------------------------------------------
+
+describe("SmartDiffViewer — split suggestion banner", () => {
+  it("shows the split suggestion banner when split_suggestion.too_big is true", async () => {
+    renderViewer(PR_ID, () => Promise.resolve(jsonResp(SMART_DIFF_SPLIT_TOO_BIG)));
+    await waitFor(() => expect(screen.getByText(/Core logic/i)).toBeInTheDocument());
+    expect(screen.getByText(/this PR is large/i)).toBeInTheDocument();
+  });
+
+  it("does not show the split suggestion banner when too_big is false", async () => {
+    renderViewer(PR_ID, () => Promise.resolve(jsonResp(SMART_DIFF)));
+    await waitFor(() => expect(screen.getByText(/Core logic/i)).toBeInTheDocument());
+    expect(screen.queryByText(/this PR is large/i)).not.toBeInTheDocument();
+  });
+});
+
+// ---- "No diff available." fallback text ------------------------------------
+
+describe("SmartDiffViewer — open file card with null patch shows fallback", () => {
+  it("renders 'No diff available.' in the file body when the patch is null", async () => {
+    // SMART_DIFF_NO_PATCH has a core file whose matching PR file has patch: null.
+    // parsePatch(null) returns [] → the open file body renders the fallback text.
+    renderViewerWith(PR_ID, PR_FILES_NO_PATCH, () => Promise.resolve(jsonResp(SMART_DIFF_NO_PATCH)));
+    await waitFor(() => expect(screen.getByText(/Core logic/i)).toBeInTheDocument());
+    expect(screen.getByText("No diff available.")).toBeInTheDocument();
+  });
+});
+
+// ---- Click inside popover keeps it open ------------------------------------
+
+describe("SmartDiffViewer — click inside popover does not close it", () => {
+  it("keeps the popover open when a mousedown fires inside the dialog", async () => {
+    renderViewerWith(
+      PR_ID,
+      [{ path: "src/service.ts", additions: 1, deletions: 1, patch: SOURCE_FILE_PATCH }],
+      () => Promise.resolve(jsonResp(SMART_DIFF_MULTI)),
+    );
+    await waitFor(() => expect(screen.getByText(/Core logic/i)).toBeInTheDocument());
+
+    // Open the popover
+    fireEvent.click(screen.getByRole("button", { name: /3 findings on line 11/i }));
+    const dialog = screen.getByRole("dialog");
+    expect(dialog).toBeInTheDocument();
+
+    // mousedown on the dialog element itself (inside wrapRef) — must NOT close the popover
+    fireEvent.mouseDown(dialog);
+    expect(screen.getByRole("dialog")).toBeInTheDocument();
+  });
+});
+
+// ---- aria-expanded reflects open/closed state ------------------------------
+
+describe("SmartDiffViewer — MultiFindingBadge aria-expanded attribute", () => {
+  it("reflects aria-expanded=false when closed and aria-expanded=true when open", async () => {
+    renderViewerWith(
+      PR_ID,
+      [{ path: "src/service.ts", additions: 1, deletions: 1, patch: SOURCE_FILE_PATCH }],
+      () => Promise.resolve(jsonResp(SMART_DIFF_MULTI)),
+    );
+    await waitFor(() => expect(screen.getByText(/Core logic/i)).toBeInTheDocument());
+
+    const countBadge = screen.getByRole("button", { name: /3 findings on line 11/i });
+
+    // Initially closed
+    expect(countBadge).toHaveAttribute("aria-expanded", "false");
+
+    // Open the popover
+    fireEvent.click(countBadge);
+    expect(countBadge).toHaveAttribute("aria-expanded", "true");
+
+    // Close with Esc — attribute resets
+    fireEvent.keyDown(document, { key: "Escape" });
+    expect(countBadge).toHaveAttribute("aria-expanded", "false");
+  });
+});
+
+// ---- File card accordion toggle --------------------------------------------
+
+describe("SmartDiffViewer — file card accordion toggle", () => {
+  it("collapses an open core file card when its header is clicked", async () => {
+    renderViewer(PR_ID, () => Promise.resolve(jsonResp(SMART_DIFF)));
+    await waitFor(() => expect(screen.getByText(/Core logic/i)).toBeInTheDocument());
+
+    // Core file is open by default — warning pills are visible
+    expect(screen.getAllByText(/^warning$/i).length).toBeGreaterThanOrEqual(1);
+
+    // Click the file path span inside the header to collapse the file card
+    fireEvent.click(screen.getByText("src/service.ts"));
+
+    // After collapse the diff lines (and their pills) are removed from the DOM
+    expect(screen.queryByText(/^warning$/i)).not.toBeInTheDocument();
+  });
+
+  it("re-expands a collapsed file card when the header is clicked again", async () => {
+    renderViewer(PR_ID, () => Promise.resolve(jsonResp(SMART_DIFF)));
+    await waitFor(() => expect(screen.getByText(/Core logic/i)).toBeInTheDocument());
+
+    const filePath = screen.getByText("src/service.ts");
+
+    // Collapse then re-expand
+    fireEvent.click(filePath);
+    expect(screen.queryByText(/^warning$/i)).not.toBeInTheDocument();
+
+    fireEvent.click(filePath);
+    expect(screen.getAllByText(/^warning$/i).length).toBeGreaterThanOrEqual(1);
   });
 });

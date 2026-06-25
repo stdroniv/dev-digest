@@ -5,7 +5,7 @@
         "hooks": [
           {
             "type": "prompt",
-            "prompt": "Before ending this session, invoke the engineering-insights skill. Detect which modules (root, client/, server/, reviewer-core/, e2e/) were meaningfully touched (repo-intel maps to server/). Rank candidates by signal strength: user corrections first, then failed approaches, repeated patterns, non-obvious solutions, workflow discoveries. Apply the quality filter (discard anything obvious from 5 minutes of reading the code). For each surviving insight, append to that module's INSIGHTS.md (root → ./INSIGHTS.md, else {module}/INSIGHTS.md) under the matching section; these files already exist with the 7-section template. If the session was trivial (typo fix, rename, formatting) or no insights passed the filter, skip silently. Do not ask for confirmation."
+            "prompt": "First check: run `git status --short`. If the output is empty (nothing changed this session), stop here — write nothing. Otherwise, invoke the engineering-insights skill. Detect which modules (root, client/, server/, reviewer-core/, e2e/) were meaningfully touched (repo-intel maps to server/). Rank candidates by signal strength: user corrections first, then failed approaches, repeated patterns, non-obvious solutions, workflow discoveries. Apply the quality filter (discard anything obvious from 5 minutes of reading the code). For each surviving insight, append to that module's INSIGHTS.md (root → ./INSIGHTS.md, else {module}/INSIGHTS.md) under the matching section; these files already exist with the 7-section template. If the session was trivial (typo fix, rename, formatting) or no insights passed the filter, skip silently. Do not ask for confirmation."
           }
         ]
       }

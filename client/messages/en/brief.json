@@ -23,5 +23,19 @@
     "recalculate": "Recalculate",
     "recalculating": "Recalculating…",
     "empty": "No intent computed — click Recalculate to classify this PR."
+  },
+  "smartDiff": {
+    "core": "Core logic",
+    "coreDesc": "The substance of the change — review closely",
+    "wiring": "Wiring",
+    "wiringDesc": "Hooks the core into the app",
+    "boilerplate": "Boilerplate",
+    "boilerplateDesc": "Generated / mechanical — skim",
+    "findings": "{count, plural, one {# finding} other {# findings}}",
+    "empty": "No changed files to show.",
+    "splitSuggestion": "This PR is large — consider splitting it.",
+    "smartOrder": "Smart order",
+    "originalOrder": "Original order",
+    "annotation": { "blocker": "blocker", "warning": "warning", "suggestion": "suggestion", "line": "line {line}", "lineRange": "lines {start}–{end}", "findingsOnLine": "{count} findings on line {line}" }
   }
 }

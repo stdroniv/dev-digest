@@ -38,6 +38,8 @@ export const BOILERPLATE_PATTERNS: RegExp[] = [
   /(?:^|\/)node_modules\//,
   // Generated files (e.g. foo.generated.ts)
   /\.generated\./,
+  // Numbered migration SQL files (e.g. 0001_init.sql, 001-create-users.sql)
+  /(?:^|\/)\d+[_-].*\.sql$/,
 ];
 
 /**

@@ -6,6 +6,7 @@
     "history": "PR history"
   },
   "noRisks": "No notable risks flagged.",
+  "risks": { "high": "High", "medium": "Medium", "low": "Low" },
   "noHistory": "No prior PRs overlap these files.",
   "overlap": "{count} overlap",
   "unavailable": "Brief not available yet.",

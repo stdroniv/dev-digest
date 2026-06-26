@@ -3,7 +3,7 @@
 
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { api } from "../api";
-import type { Intent, SmartDiff } from "@devdigest/shared";
+import type { Intent, Risks, SmartDiff } from "@devdigest/shared";
 
 /**
  * Fetch the stored intent for a PR (null when not yet computed).
@@ -13,6 +13,18 @@ export function useIntent(prId: string | null | undefined) {
   return useQuery({
     queryKey: ["intent", prId],
     queryFn: () => api.get<Intent | null>(`/pulls/${prId}/intent`),
+    enabled: prId != null,
+  });
+}
+
+/**
+ * Fetch the stored risks for a PR (null when not yet computed).
+ * Keyed by ["risks", prId] so it is independently cacheable.
+ */
+export function useRisks(prId: string | null | undefined) {
+  return useQuery({
+    queryKey: ["risks", prId],
+    queryFn: () => api.get<Risks | null>(`/pulls/${prId}/risks`),
     enabled: prId != null,
   });
 }

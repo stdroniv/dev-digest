@@ -3,9 +3,9 @@ name: ship-feature
 description: "Run the full DevDigest feature-delivery pipeline end-to-end by orchestrating the project's subagents. Use whenever the user invokes `/ship-feature`, or asks to 'ship a feature', 'build this end to end', 'run the full agent pipeline', 'take this from plan to merge-ready', or hands over a sizable feature request they want implemented with planning + tests + review (not just a quick edit). It sequences researcher → planner (with a human approval gate on the plan) → implementer → test-writer, then runs architecture-reviewer + security-reviewer + plan-verifier in parallel, loops blocking findings back to the implementer until the change is clean, and optionally finishes with doc-writer. Use it even when the user just describes a substantial feature and wants it done 'properly' — orchestrating the agents in the right order, in parallel where safe, with the approval gate and the review loop, is the whole value. For a one-line quick fix a single agent is enough; this is for multi-step features worth the full pipeline."
 allowed-tools: Task, Read, Grep, Glob, Bash
 metadata:
-  version: 1.1.0
+  version: 1.2.0
   tags: pipeline, orchestration, subagents, feature-delivery, planner, implementer, reviewers, definition-of-done
-  updated: 2026-06-24
+  updated: 2026-06-27
 ---
 
 # Ship Feature — pipeline orchestrator
@@ -62,6 +62,13 @@ makes the rest of the pipeline safe to run with less supervision.
 
 ## Step 3 — implementer
 
+**Pre-flight for greenfield / new-dependency work.** Before committing a long implementer
+run, do a ~30-second reachability check on anything the plan *assumes* but hasn't proven:
+can the new dependency actually install, is Docker up if the tests need it, does the
+external API authenticate? A cheap probe up front beats discovering a hard blocker 30
+minutes into an expensive run. Skip it when the change only touches code and tooling
+already present in the repo.
+
 Once approved, spawn `implementer` with the plan path (e.g. *"Execute
 docs/plans/<slug>.md"*). It writes the code and self-verifies with
 typecheck / lint / test / build. If it reports the plan is structurally wrong, stop and
@@ -71,6 +78,12 @@ take that back to the user / planner — don't push it to guess.
 
 Spawn `test-writer` to add behavior-focused tests for the change and **run** them. It
 pastes real test output; capture that as evidence for the review stage.
+
+**When the implementer already wrote comprehensive, passing tests** (it self-verifies in
+Step 3), you may fold this stage away to save a full agent run — but only if you make
+plan-verifier's coverage check (Step 5) a standing instruction, so an *independent*
+"is anything untested?" pass still happens. Folding without that backstop means the
+implementer graded its own homework.
 
 ## Step 5 — review, in parallel
 
@@ -87,7 +100,13 @@ you pass:
 
 - **architecture-reviewer** — design, layering, dependency direction, boundaries.
 - **security-reviewer** — OWASP Top 10 + LLM lethal-trifecta over the diff.
-- **plan-verifier** — completeness *and* scope vs `docs/plans/<slug>.md`.
+- **plan-verifier** — completeness *and* scope vs `docs/plans/<slug>.md`. Tell it to
+  default to **blocking completeness** — missing tools/requirements, unhonored locked
+  decisions, scope creep — rather than an exhaustive requirement-by-requirement matrix;
+  the full matrix is the parallel long-pole (it ran 2–3× the other reviewers on a real
+  run), so reserve it for an explicit deep pass. And always ask it to **assess test
+  coverage and name any untested critical path** — this is the standing backstop that
+  makes folding `test-writer` (Step 4) safe.
 
 They have non-overlapping lanes by design; don't merge their roles.
 
@@ -173,15 +192,23 @@ shorter, leaner* agent turns and *zero wasted runs*:
   `implementer`/`test-writer` to run the heaviest verification (full suites) as a
   **final** step and not re-dump large tool output mid-run — every dumped log is
   re-billed on all later turns.
-- **Scope re-validation tightly.** On loop-back, re-run each reviewer with "confirm
-  **only** these findings on these changed files," never a full re-review. (Scoped
-  re-checks finished in a handful of turns; an unscoped one rebuilt its whole matrix.)
+- **Scope re-validation tightly — and never by *resuming* a reviewer.** On loop-back,
+  re-check with "confirm **only** these findings on these changed files," never a full
+  re-review. But spawn a **fresh, minimal** agent (or just `Read` the 2–3 changed files
+  yourself) — resuming a prior reviewer re-bills its entire transcript as cache-read, so
+  a 4-item confirmation can cost as much as the original full pass (one run's "scoped"
+  re-verify came in *higher* than the verification it was shrinking). If you already hold
+  the evidence the re-check would gather — e.g. the implementer's pasted green test output
+  for exactly those items — skip the agent entirely.
 - **Lean exploration.** Prefer **1–2 broader explorers** (or pass a shared file list
   so they don't each re-read the same files) over many overlapping ones. Lower
   priority — explorers run on cheap Haiku.
-- **Don't poll background agents.** Completion notifications fire automatically;
-  avoid repeated status-checking and minimise main-session re-entries — the
-  orchestrator's own (large) context is the most expensive thing to re-bill.
+- **Don't background a verification the pipeline just waits on.** Run a sub-agent in the
+  background only when there's *parallel* work to overlap it with. In a serial step (e.g.
+  a single re-verify before the report) backgrounding buys nothing and can deadlock a Stop
+  hook into pinging you each idle turn — and every idle turn re-bills the orchestrator's
+  (large) context, the most expensive thing in the run. Run it foreground, or verify
+  inline. And never *poll* a background agent — completion notifications fire automatically.
 - **Escalate model only on purpose.** Per-agent `model:` is already tuned; override
   via the `Task` `model` param only to bump `implementer` to `opus` when the plan
   flags genuinely hard/ambiguous work — the default Sonnet handles mechanical edits.

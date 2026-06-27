@@ -61,7 +61,7 @@ export default async function reviewsRoutes(appBase: FastifyInstance) {
     { schema: { params: IdParams }, config: { rateLimit: { max: 10, timeWindow: '1 minute' } } },
     async (req) => {
       const { workspaceId } = await getContext(container, req);
-      const result = await intentService.compute(workspaceId, req.params.id, req.log);
+      const result = await intentService.compute(workspaceId, req.params.id, { logger: req.log });
       return result.intent;
     },
   );

@@ -1,4 +1,4 @@
-import { and, eq } from 'drizzle-orm';
+import { and, eq, sql } from 'drizzle-orm';
 import type { Db } from '../../../db/client.js';
 import * as t from '../../../db/schema.js';
 import { PrBrief, type Intent } from '@devdigest/shared';
@@ -74,4 +74,18 @@ export async function getBrief(db: Db, prId: string): Promise<PrBrief | undefine
   if (!row) return undefined;
   const parsed = PrBrief.safeParse(row.json);
   return parsed.success ? parsed.data : undefined;
+}
+
+export async function upsertBrief(db: Db, prId: string, brief: PrBrief): Promise<void> {
+  await db
+    .insert(t.prBrief)
+    .values({ prId, json: brief })
+    .onConflictDoUpdate({
+      target: t.prBrief.prId,
+      // Merge only the blocks this service owns (risks + intent); leave blast and
+      // history intact so future writers for those blocks don't get clobbered.
+      set: {
+        json: sql`pr_brief.json || jsonb_build_object('risks', EXCLUDED.json->'risks', 'intent', EXCLUDED.json->'intent')`,
+      },
+    });
 }

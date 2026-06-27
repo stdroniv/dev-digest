@@ -170,6 +170,10 @@ export default function PRDetailPage() {
               invalidateActiveRuns();
               invalidateRunHistory();
               refetchReviews();
+              if (prId) {
+                qc.invalidateQueries({ queryKey: ["risks", prId] });
+                qc.invalidateQueries({ queryKey: ["intent", prId] });
+              }
             }}
           />
         )}

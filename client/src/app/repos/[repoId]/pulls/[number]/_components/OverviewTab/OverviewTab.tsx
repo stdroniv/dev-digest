@@ -3,6 +3,7 @@
 import React from "react";
 import { SectionLabel } from "@devdigest/ui";
 import { IntentCard } from "../IntentCard";
+import { RisksCard } from "../RisksCard";
 import { s } from "./styles";
 
 interface OverviewTabProps {
@@ -14,6 +15,7 @@ export function OverviewTab({ prBody, prId }: OverviewTabProps) {
   return (
     <>
       <IntentCard prId={prId} />
+      <RisksCard prId={prId} />
 
       {prBody && (
         <section>

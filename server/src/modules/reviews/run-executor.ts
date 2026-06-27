@@ -1,5 +1,5 @@
 import type { Container } from '../../platform/container.js';
-import type { Intent, Provider, Review, RunTrace, UnifiedDiff } from '@devdigest/shared';
+import type { FeatureModelChoice, Intent, Provider, Review, RunTrace, UnifiedDiff } from '@devdigest/shared';
 import { reviewPullRequest, countBlockers } from '@devdigest/reviewer-core';
 import { RunLogger } from '../../platform/run-logger.js';
 import * as schema from '../../db/schema.js';
@@ -14,6 +14,7 @@ import {
 import { taskLine } from './helpers.js';
 import { loadDiff } from './diff-loader.js';
 import { IntentService } from './intent.service.js';
+import { BriefService } from './brief.service.js';
 
 /** Thrown by a run when the user cancels it mid-flight (between map files). */
 export class RunCancelledError extends Error {
@@ -115,6 +116,14 @@ export class ReviewRunExecutor {
     let sharedIntent: Intent | undefined;
     let intentTokens: number | undefined;
     let intentTokensSaved: number | undefined;
+
+    // Pre-flight reachable model: use the first scheduled agent's provider/model as a hint
+    // for system-LLM slots (intent, brief) when the slot's registry default is unreachable.
+    // Not yet confirmed working (agent hasn't run), but avoids stranding non-OpenAI workspaces.
+    const preflightReachable: FeatureModelChoice | undefined = jobs[0]
+      ? { provider: jobs[0].agent.provider as Provider, model: jobs[0].agent.model }
+      : undefined;
+
     const intentService = new IntentService(this.container);
     try {
       const stored = await intentService.get(workspaceId, pull.id);
@@ -123,7 +132,10 @@ export class ReviewRunExecutor {
         runLog.info(`intent: using stored intent for PR ${pull.number}`);
       } else {
         runLog.info(`intent: no stored intent — computing for PR ${pull.number}…`);
-        const computed = await intentService.compute(workspaceId, pull.id, logger);
+        const computed = await intentService.compute(workspaceId, pull.id, {
+          logger,
+          reachableModel: preflightReachable,
+        });
         sharedIntent = computed.intent;
         intentTokens = computed.tokensIn;
         intentTokensSaved = computed.savedTokens;
@@ -134,6 +146,17 @@ export class ReviewRunExecutor {
     } catch (err) {
       runLog.info(`intent: computation failed (${(err as Error).message}) — continuing without intent`);
     }
+
+    // Collect run IDs as they complete so we can signal the bus AFTER the brief
+    // is persisted. runOneAgent writes the DB record and returns/throws without
+    // emitting the SSE done event — that signal is deferred to after the brief.
+    const finishedRunIds: string[] = [];
+
+    // First successful agent's provider/model — passed into BriefService as a
+    // known-good fallback so risk-brief generation uses a reachable provider even
+    // when the `risk_brief` feature-model slot is left at the registry default
+    // (which may be unreachable for non-OpenAI workspaces).
+    let briefFallback: FeatureModelChoice | undefined;
 
     for (const { agent, runId } of jobs) {
       const agentStart = Date.now();
@@ -147,6 +170,9 @@ export class ReviewRunExecutor {
           intentTokens,
           intentTokensSaved,
         });
+        finishedRunIds.push(runId);
+        // Capture the first successful agent as a known-good brief fallback.
+        briefFallback ??= { provider: agent.provider as Provider, model: agent.model };
         logger?.info(
           {
             runId,
@@ -159,13 +185,35 @@ export class ReviewRunExecutor {
         );
       } catch (err) {
         // runOneAgent already persisted the failure/cancel (status + error +
-        // trace) and completed the bus; here we only log at the run level.
+        // trace); here we only log at the run level. Bus signal is deferred.
+        finishedRunIds.push(runId);
         const cancelled = err instanceof RunCancelledError;
         logger?.[cancelled ? 'info' : 'error'](
           { runId, agent: agent.name, err: (err as Error).message, durationMs: Date.now() - agentStart },
           `review: agent "${agent.name}" ${cancelled ? 'cancelled' : 'failed'}`,
         );
       }
+    }
+
+    // Generate and persist the risk brief once per batch, after all agents have
+    // finished (findings are already persisted by then). Non-fatal: a brief
+    // failure must never fail the review runs. Mirrors the intent try/catch above.
+    try {
+      const briefService = new BriefService(this.container);
+      await briefService.compute(workspaceId, pull.id, diff, {
+        ...(sharedIntent ? { intent: sharedIntent } : {}),
+        ...(briefFallback ? { reachableModel: briefFallback } : {}),
+        logger,
+      });
+      runLog.info(`risk brief: persisted for PR ${pull.number}`);
+    } catch (err) {
+      runLog.info(`risk brief: generation failed (${(err as Error).message}) — continuing`);
+    }
+
+    // Signal all runs done only after the brief is persisted (or failed). The
+    // client invalidates ["risks", prId] on run-done, so brief must land first.
+    for (const runId of finishedRunIds) {
+      this.container.runBus.complete(runId);
     }
   }
 
@@ -372,7 +420,6 @@ export class ReviewRunExecutor {
       };
       runLog.info('Run complete; trace persisted');
       await this.repo.saveRunTrace(runId, trace);
-      this.container.runBus.complete(runId);
 
       return { review, findings: findingRows, grounding, raw: outcome.review };
     } catch (err) {
@@ -396,7 +443,6 @@ export class ReviewRunExecutor {
       await this.repo
         .saveRunTrace(runId, this.traceFromBuffer(runId, pull, agent, '0/0 passed', Date.now() - start))
         .catch(() => undefined);
-      this.container.runBus.complete(runId);
       throw err;
     }
   }

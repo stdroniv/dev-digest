@@ -55,3 +55,22 @@ export async function resolveFeatureModel(
 ): Promise<FeatureModelChoice> {
   return (await getFeatureModelOverride(container, workspaceId, id)) ?? DEFAULTS[id];
 }
+
+export type ResolvedFeatureModel = FeatureModelChoice & { source: 'override' | 'fallback' | 'default' };
+
+/**
+ * Three-tier resolution for system-LLM slots: workspace override → caller-supplied
+ * reachable model → registry default. Use instead of resolveFeatureModel when the
+ * caller can supply a known-reachable model (e.g. a reviewer agent that just ran).
+ */
+export async function resolveFeatureModelWithFallback(
+  container: Container,
+  workspaceId: string,
+  id: FeatureModelId,
+  reachableModel?: FeatureModelChoice,
+): Promise<ResolvedFeatureModel> {
+  const override = await getFeatureModelOverride(container, workspaceId, id);
+  if (override) return { ...override, source: 'override' };
+  if (reachableModel) return { ...reachableModel, source: 'fallback' };
+  return { ...DEFAULTS[id], source: 'default' };
+}

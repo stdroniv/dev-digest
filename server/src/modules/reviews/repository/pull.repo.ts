@@ -1,7 +1,7 @@
-import { and, eq } from 'drizzle-orm';
+import { and, eq, sql } from 'drizzle-orm';
 import type { Db } from '../../../db/client.js';
 import * as t from '../../../db/schema.js';
-import type { Intent } from '@devdigest/shared';
+import { PrBrief, type Intent } from '@devdigest/shared';
 import type { PullRow } from '../../../db/rows.js';
 
 // ---- PR lookup (workspace-scoped) -----------------------------------------
@@ -65,4 +65,27 @@ export async function getIntent(db: Db, prId: string): Promise<Intent | undefine
   const [row] = await db.select().from(t.prIntent).where(eq(t.prIntent.prId, prId));
   if (!row) return undefined;
   return { intent: row.intent, in_scope: row.inScope, out_of_scope: row.outOfScope };
+}
+
+// ---- brief ----------------------------------------------------------------
+
+export async function getBrief(db: Db, prId: string): Promise<PrBrief | undefined> {
+  const [row] = await db.select().from(t.prBrief).where(eq(t.prBrief.prId, prId));
+  if (!row) return undefined;
+  const parsed = PrBrief.safeParse(row.json);
+  return parsed.success ? parsed.data : undefined;
+}
+
+export async function upsertBrief(db: Db, prId: string, brief: PrBrief): Promise<void> {
+  await db
+    .insert(t.prBrief)
+    .values({ prId, json: brief })
+    .onConflictDoUpdate({
+      target: t.prBrief.prId,
+      // Merge only the blocks this service owns (risks + intent); leave blast and
+      // history intact so future writers for those blocks don't get clobbered.
+      set: {
+        json: sql`pr_brief.json || jsonb_build_object('risks', EXCLUDED.json->'risks', 'intent', EXCLUDED.json->'intent')`,
+      },
+    });
 }

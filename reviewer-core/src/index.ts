@@ -26,6 +26,13 @@ export {
   type ClassifyIntentResult,
 } from './intent/classify.js';
 
+// PR Risk brief generator — pure, provider-injected.
+export {
+  generateRiskBrief,
+  type GenerateRiskBriefInput,
+  type GenerateRiskBriefResult,
+} from './brief/risks.js';
+
 // Citation grounding — the mandatory mechanical gate for diff findings.
 export { groundFindings, groundingSummary, type GroundingResult } from './grounding.js';
 

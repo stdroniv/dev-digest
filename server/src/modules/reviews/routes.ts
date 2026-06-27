@@ -8,12 +8,14 @@ import { NotFoundError } from '../../platform/errors.js';
 import { ReviewService } from './service.js';
 import { IntentService } from './intent.service.js';
 import { SmartDiffService } from './smart-diff.service.js';
+import { RisksService } from './risks.service.js';
 
 /**
  * reviews module.
  *   POST   /pulls/:id/review      {agentId} | {all:true}  → run review(s); returns runs
  *   POST   /pulls/:id/intent                               → compute/recompute PR intent (LLM)
  *   GET    /pulls/:id/intent                               → read stored PR intent
+ *   GET    /pulls/:id/risks                               → read stored PR risk areas
  *   GET    /pulls/:id/smart-diff                           → risk-ordered diff grouping (no LLM)
  *   GET    /runs/:id/events                                → SSE stream of RunEvent (replay-first)
  *   GET    /runs/:id/trace                                 → the single-document RunTrace
@@ -27,6 +29,7 @@ export default async function reviewsRoutes(appBase: FastifyInstance) {
   const service = new ReviewService(container);
   const intentService = new IntentService(container);
   const smartDiffService = new SmartDiffService(container);
+  const risksService = new RisksService(container);
 
   // ---- Run a review (manual trigger) -------------------------------
   // Tight per-route limit: each call can fan out to expensive LLM runs.
@@ -58,7 +61,7 @@ export default async function reviewsRoutes(appBase: FastifyInstance) {
     { schema: { params: IdParams }, config: { rateLimit: { max: 10, timeWindow: '1 minute' } } },
     async (req) => {
       const { workspaceId } = await getContext(container, req);
-      const result = await intentService.compute(workspaceId, req.params.id, req.log);
+      const result = await intentService.compute(workspaceId, req.params.id, { logger: req.log });
       return result.intent;
     },
   );
@@ -67,6 +70,11 @@ export default async function reviewsRoutes(appBase: FastifyInstance) {
     const { workspaceId } = await getContext(container, req);
     const intent = await intentService.get(workspaceId, req.params.id);
     return intent ?? null;
+  });
+
+  app.get('/pulls/:id/risks', { schema: { params: IdParams } }, async (req) => {
+    const { workspaceId } = await getContext(container, req);
+    return (await risksService.get(workspaceId, req.params.id)) ?? null;
   });
 
   // ---- Smart Diff: risk-ordered diff grouping (deterministic, no LLM) ------

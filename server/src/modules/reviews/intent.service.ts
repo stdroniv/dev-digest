@@ -1,7 +1,7 @@
-import type { Intent } from '@devdigest/shared';
+import type { FeatureModelChoice, Intent } from '@devdigest/shared';
 import type { Container } from '../../platform/container.js';
 import { classifyIntent } from '@devdigest/reviewer-core';
-import { resolveFeatureModel } from '../settings/feature-models.js';
+import { resolveFeatureModelWithFallback } from '../settings/feature-models.js';
 import { getPull, getRepo, getIntent, upsertIntent } from './repository/pull.repo.js';
 import { buildHunkHeadersBlock, buildFullPatchText, buildSpecDocsBlock } from './intent-input.js';
 import { NotFoundError } from '../../platform/errors.js';
@@ -35,7 +35,10 @@ export class IntentService {
   async compute(
     workspaceId: string,
     prId: string,
-    logger?: { info: (obj: unknown, msg?: string) => void },
+    opts?: {
+      reachableModel?: FeatureModelChoice;
+      logger?: { info: (obj: unknown, msg?: string) => void };
+    },
   ): Promise<ComputeIntentResult> {
     const pull = await getPull(this.container.db, workspaceId, prId);
     if (!pull) throw new NotFoundError(`PR ${prId} not found`);
@@ -60,7 +63,7 @@ export class IntentService {
         linkedIssue = { title: detail.linked_issue.title, body: detail.linked_issue.body };
       }
     } catch (err) {
-      logger?.info(
+      opts?.logger?.info(
         { prId, err: (err as Error).message },
         'intent: GitHub fetch failed — classifying from stored PR data only',
       );
@@ -75,13 +78,15 @@ export class IntentService {
     const headersTokens = this.container.tokenizer.count(changedFiles);
     const savedTokens = Math.max(0, fullTokens - headersTokens);
 
-    // Resolve the model for the 'review_intent' feature slot.
-    const { provider, model } = await resolveFeatureModel(
+    // Resolve the model for the 'review_intent' feature slot via three-tier policy:
+    // workspace override → caller-supplied reachable model → registry default.
+    const { provider, model } = await resolveFeatureModelWithFallback(
       this.container,
       workspaceId,
       'review_intent',
+      opts?.reachableModel,
     );
-    const llm = await this.container.llm(provider as 'openai' | 'anthropic' | 'openrouter');
+    const llm = await this.container.llm(provider);
 
     const result = await classifyIntent({
       llm,
@@ -93,7 +98,7 @@ export class IntentService {
       specDocs: specDocs || null,
     });
 
-    logger?.info(
+    opts?.logger?.info(
       {
         prId,
         model,

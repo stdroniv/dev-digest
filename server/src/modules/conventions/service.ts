@@ -75,6 +75,17 @@ export class ConventionsService {
   }
 
   /**
+   * The repo's ACCEPTED conventions only (status='accepted'), oldest first.
+   * Thin passthrough to `ConventionsRepository.listAccepted` for consumers (e.g.
+   * the MCP server) that must never surface pending/rejected candidates. Distinct
+   * from `list()`, which returns the actionable pending+accepted set for the UI.
+   */
+  async listAccepted(workspaceId: string, repoId: string): Promise<ConventionCandidate[]> {
+    const rows = await this.repo.listAccepted(workspaceId, repoId);
+    return rows.map(toConventionDto);
+  }
+
+  /**
    * Run a full extraction for a repo and persist the verified candidates.
    * Synchronous (the cheap model call takes a few seconds); the UI shows a spinner.
    */

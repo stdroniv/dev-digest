@@ -31,6 +31,16 @@ export class ReviewRepository {
     return pullRepo.getPull(this.db, workspaceId, prId);
   }
 
+  /** Resolve a PR by `(repoId, number)` — workspace-scoped read for clients
+   *  that address PRs as `owner/repo#number` rather than by UUID. */
+  getPullByNumber(
+    workspaceId: string,
+    repoId: string,
+    number: number,
+  ): Promise<PullRow | undefined> {
+    return pullRepo.getPullByNumber(this.db, workspaceId, repoId, number);
+  }
+
   getRepo(repoId: string): Promise<typeof t.repos.$inferSelect | undefined> {
     return pullRepo.getRepo(this.db, repoId);
   }

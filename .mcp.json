@@ -1,0 +1,11 @@
+{
+  "mcpServers": {
+    "devdigest": {
+      "command": "node",
+      "args": ["/Users/dronmac/Projects/personal/dev-digest/mcp/bin/devdigest-mcp.mjs"],
+      "env": {
+        "DATABASE_URL": "postgres://devdigest:devdigest@localhost:5432/devdigest"
+      }
+    }
+  }
+}

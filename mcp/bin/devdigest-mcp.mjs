@@ -11,5 +11,9 @@ const here = dirname(fileURLToPath(import.meta.url));
 const entry = join(here, '..', 'src', 'index.ts');
 const tsx = join(here, '..', 'node_modules', '.bin', 'tsx');
 
-const child = spawn(tsx, [entry], { stdio: 'inherit' });
+// Pin cwd to the mcp/ package dir so `tsx` resolves `mcp/tsconfig.json` (and its
+// `@devdigest/*` path aliases) regardless of the caller's cwd. MCP clients spawn
+// this shim from the project root, where those aliases would otherwise be
+// unresolvable and the server would crash on boot.
+const child = spawn(tsx, [entry], { stdio: 'inherit', cwd: join(here, '..') });
 child.on('exit', (code) => process.exit(code ?? 0));

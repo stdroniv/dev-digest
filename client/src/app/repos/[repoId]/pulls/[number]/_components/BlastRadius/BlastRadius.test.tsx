@@ -185,18 +185,23 @@ function renderPanel(
 // (a) Tree renders grouped symbol + callers + header counts
 // ---------------------------------------------------------------------------
 describe("BlastRadius — tree view with data", () => {
+  // Step 10: symbol name now includes "()" for function kind (P3.7 displayName)
   it("renders the symbol name", async () => {
     renderPanel(BLAST_DATA);
     await waitFor(() =>
-      expect(screen.getByText("checkRateLimit")).toBeInTheDocument(),
+      expect(screen.getByText("checkRateLimit()")).toBeInTheDocument(),
     );
   });
 
-  it("renders the symbol kind badge", async () => {
+  // Step 10: kind label dropped (design has none) — assert Code chip renders instead
+  it("renders the symbol as a code chip without a kind label", async () => {
     renderPanel(BLAST_DATA);
-    await waitFor(() =>
-      expect(screen.getByText("function")).toBeInTheDocument(),
-    );
+    await waitFor(() => {
+      // Code chip shows function name with parens
+      expect(screen.getByText("checkRateLimit()")).toBeInTheDocument();
+      // Kind label ("function") is dropped
+      expect(screen.queryByText("function")).not.toBeInTheDocument();
+    });
   });
 
   it("renders caller file references", async () => {
@@ -207,11 +212,15 @@ describe("BlastRadius — tree view with data", () => {
     expect(screen.getByText("src/routes/api.ts:17")).toBeInTheDocument();
   });
 
+  // Step 10: stat row is now segmented — query each stat item individually.
+  // getNodeText reads only DIRECT text nodes so parent containers (which only
+  // contain child elements) return "" and do not trigger multiple-match errors.
   it("renders the header stats line containing symbol/caller counts", async () => {
     renderPanel(BLAST_DATA);
     await waitFor(() => {
-      const stat = screen.getByText(/1 symbols · 2 callers/);
-      expect(stat).toBeInTheDocument();
+      expect(screen.getByText(/1 symbols/)).toBeInTheDocument();
+      // "2 callers" also appears in the per-symbol count badge → use getAllByText
+      expect(screen.getAllByText(/2 callers/).length).toBeGreaterThanOrEqual(1);
     });
   });
 });
@@ -279,12 +288,13 @@ describe("BlastRadius — empty state", () => {
 //      the empty state (regression: the old `!hasCallers` guard hid them).
 // ---------------------------------------------------------------------------
 describe("BlastRadius — symbols with no downstream callers", () => {
+  // Step 10: symbol names now include "()" for function kind (P3.7 displayName)
   it("still lists the changed symbols", async () => {
     renderPanel(SYMBOLS_NO_CALLERS);
     await waitFor(() =>
-      expect(screen.getByText("buildSubject")).toBeInTheDocument(),
+      expect(screen.getByText("buildSubject()")).toBeInTheDocument(),
     );
-    expect(screen.getByText("resolveTitle")).toBeInTheDocument();
+    expect(screen.getByText("resolveTitle()")).toBeInTheDocument();
   });
 
   it("shows the no-downstream-callers note above the tree", async () => {
@@ -327,7 +337,7 @@ describe("BlastRadius — partial index state", () => {
   it("still renders the symbol tree when index is partial (panel not blank)", async () => {
     renderPanel(PARTIAL_BLAST);
     await waitFor(() =>
-      expect(screen.getByText("sendWelcomeEmail")).toBeInTheDocument(),
+      expect(screen.getByText("sendWelcomeEmail()")).toBeInTheDocument(),
     );
   });
 });
@@ -340,7 +350,7 @@ describe("BlastRadius — graph toggle", () => {
     renderPanel(BLAST_DATA);
     // Wait for data to load
     await waitFor(() =>
-      expect(screen.getByText("checkRateLimit")).toBeInTheDocument(),
+      expect(screen.getByText("checkRateLimit()")).toBeInTheDocument(),
     );
     const graphBtn = screen.getByRole("button", { name: /graph/i });
     fireEvent.click(graphBtn);
@@ -358,7 +368,7 @@ describe("BlastRadius — endpoint/cron badges per symbol", () => {
   it("endpoint badge appears exactly once even with multiple callers (P1.1)", async () => {
     renderPanel(BLAST_DATA); // 1 endpoint "POST /auth/login", 2 callers
     await waitFor(() =>
-      expect(screen.getByText("checkRateLimit")).toBeInTheDocument(),
+      expect(screen.getByText("checkRateLimit()")).toBeInTheDocument(),
     );
     // getAllByText throws if nothing found; length 1 asserts no duplication per caller
     const badges = screen.getAllByText("POST /auth/login");
@@ -374,13 +384,49 @@ describe("BlastRadius — endpoint/cron badges per symbol", () => {
 });
 
 // ---------------------------------------------------------------------------
+// (P3) Per-symbol caller count badge + chevron collapse (Step 7)
+// ---------------------------------------------------------------------------
+describe("BlastRadius — per-symbol caller count and chevron collapse", () => {
+  // Step 10: "2 callers" appears in BOTH the stat row item AND the per-symbol
+  // count badge — use getAllByText to avoid single-match assertion failure.
+  it("renders the per-symbol caller count badge", async () => {
+    renderPanel(BLAST_DATA); // symbol has 2 callers
+    await waitFor(() =>
+      expect(screen.getByText("checkRateLimit()")).toBeInTheDocument(),
+    );
+    // Stat row item "2 callers" + per-symbol badge "2 callers" → at least 2
+    const callerCounts = screen.getAllByText("2 callers");
+    expect(callerCounts.length).toBeGreaterThanOrEqual(2);
+  });
+
+  it("clicking the chevron collapses the callers list", async () => {
+    renderPanel(BLAST_DATA);
+    // First symbol is defaultOpen=true so callers are visible
+    await waitFor(() =>
+      expect(screen.getByText("src/routes/auth.ts:42")).toBeInTheDocument(),
+    );
+    // Click the chevron button to collapse
+    const chevron = screen.getByRole("button", {
+      name: /Toggle callers for checkRateLimit/,
+    });
+    fireEvent.click(chevron);
+    // Caller text disappears from DOM
+    await waitFor(() =>
+      expect(
+        screen.queryByText("src/routes/auth.ts:42"),
+      ).not.toBeInTheDocument(),
+    );
+  });
+});
+
+// ---------------------------------------------------------------------------
 // (f) Summary disclosure: stays clean when summary=null / skipped='no_key'
 // ---------------------------------------------------------------------------
 describe("BlastRadius — summary disclosure", () => {
   it("shows the summary button initially", async () => {
     renderPanel(BLAST_DATA);
     await waitFor(() =>
-      expect(screen.getByText("checkRateLimit")).toBeInTheDocument(),
+      expect(screen.getByText("checkRateLimit()")).toBeInTheDocument(),
     );
     expect(
       screen.getByRole("button", { name: /Explain impact/i }),
@@ -390,7 +436,7 @@ describe("BlastRadius — summary disclosure", () => {
   it("hides cleanly (no error UI) when summary is null with skipped='no_key'", async () => {
     renderPanel(BLAST_DATA, { summary: null, cached: false, skipped: "no_key" });
     await waitFor(() =>
-      expect(screen.getByText("checkRateLimit")).toBeInTheDocument(),
+      expect(screen.getByText("checkRateLimit()")).toBeInTheDocument(),
     );
     const summaryBtn = screen.getByRole("button", { name: /Explain impact/i });
     fireEvent.click(summaryBtn);

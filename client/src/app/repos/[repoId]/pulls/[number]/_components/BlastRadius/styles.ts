@@ -19,34 +19,53 @@ export const s = {
     gap: 12,
   } satisfies CSSProperties,
 
+  // Step 6: stat row is now a flex container; stat items are separate spans
   statRow: {
-    fontSize: 13,
-    color: "var(--text-muted)",
+    display: "flex",
+    alignItems: "center",
+    gap: 16,
     flex: 1,
   } satisfies CSSProperties,
 
-  toggleGroup: {
-    display: "flex",
-    gap: 4,
-    flexShrink: 0,
+  // Step 6: each icon+count+label group
+  statItem: {
+    display: "inline-flex",
+    alignItems: "center",
+    gap: 5,
+    fontSize: 13,
+    color: "var(--text-muted)",
   } satisfies CSSProperties,
 
-  toggleBtn: {
-    fontSize: 12,
-    padding: "3px 10px",
-    borderRadius: 5,
+  // Step 9: segmented toggle control container (replaces individual-bordered pills)
+  toggleGroup: {
+    display: "flex",
+    gap: 2,
+    background: "var(--bg-surface)",
     borderStyle: "solid",
     borderWidth: 1,
     borderColor: "var(--border)",
-    background: "transparent",
-    color: "var(--text-secondary)",
-    cursor: "pointer",
+    borderRadius: 7,
+    padding: 2,
+    flexShrink: 0,
   } satisfies CSSProperties,
 
+  // Step 9: toggle button — no individual border; textTransform capitalize handles casing
+  toggleBtn: {
+    padding: "3px 10px",
+    fontSize: 11.5,
+    fontWeight: 600,
+    borderRadius: 5,
+    borderStyle: "none",
+    background: "transparent",
+    color: "var(--text-muted)",
+    cursor: "pointer",
+    textTransform: "capitalize" as const,
+  } satisfies CSSProperties,
+
+  // Step 9: active state — subtle bg-elevated, not bright accent
   toggleBtnActive: {
-    background: "var(--accent)",
-    borderColor: "var(--accent)",
-    color: "#fff",
+    background: "var(--bg-elevated)",
+    color: "var(--text-primary)",
   } satisfies CSSProperties,
 
   degradedBadge: {
@@ -91,6 +110,33 @@ export const s = {
     borderTopColor: "var(--border)",
   } satisfies CSSProperties,
 
+  // Step 7: collapsible symbol header row
+  symbolHeader: {
+    display: "flex",
+    alignItems: "center",
+    gap: 6,
+  } satisfies CSSProperties,
+
+  // Step 7: chevron toggle button
+  chevronBtn: {
+    display: "inline-flex",
+    alignItems: "center",
+    justifyContent: "center",
+    background: "transparent",
+    borderStyle: "none",
+    padding: 2,
+    cursor: "pointer",
+    color: "var(--text-muted)",
+    flexShrink: 0,
+  } satisfies CSSProperties,
+
+  // Step 7: code chip container (Code icon + monospace name)
+  symbolChip: {
+    display: "inline-flex",
+    alignItems: "center",
+    gap: 4,
+  } satisfies CSSProperties,
+
   symbolName: {
     fontSize: 13,
     fontWeight: 600,
@@ -101,20 +147,16 @@ export const s = {
   symbolFile: {
     fontSize: 11,
     color: "var(--text-muted)",
-    marginLeft: 6,
     fontFamily: "var(--font-mono, monospace)",
   } satisfies CSSProperties,
 
-  symbolKind: {
-    fontSize: 10,
-    fontWeight: 700,
-    letterSpacing: "0.05em",
-    textTransform: "uppercase" as const,
+  // Step 7: per-symbol caller count — right-aligned plain muted text, not a pill
+  symbolCount: {
+    marginLeft: "auto",
+    fontSize: 12,
     color: "var(--text-muted)",
-    background: "var(--bg-sunken)",
-    padding: "1px 5px",
-    borderRadius: 3,
-    marginLeft: 8,
+    flexShrink: 0,
+    whiteSpace: "nowrap" as const,
   } satisfies CSSProperties,
 
   callerList: {
@@ -133,6 +175,14 @@ export const s = {
     fontSize: 12,
   } satisfies CSSProperties,
 
+  // Step 7: leading CornerDownRight connector — separate element keeps file:line as own text node
+  callerConnector: {
+    display: "inline-flex",
+    alignItems: "center",
+    color: "var(--text-muted)",
+    flexShrink: 0,
+  } satisfies CSSProperties,
+
   callerLink: {
     color: "var(--accent)",
     textDecoration: "none",
@@ -146,23 +196,27 @@ export const s = {
     fontSize: 12,
   } satisfies CSSProperties,
 
+  // Step 9: badge upgraded to design spec (padding, radius, fontSize, gap)
   badge: {
     display: "inline-flex",
-    fontSize: 10,
+    alignItems: "center",
+    gap: 5,
+    fontSize: 11.5,
     fontWeight: 600,
-    padding: "1px 6px",
-    borderRadius: 3,
-    marginLeft: 4,
+    padding: "2px 8px",
+    borderRadius: 5,
   } satisfies CSSProperties,
 
+  // Step 9: endpoint badge — accent-text on accent-bg
   endpointBadge: {
-    background: "rgba(59, 130, 246, 0.12)",
-    color: "var(--accent)",
+    background: "var(--accent-bg, rgba(59, 130, 246, 0.12))",
+    color: "var(--accent-text, var(--accent))",
   } satisfies CSSProperties,
 
+  // Step 9: cron badge — amber (was purple)
   cronBadge: {
-    background: "rgba(139, 92, 246, 0.12)",
-    color: "var(--purple, #8b5cf6)",
+    background: "var(--warn-bg, rgba(245, 158, 11, 0.12))",
+    color: "var(--warn)",
   } satisfies CSSProperties,
 
   summarySection: {

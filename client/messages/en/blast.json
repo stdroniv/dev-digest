@@ -3,13 +3,14 @@
     "symbols": "symbols",
     "callers": "callers",
     "endpoints": "endpoints",
-    "crons": "cron/jobs"
+    "crons": "cron"
   },
   "view": {
     "tree": "tree",
     "graph": "graph"
   },
   "callerCount": "{count} callers",
+  "symbolToggle": "Toggle callers for {name}",
   "empty": "No impacted symbols found for this PR.",
   "noDownstream": "{count} changed symbol(s), no downstream callers found.",
   "graph": {

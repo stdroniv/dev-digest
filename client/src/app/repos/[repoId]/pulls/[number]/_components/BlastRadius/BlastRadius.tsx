@@ -2,7 +2,7 @@
 
 import React from "react";
 import { useTranslations } from "next-intl";
-import { SectionLabel } from "@devdigest/ui";
+import { Icon, SectionLabel } from "@devdigest/ui";
 import { useBlastRadius, useBlastSummary } from "@/lib/hooks/blast";
 import { blastCallerUrl } from "@/lib/github-urls";
 import type { BlastSymbolGroup, BlastCallerEntry } from "@/lib/types";
@@ -57,7 +57,8 @@ export function BlastRadius({ prId, repoFullName }: BlastRadiusProps) {
 
   return (
     <section>
-      <SectionLabel icon="GitMerge">Blast Radius</SectionLabel>
+      {/* Step 8: section icon GitMerge → Workflow (confirmed against design source) */}
+      <SectionLabel icon="Workflow">Blast Radius</SectionLabel>
 
       {isDegraded && (
         <div style={s.degradedBadge} role="status" aria-label={t("degraded.badge")}>
@@ -73,9 +74,29 @@ export function BlastRadius({ prId, repoFullName }: BlastRadiusProps) {
       <div style={s.card}>
         {/* Header: stat summary + Tree | Graph toggle */}
         <div style={s.header}>
-          <span style={s.statRow}>
-            {`${totals.symbols} ${t("stat.symbols")} · ${totals.callers} ${t("stat.callers")} · ${totals.endpoints} ${t("stat.endpoints")} · ${totals.crons} ${t("stat.crons")}`}
-          </span>
+          {/* Step 6: per-stat icon groups; each rendered as icon + template-literal text node
+              so getByText(/N label/) finds exactly the stat item span (getNodeText reads
+              direct text nodes only, not descendant element text). */}
+          <div style={s.statRow}>
+            <span style={s.statItem}>
+              <Icon.Code size={13} style={{ color: "var(--text-muted)" }} />
+              {`${totals.symbols} ${t("stat.symbols")}`}
+            </span>
+            <span style={s.statItem}>
+              <Icon.CornerDownRight size={13} style={{ color: "var(--text-muted)" }} />
+              {`${totals.callers} ${t("stat.callers")}`}
+            </span>
+            <span style={s.statItem}>
+              <Icon.Globe size={13} style={{ color: "var(--text-muted)" }} />
+              {`${totals.endpoints} ${t("stat.endpoints")}`}
+            </span>
+            <span style={s.statItem}>
+              <Icon.Clock size={13} style={{ color: "var(--text-muted)" }} />
+              {`${totals.crons} ${t("stat.crons")}`}
+            </span>
+          </div>
+
+          {/* Step 9: segmented toggle control — container wraps both buttons */}
           <div style={s.toggleGroup}>
             <button
               style={{
@@ -124,6 +145,7 @@ export function BlastRadius({ prId, repoFullName }: BlastRadiusProps) {
                 repoFullName={repoFullName}
                 indexedSha={indexedSha}
                 t={t}
+                defaultOpen={i === 0}
               />
             ))}
           </div>
@@ -147,37 +169,83 @@ export function BlastRadius({ prId, repoFullName }: BlastRadiusProps) {
 // Sub-components
 // ---------------------------------------------------------------------------
 
+/** Appends "()" only for callable kinds (function/method); bare name otherwise. */
+function displayName(group: BlastSymbolGroup): string {
+  return group.kind === "function" || group.kind === "method"
+    ? `${group.name}()`
+    : group.name;
+}
+
 function SymbolRow({
   group,
   repoFullName,
   indexedSha,
   t,
+  defaultOpen,
 }: {
   group: BlastSymbolGroup;
   repoFullName: string | null | undefined;
   indexedSha: string | null;
   t: ReturnType<typeof useTranslations<"blast">>;
+  defaultOpen: boolean;
 }) {
+  // Step 7: first symbol open, rest collapsed (matches design; keeps caller-link tests green)
+  const [open, setOpen] = React.useState(defaultOpen);
+
   return (
     <div style={s.symbolRow}>
-      <div style={{ display: "flex", alignItems: "baseline", gap: 4 }}>
-        <span style={s.symbolName}>{group.name}</span>
-        <span style={s.symbolKind}>{group.kind}</span>
+      {/* Step 7: collapsible header row with chevron button, code chip, file, badges, count */}
+      <div style={s.symbolHeader}>
+        {/* Chevron: one ChevronRight rotated 90° when open */}
+        <button
+          style={s.chevronBtn}
+          onClick={() => setOpen((o) => !o)}
+          aria-expanded={open}
+          aria-label={t("symbolToggle", { name: group.name })}
+        >
+          <Icon.ChevronRight
+            size={14}
+            style={{
+              transform: open ? "rotate(90deg)" : "none",
+              transition: "transform .12s",
+            }}
+          />
+        </button>
+
+        {/* Step 7: Code chip — icon + monospace displayName (no kind label) */}
+        <span style={s.symbolChip}>
+          <Icon.Code size={12} style={{ color: "var(--accent)" }} />
+          <span style={s.symbolName}>{displayName(group)}</span>
+        </span>
+
         <span style={s.symbolFile}>{group.file}</span>
+
+        {/* Step 9: endpoint badges with Globe icon; cron badges with Clock icon */}
         {group.endpoints.map((ep, ei) => (
           <span key={`ep-${ei}`} style={{ ...s.badge, ...s.endpointBadge }}>
+            <Icon.Globe size={12} />
             {ep}
           </span>
         ))}
         {group.crons.map((cron, ci) => (
           <span key={`cron-${ci}`} style={{ ...s.badge, ...s.cronBadge }}>
+            <Icon.Clock size={12} />
             {cron}
           </span>
         ))}
+
+        {/* Step 7: per-symbol caller count — right-aligned plain muted text (NOT a pill) */}
+        <span style={s.symbolCount}>
+          {t("callerCount", { count: group.callers.length })}
+        </span>
       </div>
 
-      {group.callers.length > 0 && (
-        <ul style={s.callerList} aria-label={t("callerCount", { count: group.callers.length })}>
+      {/* Caller list renders only when open and callers exist */}
+      {open && group.callers.length > 0 && (
+        <ul
+          style={s.callerList}
+          aria-label={t("callerCount", { count: group.callers.length })}
+        >
           {group.callers.map((caller, ci) => (
             <CallerItem
               key={`${caller.file}:${caller.line}:${ci}`}
@@ -209,6 +277,11 @@ function CallerItem({
 
   return (
     <li style={s.callerItem}>
+      {/* Step 7: CornerDownRight connector as a SEPARATE element so the file:line
+          label stays its own text node (caller-link tests unaffected) */}
+      <span aria-hidden="true" style={s.callerConnector}>
+        <Icon.CornerDownRight size={11} />
+      </span>
       {href ? (
         <a
           href={href}

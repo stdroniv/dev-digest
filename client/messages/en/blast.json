@@ -20,6 +20,10 @@
     "badge": "Index degraded — results may be incomplete",
     "explain": "The repo-intel index ran in degraded mode (ripgrep fallback). Caller data may be partial."
   },
+  "partial": {
+    "badge": "Index incomplete — caller data may be missing",
+    "explain": "The repo-intel index for this repo is partial (a large repo hit the indexing time budget). Some callers and endpoints may not be resolved yet."
+  },
   "summary": {
     "show": "Explain impact (AI summary)",
     "loading": "Generating summary…",

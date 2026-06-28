@@ -102,6 +102,29 @@ const DEGRADED_BLAST = {
   index: { ...BLAST_DATA.index, degraded: true },
 };
 
+/** Partial-index response — index.status "partial", degraded false, symbols present, no callers. */
+const PARTIAL_BLAST = {
+  symbols: [
+    {
+      file: "src/services/mailer.ts",
+      name: "sendWelcomeEmail",
+      kind: "function",
+      callers: [],
+      endpoints: [],
+      crons: [],
+    },
+  ],
+  totals: { symbols: 1, callers: 0, endpoints: 0, crons: 0 },
+  impactedEndpoints: [],
+  impactedCrons: [],
+  index: {
+    status: "partial" as const,
+    degraded: false,
+    lastIndexedSha: INDEXED_SHA,
+  },
+  degraded: false,
+};
+
 /** Symbol with an endpoint but zero callers — validates badge renders independent of caller list. */
 const ENDPOINT_NO_CALLERS = {
   symbols: [
@@ -284,6 +307,27 @@ describe("BlastRadius — degraded state", () => {
       expect(
         screen.getByText(/Index degraded — results may be incomplete/),
       ).toBeInTheDocument(),
+    );
+  });
+});
+
+// ---------------------------------------------------------------------------
+// (P2) Partial-index badge — honest signal when index is incomplete
+// ---------------------------------------------------------------------------
+describe("BlastRadius — partial index state", () => {
+  it("shows the partial badge when index.status is partial", async () => {
+    renderPanel(PARTIAL_BLAST);
+    await waitFor(() =>
+      expect(
+        screen.getByText(/Index incomplete — caller data may be missing/),
+      ).toBeInTheDocument(),
+    );
+  });
+
+  it("still renders the symbol tree when index is partial (panel not blank)", async () => {
+    renderPanel(PARTIAL_BLAST);
+    await waitFor(() =>
+      expect(screen.getByText("sendWelcomeEmail")).toBeInTheDocument(),
     );
   });
 });

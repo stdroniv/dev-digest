@@ -40,6 +40,7 @@ export function BlastRadius({ prId, repoFullName }: BlastRadiusProps) {
 
   const isDegraded =
     data?.degraded === true || data?.index?.degraded === true;
+  const isPartial = data?.index?.status === "partial";
   const totals = data?.totals ?? {
     symbols: 0,
     callers: 0,
@@ -61,6 +62,11 @@ export function BlastRadius({ prId, repoFullName }: BlastRadiusProps) {
       {isDegraded && (
         <div style={s.degradedBadge} role="status" aria-label={t("degraded.badge")}>
           {t("degraded.badge")}
+        </div>
+      )}
+      {!isDegraded && isPartial && (
+        <div style={s.degradedBadge} role="status" aria-label={t("partial.badge")}>
+          {t("partial.badge")}
         </div>
       )}
 

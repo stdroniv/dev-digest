@@ -10,6 +10,7 @@
     "graph": "graph"
   },
   "callerCount": "{count} callers",
+  "empty": "No impacted symbols found for this PR.",
   "noDownstream": "{count} changed symbol(s), no downstream callers found.",
   "graph": {
     "empty": "No downstream callers to graph.",

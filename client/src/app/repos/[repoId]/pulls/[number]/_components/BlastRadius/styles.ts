@@ -77,6 +77,13 @@ export const s = {
     padding: "0 0 8px",
   } satisfies CSSProperties,
 
+  noCallersNote: {
+    padding: "10px 16px",
+    fontSize: 12,
+    color: "var(--text-muted)",
+    fontStyle: "italic" as const,
+  } satisfies CSSProperties,
+
   symbolRow: {
     padding: "8px 16px 4px",
     borderTopStyle: "solid" as const,

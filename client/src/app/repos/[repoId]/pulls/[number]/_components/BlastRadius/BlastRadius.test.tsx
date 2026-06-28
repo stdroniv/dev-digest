@@ -64,11 +64,65 @@ const EMPTY_BLAST = {
   degraded: false,
 };
 
+/** Changed symbols present, but no resolved downstream callers. */
+const SYMBOLS_NO_CALLERS = {
+  symbols: [
+    {
+      file: "src/email/subject.ts",
+      name: "buildSubject",
+      kind: "function",
+      callers: [],
+      endpoints: [],
+      crons: [],
+    },
+    {
+      file: "src/email/subject.ts",
+      name: "resolveTitle",
+      kind: "function",
+      callers: [],
+      endpoints: [],
+      crons: [],
+    },
+  ],
+  totals: { symbols: 2, callers: 0, endpoints: 0, crons: 0 },
+  impactedEndpoints: [],
+  impactedCrons: [],
+  index: {
+    status: "full" as const,
+    degraded: false,
+    lastIndexedSha: INDEXED_SHA,
+  },
+  degraded: false,
+};
+
 /** Degraded blast response. */
 const DEGRADED_BLAST = {
   ...BLAST_DATA,
   degraded: true,
   index: { ...BLAST_DATA.index, degraded: true },
+};
+
+/** Symbol with an endpoint but zero callers — validates badge renders independent of caller list. */
+const ENDPOINT_NO_CALLERS = {
+  symbols: [
+    {
+      file: "src/routes/webhook.ts",
+      name: "handleWebhook",
+      kind: "function",
+      callers: [],
+      endpoints: ["POST /x"],
+      crons: [],
+    },
+  ],
+  totals: { symbols: 1, callers: 0, endpoints: 1, crons: 0 },
+  impactedEndpoints: ["POST /x"],
+  impactedCrons: [],
+  index: {
+    status: "full" as const,
+    degraded: false,
+    lastIndexedSha: INDEXED_SHA,
+  },
+  degraded: false,
 };
 
 function jsonResp(body: unknown, status = 200): Response {
@@ -187,11 +241,34 @@ describe("BlastRadius — caller link URLs", () => {
 // (c) Empty state when totals.symbols === 0
 // ---------------------------------------------------------------------------
 describe("BlastRadius — empty state", () => {
-  it("shows the noDownstream message when symbols === 0", async () => {
+  it("shows the no-impacted-symbols message when symbols === 0", async () => {
     renderPanel(EMPTY_BLAST);
     await waitFor(() =>
       expect(
-        screen.getByText(/0 changed symbol\(s\), no downstream callers found/),
+        screen.getByText(/No impacted symbols found for this PR/),
+      ).toBeInTheDocument(),
+    );
+  });
+});
+
+// ---------------------------------------------------------------------------
+// (c2) Symbols present but no callers — list the symbols, do NOT collapse to
+//      the empty state (regression: the old `!hasCallers` guard hid them).
+// ---------------------------------------------------------------------------
+describe("BlastRadius — symbols with no downstream callers", () => {
+  it("still lists the changed symbols", async () => {
+    renderPanel(SYMBOLS_NO_CALLERS);
+    await waitFor(() =>
+      expect(screen.getByText("buildSubject")).toBeInTheDocument(),
+    );
+    expect(screen.getByText("resolveTitle")).toBeInTheDocument();
+  });
+
+  it("shows the no-downstream-callers note above the tree", async () => {
+    renderPanel(SYMBOLS_NO_CALLERS);
+    await waitFor(() =>
+      expect(
+        screen.getByText(/2 changed symbol\(s\), no downstream callers found/),
       ).toBeInTheDocument(),
     );
   });
@@ -227,6 +304,28 @@ describe("BlastRadius — graph toggle", () => {
       const svg = document.querySelector("svg[aria-label]");
       expect(svg).not.toBeNull();
     });
+  });
+});
+
+// ---------------------------------------------------------------------------
+// (P1) Endpoint/cron badges rendered once per symbol (not per caller)
+// ---------------------------------------------------------------------------
+describe("BlastRadius — endpoint/cron badges per symbol", () => {
+  it("endpoint badge appears exactly once even with multiple callers (P1.1)", async () => {
+    renderPanel(BLAST_DATA); // 1 endpoint "POST /auth/login", 2 callers
+    await waitFor(() =>
+      expect(screen.getByText("checkRateLimit")).toBeInTheDocument(),
+    );
+    // getAllByText throws if nothing found; length 1 asserts no duplication per caller
+    const badges = screen.getAllByText("POST /auth/login");
+    expect(badges).toHaveLength(1);
+  });
+
+  it("endpoint badge still renders when callers list is empty (P1.1 zero-caller case)", async () => {
+    renderPanel(ENDPOINT_NO_CALLERS);
+    await waitFor(() =>
+      expect(screen.getByText("POST /x")).toBeInTheDocument(),
+    );
   });
 });
 

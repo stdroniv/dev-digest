@@ -47,8 +47,12 @@ export function BlastRadius({ prId, repoFullName }: BlastRadiusProps) {
     crons: 0,
   };
   const indexedSha = data?.index?.lastIndexedSha ?? null;
-  const hasCallers = (data?.symbols ?? []).some((g) => g.callers.length > 0);
-  const isEmpty = !data || totals.symbols === 0 || !hasCallers;
+  // Empty ONLY when there are no changed symbols. A PR whose changed symbols have
+  // no resolved downstream callers still has symbols worth listing — collapsing the
+  // whole panel to a one-line message (the old `|| !hasCallers`) hid every symbol.
+  const isEmpty = !data || totals.symbols === 0;
+  // Symbols exist but nothing downstream resolved — show the symbols + a note.
+  const noCallers = !isEmpty && totals.callers === 0;
 
   return (
     <section>
@@ -90,11 +94,9 @@ export function BlastRadius({ prId, repoFullName }: BlastRadiusProps) {
           </div>
         </div>
 
-        {/* Empty state */}
+        {/* Empty state — no changed symbols at all */}
         {isEmpty ? (
-          <div style={s.emptyState}>
-            {t("noDownstream", { count: totals.symbols })}
-          </div>
+          <div style={s.emptyState}>{t("empty")}</div>
         ) : view === "graph" ? (
           <BlastGraph
             symbols={data?.symbols ?? []}
@@ -102,8 +104,13 @@ export function BlastRadius({ prId, repoFullName }: BlastRadiusProps) {
             indexedSha={indexedSha}
           />
         ) : (
-          /* Tree view */
+          /* Tree view — always lists the changed symbols */
           <div style={s.tree}>
+            {noCallers && (
+              <div style={s.noCallersNote}>
+                {t("noDownstream", { count: totals.symbols })}
+              </div>
+            )}
             {(data?.symbols ?? []).map((group, i) => (
               <SymbolRow
                 key={`${group.file}:${group.name}:${i}`}
@@ -151,6 +158,16 @@ function SymbolRow({
         <span style={s.symbolName}>{group.name}</span>
         <span style={s.symbolKind}>{group.kind}</span>
         <span style={s.symbolFile}>{group.file}</span>
+        {group.endpoints.map((ep, ei) => (
+          <span key={`ep-${ei}`} style={{ ...s.badge, ...s.endpointBadge }}>
+            {ep}
+          </span>
+        ))}
+        {group.crons.map((cron, ci) => (
+          <span key={`cron-${ci}`} style={{ ...s.badge, ...s.cronBadge }}>
+            {cron}
+          </span>
+        ))}
       </div>
 
       {group.callers.length > 0 && (
@@ -161,8 +178,6 @@ function SymbolRow({
               caller={caller}
               repoFullName={repoFullName}
               indexedSha={indexedSha}
-              endpointBadges={group.endpoints}
-              cronBadges={group.crons}
               t={t}
             />
           ))}
@@ -176,15 +191,11 @@ function CallerItem({
   caller,
   repoFullName,
   indexedSha,
-  endpointBadges,
-  cronBadges,
   t,
 }: {
   caller: BlastCallerEntry;
   repoFullName: string | null | undefined;
   indexedSha: string | null;
-  endpointBadges: string[];
-  cronBadges: string[];
   t: ReturnType<typeof useTranslations<"blast">>;
 }) {
   const href = blastCallerUrl(repoFullName, indexedSha, caller.file, caller.line);
@@ -205,16 +216,6 @@ function CallerItem({
       ) : (
         <span style={s.callerLinkPlain}>{label}</span>
       )}
-      {endpointBadges.map((ep, ei) => (
-        <span key={`ep-${ei}`} style={{ ...s.badge, ...s.endpointBadge }}>
-          {ep}
-        </span>
-      ))}
-      {cronBadges.map((cron, ci) => (
-        <span key={`cron-${ci}`} style={{ ...s.badge, ...s.cronBadge }}>
-          {cron}
-        </span>
-      ))}
     </li>
   );
 }

@@ -98,6 +98,27 @@ const PHANTOM_GLOBALS_ALLOWLIST: ReadonlySet<string> = new Set([
   'afterAll', 'afterEach', 'vi', 'jest',
 ]);
 
+/**
+ * Per-symbol caller cap. Walks the already-rank-desc-sorted flat list and
+ * keeps at most `cap` callers per `viaSymbol`, preserving input order.
+ * Mirrors the "export the pure bit for a hermetic test" pattern used by
+ * `shapeBlastResponse` in blast/service.ts.
+ */
+export function capCallersPerSymbol(
+  callers: BlastCallerRow[],
+  cap = MAX_CALLERS_PER_SYMBOL,
+): BlastCallerRow[] {
+  const counts = new Map<string, number>();
+  const result: BlastCallerRow[] = [];
+  for (const c of callers) {
+    const n = counts.get(c.viaSymbol) ?? 0;
+    if (n >= cap) continue;
+    counts.set(c.viaSymbol, n + 1);
+    result.push(c);
+  }
+  return result;
+}
+
 export class RepoIntelService implements RepoIntel {
   private readonly repo: RepoIntelRepository;
 
@@ -383,7 +404,7 @@ export class RepoIntelService implements RepoIntel {
 
     return {
       changedSymbols,
-      callers: callers.slice(0, MAX_CALLERS_PER_SYMBOL),
+      callers: capCallersPerSymbol(callers),
       impactedEndpoints: [...endpoints],
       factsByFile,
       degraded: false,

@@ -66,6 +66,30 @@ export function githubPrFileUrl(
 }
 
 /**
+ * Build a GitHub blob URL for a blast-radius caller reference.
+ *
+ * Uses the INDEXED SHA (not the PR head SHA) because caller files live
+ * OUTSIDE the PR diff — their line numbers come from the repo-intel index
+ * and are only accurate against the commit that was indexed.
+ *
+ * Returns `null` when either `repoFullName` or `indexedSha` is missing,
+ * so callers can render the `file:line` text without a link.
+ *
+ * Deliberately uses `githubBlobUrl` (NOT `githubPrFileUrl`): the PR "Files
+ * changed" view only contains files touched by the PR — caller files that
+ * are OUTSIDE the diff won't appear there.
+ */
+export function blastCallerUrl(
+  repoFullName: string | null | undefined,
+  indexedSha: string | null | undefined,
+  file: string,
+  line: number,
+): string | null {
+  if (!repoFullName || !indexedSha) return null;
+  return githubBlobUrl(repoFullName, indexedSha, file, line);
+}
+
+/**
  * SHA-256 hex of a string via the Web Crypto API. Used to build the `#diff-<hash>` anchor
  * for {@link githubPrFileUrl}. Returns "" when `crypto.subtle` is unavailable (insecure
  * context / jsdom) so callers fall back to the bare `/files` URL instead of throwing.

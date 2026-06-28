@@ -14,5 +14,17 @@
   "graph": {
     "empty": "No downstream callers to graph.",
     "ariaLabel": "Blast radius graph"
+  },
+  "degraded": {
+    "badge": "Index degraded — results may be incomplete",
+    "explain": "The repo-intel index ran in degraded mode (ripgrep fallback). Caller data may be partial."
+  },
+  "summary": {
+    "show": "Explain impact (AI summary)",
+    "loading": "Generating summary…",
+    "empty": "No summary available."
+  },
+  "clickToCode": {
+    "aria": "Open {file} line {line} on GitHub"
   }
 }

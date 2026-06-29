@@ -2,7 +2,7 @@
 
 import React from "react";
 import { useTranslations } from "next-intl";
-import { SectionLabel, Button, Skeleton } from "@devdigest/ui";
+import { Icon, SectionLabel, Button, Skeleton } from "@devdigest/ui";
 import type { Intent } from "@devdigest/shared";
 import { useIntent, useRecalculateIntent } from "@/lib/hooks/brief";
 import { s } from "./styles";
@@ -120,7 +120,7 @@ function IntentContent({
   return (
     <>
       <div style={s.header}>
-        <p style={s.summaryText}>{intent.intent}</p>
+        <p style={s.summaryText}>{`"${intent.intent}"`}</p>
         <Button size="sm" kind="ghost" onClick={onRecalculate} disabled={isPending}>
           {recalculateLabel}
         </Button>
@@ -133,7 +133,10 @@ function IntentContent({
       <div style={s.scopeSection}>
         {intent.in_scope.length > 0 && (
           <div style={s.scopeCol}>
-            <p style={s.scopeLabel}>{inScopeLabel}</p>
+            <p style={{ ...s.scopeLabel, ...s.scopeLabelRow }}>
+              <Icon.Check size={12} style={{ color: "var(--ok)" }} aria-hidden="true" />
+              {inScopeLabel}
+            </p>
             <ul style={s.scopeList}>
               {intent.in_scope.map((item, i) => (
                 <li key={i} style={s.scopeItem}>
@@ -147,7 +150,10 @@ function IntentContent({
 
         {intent.out_of_scope.length > 0 && (
           <div style={s.scopeCol}>
-            <p style={s.scopeLabel}>{outOfScopeLabel}</p>
+            <p style={{ ...s.scopeLabel, ...s.scopeLabelRow }}>
+              <Icon.X size={12} style={{ color: "var(--crit)" }} aria-hidden="true" />
+              {outOfScopeLabel}
+            </p>
             <ul style={s.scopeList}>
               {intent.out_of_scope.map((item, i) => (
                 <li key={i} style={s.scopeItem}>

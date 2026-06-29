@@ -67,7 +67,8 @@ describe("IntentCard — with intent data", () => {
   it("renders the summary text", async () => {
     renderCard(PR_ID, buildFetchMock(INTENT));
     await waitFor(() =>
-      expect(screen.getByText("Add rate limiting to public API endpoints.")).toBeInTheDocument(),
+      // Substring regex — robust to the curly-quote wrapper added by Phase 5a
+      expect(screen.getByText(/Add rate limiting to public API endpoints\./)).toBeInTheDocument(),
     );
   });
 

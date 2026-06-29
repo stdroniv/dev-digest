@@ -26,6 +26,7 @@ export const s = {
     color: "var(--text-primary)",
     flex: 1,
     minWidth: 0,
+    fontStyle: "italic" as const,
   } satisfies CSSProperties,
 
   scopeSection: {
@@ -47,6 +48,12 @@ export const s = {
     color: "var(--text-muted)",
     marginBottom: 6,
     marginTop: 10,
+  } satisfies CSSProperties,
+
+  scopeLabelRow: {
+    display: "flex",
+    alignItems: "center",
+    gap: 5,
   } satisfies CSSProperties,
 
   scopeList: {

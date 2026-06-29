@@ -95,6 +95,13 @@ function renderOverview(latestReview: ReviewRecord | null) {
 // Case 1: latestReview with verdict + score → PR SCORE gauge renders
 // ---------------------------------------------------------------------------
 describe("OverviewTab — PR score badge", () => {
+  it("renders the 'PR Brief' section label", async () => {
+    renderOverview(REVIEW_WITH_SCORE);
+    await waitFor(() =>
+      expect(screen.getByText("PR Brief")).toBeInTheDocument(),
+    );
+  });
+
   it("renders 'PR SCORE' label when latestReview has a verdict", async () => {
     renderOverview(REVIEW_WITH_SCORE);
     await waitFor(() =>

@@ -11,6 +11,7 @@ import { Review as ReviewSchema } from '@devdigest/shared';
 import { assemblePrompt } from '../prompt.js';
 import { groundFindings, groundingSummary } from '../grounding.js';
 import { reduceReviews, scoreFromFindings, sliceDiff, dedupeFindings } from './reduce.js';
+import { verdictFromFindings } from '../output/to-review.js';
 
 /**
  * reviewPullRequest — the review engine entry point.
@@ -290,11 +291,18 @@ export async function reviewPullRequest(input: ReviewInput): Promise<ReviewOutco
   }
   emit('result', `Citation grounding: ${grounding}`);
 
-  // Score is derived from the findings that SURVIVED grounding (not the model's
-  // self-reported number, and not the pre-grounding set) so the score, the
-  // findings list, and the deterministic event always agree.
+  // Score AND verdict are derived from the findings that SURVIVED grounding (not
+  // the model's self-reported number/verdict, and not the pre-grounding set), via
+  // the same deterministic rules the CI event uses — so the score, the verdict
+  // badge, the findings list, and the GitHub event can never contradict each other
+  // (no more "100 / 0 findings / request changes" cards).
   return {
-    review: { ...merged, findings: ground.kept, score: scoreFromFindings(ground.kept) },
+    review: {
+      ...merged,
+      findings: ground.kept,
+      score: scoreFromFindings(ground.kept),
+      verdict: verdictFromFindings(ground.kept),
+    },
     grounding,
     dropped: ground.dropped,
     mode,

@@ -1,6 +1,11 @@
 import { describe, it, expect } from 'vitest';
 import type { Finding, Review, UnifiedDiff } from '@devdigest/shared';
-import { toReviewPayload, gateTriggered, countBlockers } from '../src/index.js';
+import {
+  toReviewPayload,
+  gateTriggered,
+  countBlockers,
+  verdictFromFindings,
+} from '../src/index.js';
 
 /**
  * The review EVENT is computed deterministically from finding severities + the
@@ -162,5 +167,50 @@ describe('gateTriggered', () => {
     expect(gateTriggered([finding('WARNING')], 'warning')).toBe(true);
     expect(gateTriggered([finding('CRITICAL')], 'never')).toBe(false);
     expect(gateTriggered([], 'any')).toBe(false);
+  });
+});
+
+/**
+ * The studio's verdict badge must be derived from the grounded findings — NOT the
+ * model's self-reported verdict — so a run can never show "100 / 0 findings /
+ * request changes". `verdictFromFindings` is that derivation, and it is the single
+ * source `toReviewPayload`'s CI event is mapped from.
+ */
+describe('verdictFromFindings — deterministic verdict from findings', () => {
+  it('no findings → approve (regardless of gate)', () => {
+    expect(verdictFromFindings([], 'critical')).toBe('approve');
+    expect(verdictFromFindings([], 'any')).toBe('approve');
+  });
+
+  it("findings below the gate → comment (e.g. WARNING under 'critical')", () => {
+    expect(verdictFromFindings([finding('WARNING')], 'critical')).toBe('comment');
+    expect(verdictFromFindings([finding('SUGGESTION')], 'warning')).toBe('comment');
+  });
+
+  it('findings at or above the gate → request_changes', () => {
+    expect(verdictFromFindings([finding('CRITICAL')], 'critical')).toBe('request_changes');
+    expect(verdictFromFindings([finding('WARNING')], 'warning')).toBe('request_changes');
+    expect(verdictFromFindings([finding('SUGGESTION')], 'any')).toBe('request_changes');
+  });
+
+  it("'never' never blocks, even on a CRITICAL", () => {
+    expect(verdictFromFindings([finding('CRITICAL')], 'never')).toBe('comment');
+  });
+
+  it("defaults to the 'critical' gate when failOn is omitted", () => {
+    expect(verdictFromFindings([finding('WARNING')])).toBe('comment');
+    expect(verdictFromFindings([finding('CRITICAL')])).toBe('request_changes');
+  });
+
+  it('agrees with the CI event toReviewPayload posts (single source of truth)', () => {
+    const EVENT: Record<string, string> = {
+      approve: 'APPROVE',
+      comment: 'COMMENT',
+      request_changes: 'REQUEST_CHANGES',
+    };
+    for (const fs of [[], [finding('WARNING')], [finding('CRITICAL')]]) {
+      const v = verdictFromFindings(fs, 'critical');
+      expect(toReviewPayload(review(fs), { failOn: 'critical' }).event).toBe(EVENT[v]);
+    }
   });
 });

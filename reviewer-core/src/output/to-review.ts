@@ -1,4 +1,11 @@
-import type { CiFailOn, Finding, GitHubReviewPayload, Review, UnifiedDiff } from '@devdigest/shared';
+import type {
+  CiFailOn,
+  Finding,
+  GitHubReviewPayload,
+  Review,
+  UnifiedDiff,
+  Verdict,
+} from '@devdigest/shared';
 import { buildLineIndex } from '../grounding.js';
 
 /**
@@ -48,6 +55,32 @@ export function gateTriggered(findings: Finding[], failOn: CiFailOn): boolean {
 export function countBlockers(findings: Finding[], failOn: CiFailOn): number {
   const min = FAIL_ON_MIN_RANK[failOn];
   return findings.reduce((n, f) => n + ((SEV_RANK[f.severity] ?? 0) >= min ? 1 : 0), 0);
+}
+
+/**
+ * Map a deterministic domain `Verdict` to the GitHub review event. The studio
+ * shows the `Verdict` on a run row; CI posts the event — one decision, two
+ * surfaces, so they must come from the same source.
+ */
+const VERDICT_TO_EVENT: Record<Verdict, GitHubReviewPayload['event']> = {
+  approve: 'APPROVE',
+  request_changes: 'REQUEST_CHANGES',
+  comment: 'COMMENT',
+};
+
+/**
+ * Deterministic verdict derived from the (grounded) findings + gate policy — the
+ * SAME rule that drives the CI review event, surfaced as a domain `Verdict` so the
+ * studio's verdict badge agrees with the score and the findings beneath it instead
+ * of trusting the model's self-reported `verdict`. That field drifts and surprises:
+ * a model can nitpick in prose and self-report `request_changes` while filing ZERO
+ * findings and scoring 100 — the contradictory "100 / 0 findings / request changes"
+ * card. Mirrors `scoreFromFindings`: no findings → approve; gate tripped →
+ * request_changes; otherwise → comment.
+ */
+export function verdictFromFindings(findings: Finding[], failOn: CiFailOn = 'critical'): Verdict {
+  if (findings.length === 0) return 'approve';
+  return gateTriggered(findings, failOn) ? 'request_changes' : 'comment';
 }
 
 export interface ToReviewOptions {
@@ -152,13 +185,9 @@ export function toReviewPayload(review: Review, opts: ToReviewOptions = {}): Git
   const lineIndex = opts.diff ? buildLineIndex(opts.diff) : null;
   const comments = inline ? inlineComments(review.findings, lineIndex) : [];
   // Deterministic event from severities + gate policy (ignores model verdict):
-  // no findings → APPROVE; gate tripped → REQUEST_CHANGES; otherwise → COMMENT.
+  // the SAME findings→verdict rule the studio shows, mapped to the GitHub event.
   const event: GitHubReviewPayload['event'] =
-    review.findings.length === 0
-      ? 'APPROVE'
-      : gateTriggered(review.findings, failOn)
-        ? 'REQUEST_CHANGES'
-        : 'COMMENT';
+    VERDICT_TO_EVENT[verdictFromFindings(review.findings, failOn)];
   return {
     body: composeBody(review.findings, event, title),
     event,

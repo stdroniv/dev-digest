@@ -132,7 +132,7 @@ function IntentContent({
 
       <div style={s.scopeSection}>
         {intent.in_scope.length > 0 && (
-          <>
+          <div style={s.scopeCol}>
             <p style={s.scopeLabel}>{inScopeLabel}</p>
             <ul style={s.scopeList}>
               {intent.in_scope.map((item, i) => (
@@ -142,11 +142,11 @@ function IntentContent({
                 </li>
               ))}
             </ul>
-          </>
+          </div>
         )}
 
         {intent.out_of_scope.length > 0 && (
-          <>
+          <div style={s.scopeCol}>
             <p style={s.scopeLabel}>{outOfScopeLabel}</p>
             <ul style={s.scopeList}>
               {intent.out_of_scope.map((item, i) => (
@@ -156,7 +156,7 @@ function IntentContent({
                 </li>
               ))}
             </ul>
-          </>
+          </div>
         )}
       </div>
     </>

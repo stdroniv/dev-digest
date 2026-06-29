@@ -30,7 +30,14 @@ export const s = {
 
   scopeSection: {
     padding: "0 16px 14px",
+    display: "grid",
+    gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))",
+    columnGap: 24,
+    rowGap: 4,
+    alignItems: "start",
   } satisfies CSSProperties,
+
+  scopeCol: { minWidth: 0 } satisfies CSSProperties,
 
   scopeLabel: {
     fontSize: 11,

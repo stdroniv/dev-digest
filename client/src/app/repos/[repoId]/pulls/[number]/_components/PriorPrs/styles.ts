@@ -89,6 +89,7 @@ export const s = {
     gap: 8,
     textDecoration: "none",
     color: "inherit",
+    minWidth: 0,
   } satisfies CSSProperties,
 
   prNumber: {
@@ -96,11 +97,13 @@ export const s = {
     fontWeight: 700,
     fontFamily: "var(--font-mono, monospace)",
     color: "var(--accent)",
+    flexShrink: 0,
   } satisfies CSSProperties,
 
   prTitle: {
     fontSize: 13,
     color: "var(--text-primary)",
+    overflowWrap: "anywhere" as const,
   } satisfies CSSProperties,
 
   rowMeta: {

@@ -2,7 +2,7 @@
 
 import React from "react";
 import { useTranslations } from "next-intl";
-import { Icon, SectionLabel } from "@devdigest/ui";
+import { Icon, SectionLabel, Skeleton } from "@devdigest/ui";
 import { useBlastRadius, useBlastSummary } from "@/lib/hooks/blast";
 import { blastCallerUrl } from "@/lib/github-urls";
 import type { BlastSymbolGroup, BlastCallerEntry } from "@/lib/types";
@@ -36,7 +36,18 @@ export function BlastRadius({ prId, repoFullName }: BlastRadiusProps) {
     { enabled: summaryEnabled },
   );
 
-  if (isLoading) return null;
+  if (isLoading) {
+    return (
+      <section>
+        <SectionLabel icon="Workflow">Blast Radius</SectionLabel>
+        <div style={s.card}>
+          <div style={{ padding: 16 }}>
+            <Skeleton height={120} />
+          </div>
+        </div>
+      </section>
+    );
+  }
 
   const isDegraded =
     data?.degraded === true || data?.index?.degraded === true;
@@ -226,7 +237,7 @@ function SymbolRow({
           <span style={s.symbolName}>{displayName(group)}</span>
         </span>
 
-        <span style={s.symbolFile}>{group.file}</span>
+        <span style={s.symbolFile} title={group.file}>{group.file}</span>
 
         {/* Step 9: endpoint badges with Globe icon; cron badges with Clock icon */}
         {group.endpoints.map((ep, ei) => (
@@ -297,11 +308,12 @@ function CallerItem({
           rel="noopener noreferrer"
           style={s.callerLink}
           aria-label={t("clickToCode.aria", { file: caller.file, line: caller.line })}
+          title={label}
         >
           {label}
         </a>
       ) : (
-        <span style={s.callerLinkPlain}>{label}</span>
+        <span style={s.callerLinkPlain} title={label}>{label}</span>
       )}
     </li>
   );

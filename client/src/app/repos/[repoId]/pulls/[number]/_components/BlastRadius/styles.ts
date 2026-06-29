@@ -17,14 +17,18 @@ export const s = {
     justifyContent: "space-between",
     padding: "12px 16px 10px",
     gap: 12,
+    flexWrap: "wrap" as const,
+    rowGap: 8,
   } satisfies CSSProperties,
 
   // Step 6: stat row is now a flex container; stat items are separate spans
   statRow: {
     display: "flex",
     alignItems: "center",
-    gap: 16,
+    gap: 12,
     flex: 1,
+    flexWrap: "wrap" as const,
+    rowGap: 6,
   } satisfies CSSProperties,
 
   // Step 6: each icon+count+label group
@@ -110,11 +114,12 @@ export const s = {
     borderTopColor: "var(--border)",
   } satisfies CSSProperties,
 
-  // Step 7: collapsible symbol header row
+  // Step 7: collapsible symbol header row — minWidth:0 so long paths ellipsis
   symbolHeader: {
     display: "flex",
     alignItems: "center",
     gap: 6,
+    minWidth: 0,
   } satisfies CSSProperties,
 
   // Step 7: chevron toggle button
@@ -130,11 +135,13 @@ export const s = {
     flexShrink: 0,
   } satisfies CSSProperties,
 
-  // Step 7: code chip container (Code icon + monospace name)
+  // Step 7: code chip container (Code icon + monospace name) — flexShrink:0 so
+  // it never compresses when the file path is long.
   symbolChip: {
     display: "inline-flex",
     alignItems: "center",
     gap: 4,
+    flexShrink: 0,
   } satisfies CSSProperties,
 
   symbolName: {
@@ -148,6 +155,11 @@ export const s = {
     fontSize: 11,
     color: "var(--text-muted)",
     fontFamily: "var(--font-mono, monospace)",
+    overflow: "hidden",
+    textOverflow: "ellipsis",
+    whiteSpace: "nowrap" as const,
+    minWidth: 0,
+    flexShrink: 1,
   } satisfies CSSProperties,
 
   // Step 7: per-symbol caller count — right-aligned plain muted text, not a pill
@@ -166,6 +178,7 @@ export const s = {
     display: "flex",
     flexDirection: "column" as const,
     gap: 3,
+    overflowX: "auto" as const,
   } satisfies CSSProperties,
 
   callerItem: {
@@ -173,6 +186,8 @@ export const s = {
     alignItems: "center",
     gap: 8,
     fontSize: 12,
+    whiteSpace: "nowrap" as const,
+    minWidth: 0,
   } satisfies CSSProperties,
 
   // Step 7: leading CornerDownRight connector — separate element keeps file:line as own text node
@@ -188,12 +203,14 @@ export const s = {
     textDecoration: "none",
     fontFamily: "var(--font-mono, monospace)",
     fontSize: 12,
+    whiteSpace: "nowrap" as const,
   } satisfies CSSProperties,
 
   callerLinkPlain: {
     color: "var(--text-secondary)",
     fontFamily: "var(--font-mono, monospace)",
     fontSize: 12,
+    whiteSpace: "nowrap" as const,
   } satisfies CSSProperties,
 
   // Step 9: badge upgraded to design spec (padding, radius, fontSize, gap)

@@ -4,7 +4,6 @@ import React from "react";
 import { useTranslations } from "next-intl";
 import { SectionLabel } from "@devdigest/ui";
 import { IntentCard } from "../IntentCard";
-import { RisksCard } from "../RisksCard";
 import { BlastRadius } from "../BlastRadius";
 import { PriorPrs } from "../PriorPrs";
 import { VerdictBanner } from "../VerdictBanner";
@@ -49,9 +48,6 @@ export function OverviewTab({ prBody, prId, repoFullName, latestReview }: Overvi
           </div>
         </div>
       </section>
-
-      {/* RisksCard remains here in P1 only; removed in P3 */}
-      <RisksCard prId={prId} />
 
       {prBody && (
         <section>

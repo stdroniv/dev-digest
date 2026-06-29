@@ -2,10 +2,11 @@
 
 import React from "react";
 import { useTranslations } from "next-intl";
-import { SectionLabel, Button } from "@devdigest/ui";
+import { SectionLabel, Button, Skeleton } from "@devdigest/ui";
 import type { Intent } from "@devdigest/shared";
 import { useIntent, useRecalculateIntent } from "@/lib/hooks/brief";
 import { s } from "./styles";
+import { RiskAreas } from "./RiskAreas";
 
 interface IntentCardProps {
   prId: string | null | undefined;
@@ -27,7 +28,16 @@ export function IntentCard({ prId }: IntentCardProps) {
   };
 
   if (isLoading) {
-    return null;
+    return (
+      <section>
+        <SectionLabel icon="Target">{t("block.intent")}</SectionLabel>
+        <div style={s.card}>
+          <div style={{ padding: 16 }}>
+            <Skeleton height={88} />
+          </div>
+        </div>
+      </section>
+    );
   }
 
   const recalculateLabel = recalculate.isPending
@@ -55,6 +65,7 @@ export function IntentCard({ prId }: IntentCardProps) {
             recalculateLabel={recalculateLabel}
           />
         )}
+        <RiskAreas prId={prId} />
       </div>
     </section>
   );

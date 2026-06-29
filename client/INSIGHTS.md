@@ -85,6 +85,12 @@ it actionable cold; never edit or delete existing entries.
 
 ## Session Notes
 
+### 2026-06-29
+
+- When mounting a new child component (`RiskAreas`) inside an existing card (`IntentCard`) where the parent test's `fetch` mock returns the same response to every URL, the child's data hook (`useRisks` → `GET /pulls/:id/risks`) receives the parent's intent fixture, causing a silent shape mismatch (no thrown error — the query data just has the wrong type). Fix: switch all fetch mocks in that test file to URL-branching patterns (`if (path.includes("/risks")) return null`) the moment a new self-fetching child is added. The tell is new `MISSING_MESSAGE`-style errors OR unexpected empty states in the child despite the parent rendering correctly.
+
+- `Skeleton` from `@devdigest/ui` is the canonical height-stable placeholder for loading branches. Before this effort both `IntentCard` and `BlastRadius` returned `null` while loading, causing the two-column grid to flash a zero-height half until the slower fetch resolved. Pattern that works: replace `if (isLoading) return null` with a minimal `<section><SectionLabel …/><div style={s.card}><div style={{padding:16}}><Skeleton height={N}/></div></div></section>`. Use `height={88}` for Intent (one-line summary height) and `height={120}` for Blast (stat row + toggle). The `card` style's `overflow:hidden` clips the skeleton cleanly.
+
 - `BlastGraph` previously used `hasContent = callers.length > 0 || rightNodes.length > 0` as its empty gate. After the step-7 fix this became `symbols.length === 0`. As a consequence the BlastGraph tests that previously asserted `SYMBOLS_NO_CALLERS` shows the empty message and no SVG NOW INVERT: `SYMBOLS_NO_CALLERS` renders an SVG. Any future test addition for BlastGraph should follow the new gate: empty message only when `symbols.length === 0`, not when callers are absent.
 
 - BlastRadius endpoint/cron badges must live in `SymbolRow`'s header div (always rendered), NOT inside `CallerItem`. When badges were in `CallerItem` they duplicated once per caller AND disappeared entirely when `callers.length === 0` (the `<ul>` was conditional on caller count). The fix: render `group.endpoints`/`group.crons` badges in the symbol header div regardless of caller count; `CallerItem` becomes link-only. RTL test pattern for "appears exactly once": `screen.getAllByText("POST /auth/login")` + `expect(...).toHaveLength(1)` — `getByText` would also catch duplication but throws if missing; `getAllByText` works for both cases.

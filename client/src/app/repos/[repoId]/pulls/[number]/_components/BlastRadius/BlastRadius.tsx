@@ -41,6 +41,9 @@ export function BlastRadius({ prId, repoFullName }: BlastRadiusProps) {
   const isDegraded =
     data?.degraded === true || data?.index?.degraded === true;
   const isPartial = data?.index?.status === "partial";
+  // Limited cross-file resolution — distinct informational note, NOT the
+  // degraded/partial badge. Does NOT gate isEmpty.
+  const isLimited = data?.resolution?.limited === true;
   const totals = data?.totals ?? {
     symbols: 0,
     callers: 0,
@@ -136,6 +139,11 @@ export function BlastRadius({ prId, repoFullName }: BlastRadiusProps) {
             {noCallers && (
               <div style={s.noCallersNote}>
                 {t("noDownstream", { count: totals.symbols })}
+              </div>
+            )}
+            {isLimited && (
+              <div style={s.noCallersNote} role="note">
+                {t("resolution.note")}
               </div>
             )}
             {(data?.symbols ?? []).map((group, i) => (

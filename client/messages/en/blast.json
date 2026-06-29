@@ -12,7 +12,7 @@
   "callerCount": "{count} callers",
   "symbolToggle": "Toggle callers for {name}",
   "empty": "No impacted symbols found for this PR.",
-  "noDownstream": "{count} changed symbol(s), no downstream callers found.",
+  "noDownstream": "{count} changed symbol(s) with no in-repo callers — e.g. route handlers, exports, or framework entry points.",
   "graph": {
     "empty": "No downstream callers to graph.",
     "ariaLabel": "Blast radius graph"
@@ -32,5 +32,8 @@
   },
   "clickToCode": {
     "aria": "Open {file} line {line} on GitHub"
+  },
+  "resolution": {
+    "note": "Cross-file resolution is limited for this repo — some callers may be missing because imports across packages or path aliases didn't resolve. Re-index after the next release for fuller results."
   }
 }

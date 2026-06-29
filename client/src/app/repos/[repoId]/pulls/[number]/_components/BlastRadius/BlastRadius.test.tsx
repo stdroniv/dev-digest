@@ -48,6 +48,7 @@ const BLAST_DATA = {
     lastIndexedSha: INDEXED_SHA,
   },
   degraded: false,
+  resolution: { limited: false },
 };
 
 /** Empty blast response — no symbols. */
@@ -62,6 +63,7 @@ const EMPTY_BLAST = {
     lastIndexedSha: INDEXED_SHA,
   },
   degraded: false,
+  resolution: { limited: false },
 };
 
 /** Changed symbols present, but no resolved downstream callers. */
@@ -301,7 +303,7 @@ describe("BlastRadius — symbols with no downstream callers", () => {
     renderPanel(SYMBOLS_NO_CALLERS);
     await waitFor(() =>
       expect(
-        screen.getByText(/2 changed symbol\(s\), no downstream callers found/),
+        screen.getByText(/2 changed symbol\(s\) with no in-repo callers/),
       ).toBeInTheDocument(),
     );
   });
@@ -416,6 +418,64 @@ describe("BlastRadius — per-symbol caller count and chevron collapse", () => {
         screen.queryByText("src/routes/auth.ts:42"),
       ).not.toBeInTheDocument(),
     );
+  });
+});
+
+// ---------------------------------------------------------------------------
+// (P4) Limited-resolution note — distinct informational note (Tier 4)
+// ---------------------------------------------------------------------------
+describe("BlastRadius — limited resolution note", () => {
+  /** Symbols present, healthy index, but limited cross-file resolution. */
+  const LIMITED_RESOLUTION_BLAST = {
+    ...BLAST_DATA,
+    resolution: { limited: true, reason: "sparse_cross_file" },
+  };
+
+  /** Control: same data but resolution is healthy (limited: false). */
+  const HEALTHY_RESOLUTION_BLAST = {
+    ...BLAST_DATA,
+    resolution: { limited: false },
+  };
+
+  it("renders the limited-resolution note when resolution.limited is true", async () => {
+    renderPanel(LIMITED_RESOLUTION_BLAST);
+    await waitFor(() =>
+      expect(
+        screen.getByText(/Cross-file resolution is limited for this repo/),
+      ).toBeInTheDocument(),
+    );
+  });
+
+  it("symbols still render when resolution.limited is true (panel not collapsed)", async () => {
+    renderPanel(LIMITED_RESOLUTION_BLAST);
+    await waitFor(() =>
+      expect(screen.getByText("checkRateLimit()")).toBeInTheDocument(),
+    );
+  });
+
+  it("degraded badge does NOT render when only resolution.limited is true", async () => {
+    renderPanel(LIMITED_RESOLUTION_BLAST);
+    await waitFor(() =>
+      expect(
+        screen.getByText(/Cross-file resolution is limited for this repo/),
+      ).toBeInTheDocument(),
+    );
+    expect(
+      screen.queryByText(/Index degraded — results may be incomplete/),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByText(/Index incomplete — caller data may be missing/),
+    ).not.toBeInTheDocument();
+  });
+
+  it("does NOT render the limited-resolution note when resolution.limited is false", async () => {
+    renderPanel(HEALTHY_RESOLUTION_BLAST);
+    await waitFor(() =>
+      expect(screen.getByText("checkRateLimit()")).toBeInTheDocument(),
+    );
+    expect(
+      screen.queryByText(/Cross-file resolution is limited for this repo/),
+    ).not.toBeInTheDocument();
   });
 });
 

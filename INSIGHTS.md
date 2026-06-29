@@ -227,6 +227,20 @@ cold; never edit or delete existing entries.
   CallTool request handler wraps the callback in try/catch, converting ANY thrown error into an `isError`
   result — so a handler throw can't crash the stdio transport (still prefer curated `isError` results via an
   `McpToolError` + a `runTool` wrapper so messages stay actionable).
+- The design reference (`~/Downloads/DevDigest Design (standalone) (3).html`) is NOT
+  plain HTML — grepping it for visible UI strings (`Intent`, `Scope`, `symbols`,
+  `downstream`) returns ZERO hits. It's a `__bundler` export: all component source is
+  gzip+base64 inside a single `<script type="__bundler/manifest">` JSON
+  (`{uuid:{mime,compressed,data}}`), and the only readable JSX (near EOF) is the
+  `DesignCanvas` wrapper (`window.ScreenPRDetail`/`window.BlastRadius` are *referenced*,
+  never defined in cleartext). To read the real components: parse the manifest JSON,
+  `base64.b64decode` → `gzip.decompress` → utf-8 each `data`, then grep the decoded
+  files. Component map: PR-overview layout = `screen_pr_detail.jsx`
+  (`BriefCard`/`IntentBlock`/`RiskPillRow`/`HistoryAccordion`), blast tree+graph =
+  `blast.jsx`, verdict/score gauge = `findings.jsx` (`VerdictBanner` → `CircularScore`
+  "PR SCORE"), mock data (`VERDICT.score`, `INTENT`, `BLAST`) = `data.jsx`. One-shot
+  Python decoded all 44 resources to `scratchpad/` in seconds — don't try to read the
+  raw file.
 
 ## Recurring Errors & Fixes
 

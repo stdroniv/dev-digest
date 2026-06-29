@@ -26,7 +26,8 @@ import PQueue from 'p-queue';
 import type { RepoRef } from '@devdigest/shared';
 import type { Container } from '../../../platform/container.js';
 import { withTimeout } from '../../../platform/resilience.js';
-import { parseSymbols, parseReferences, langForFile } from '../../../adapters/astgrep/index.js';
+import { parseSymbols, parseReferences, parseImports, langForFile } from '../../../adapters/astgrep/index.js';
+import { buildResolverContext, resolveImportEdges, unionEdges } from './import-edges.js';
 import { extractEndpoints, extractCrons } from '../../../adapters/codeindex/extract.js';
 import {
   DEFAULT_REPO_MAP_TOKEN_BUDGET,
@@ -117,6 +118,7 @@ export async function runFullIndex(
   const symbolsBuf: IndexerSymbolRow[] = [];
   const refsBuf: IndexerReferenceRow[] = [];
   const factsBuf: IndexerFileFactsRow[] = [];
+  const importsBuf: Array<{ fromFile: string; spec: string }> = [];
   const parseDegraded: ParseDegradedEntry[] = [];
   let filesIndexed = 0;
   let filesSkipped = walk.stats.skippedTooLarge;
@@ -183,10 +185,14 @@ export async function runFullIndex(
         }
         // Per-file facts (endpoints/crons) so blast reads from file_facts
         // instead of re-parsing the clone (T3 blast migration).
-        const endpoints = extractEndpoints(source);
-        const crons = extractCrons(source);
+        const endpoints = extractEndpoints(source, relPath);
+        const crons = extractCrons(source, relPath);
         if (endpoints.length > 0 || crons.length > 0) {
           factsBuf.push({ filePath: relPath, endpoints, crons });
+        }
+        // Collect imports for the monorepo-aware edge resolver (Tier 2).
+        for (const im of parseImports(relPath, source)) {
+          importsBuf.push({ fromFile: relPath, spec: im.source });
         }
         filesIndexed += 1;
       } catch (err) {
@@ -211,10 +217,16 @@ export async function runFullIndex(
   let graphFailed: string | undefined;
   let edgeRows: IndexerEdgeRow[] = [];
   let rankCount = 0;
+  let importEdgesCount = 0;
   if (!softBudgetReached) {
     try {
-      const edges = await container.depgraph.buildEdges(repo.clonePath, walk.files);
-      edgeRows = edges.map((e) => ({ fromFile: e.from, toFile: e.to }));
+      const cruiseEdges = await container.depgraph.buildEdges(repo.clonePath, walk.files);
+      // Union with monorepo-aware resolver edges (workspace + alias imports).
+      const ctx = await buildResolverContext(repo.clonePath, walk.files);
+      const importEdges = resolveImportEdges(importsBuf, ctx);
+      importEdgesCount = importEdges.length;
+      const allEdges = unionEdges(cruiseEdges, importEdges);
+      edgeRows = allEdges.map((e) => ({ fromFile: e.from, toFile: e.to }));
     } catch (err) {
       graphFailed = asMessage(err);
     }
@@ -257,6 +269,7 @@ export async function runFullIndex(
     symbolsWritten: symbolsBuf.length,
     referencesWritten: refsBuf.length,
     edgesWritten: edgeRows.length,
+    importEdges: importEdgesCount,
     ranked: rankCount,
     factsWritten: factsBuf.length,
     hotnessAvailable: false, // Option B — rank = pagerank only

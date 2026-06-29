@@ -40,6 +40,7 @@ const MOCK_BLAST: BlastResponse = {
   impactedCrons: [],
   index: { status: 'full', degraded: false, lastIndexedSha: 'sha-abc123' },
   degraded: false,
+  resolution: { limited: false },
 };
 
 const EMPTY_BLAST: BlastResponse = {
@@ -50,6 +51,7 @@ const EMPTY_BLAST: BlastResponse = {
   index: { status: 'degraded', degraded: true, lastIndexedSha: null },
   degraded: true,
   reason: 'no_data',
+  resolution: { limited: false },
 };
 
 function mockBlastSvc(response: BlastResponse) {

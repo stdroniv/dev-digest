@@ -589,6 +589,96 @@ export class RepoIntelRepository {
     await this.db.delete(t.repoMapCache).where(eq(t.repoMapCache.repoId, repoId));
   }
 
+  // -------------------------------------------------------------------------
+  // T1 caller-fallback reads (Tier 1 — no reindex required).
+  // -------------------------------------------------------------------------
+
+  /**
+   * Names that are exported by EXACTLY ONE file repo-wide (among `names`).
+   * Used by the name-unique caller fallback: only globally-unique exports are
+   * safe to attribute by bare name, preserving the precision-over-recall contract.
+   */
+  async getUniqueExportFiles(
+    repoId: string,
+    names: string[],
+  ): Promise<Array<{ name: string; path: string }>> {
+    if (names.length === 0) return [];
+    // Use the query builder's inArray (→ `IN ($1,$2,…)`) rather than a raw
+    // `= ANY(${names})`: interpolating a JS array into a raw `sql` template binds
+    // it as a single text param, so Postgres tries to read a bare symbol name as
+    // an array literal ("malformed array literal"). groupBy + having express the
+    // exactly-one-declaring-file uniqueness check.
+    return this.db
+      .select({
+        name: t.symbols.name,
+        path: sql<string>`min(${t.symbols.path})`,
+      })
+      .from(t.symbols)
+      .where(
+        and(
+          eq(t.symbols.repoId, repoId),
+          eq(t.symbols.exported, true),
+          inArray(t.symbols.name, names),
+        ),
+      )
+      .groupBy(t.symbols.name)
+      .having(sql`count(distinct ${t.symbols.path}) = 1`);
+  }
+
+  /**
+   * All references (from any file) to symbols in `names`, inner-joined to
+   * file_rank so only ranked caller files count and the rank is available for
+   * sorting/cap. Used by the name-unique fallback; intentionally omits the
+   * `decl_file ∈ declFiles` filter that `getResolvedCallers` applies.
+   */
+  async getReferencesByNames(repoId: string, names: string[]): Promise<ResolvedCallerRow[]> {
+    if (names.length === 0) return [];
+    return this.db
+      .select({
+        fromPath: t.references.fromPath,
+        toSymbol: t.references.toSymbol,
+        line: t.references.line,
+        rank: t.fileRank.rank,
+      })
+      .from(t.references)
+      .innerJoin(
+        t.fileRank,
+        and(
+          eq(t.fileRank.repoId, t.references.repoId),
+          eq(t.fileRank.filePath, t.references.fromPath),
+        ),
+      )
+      .where(
+        and(
+          eq(t.references.repoId, repoId),
+          inArray(t.references.toSymbol, names),
+        ),
+      );
+  }
+
+  // -------------------------------------------------------------------------
+  // Tier 4 — resolution-ratio signal (read-time, no reindex).
+  // -------------------------------------------------------------------------
+
+  /**
+   * Count of references total vs. those with a resolved decl_file.
+   * `count(decl_file)` counts non-null rows. Both values arrive as bigint
+   * strings from postgres.js and are converted to number here.
+   */
+  async getReferenceResolutionStats(repoId: string): Promise<{ total: number; resolved: number }> {
+    const rows = await this.db.execute<{ total: string; resolved: string }>(sql`
+      SELECT count(*) AS total, count(decl_file) AS resolved
+      FROM "references"
+      WHERE repo_id = ${repoId}
+    `);
+    const row = (rows as Array<{ total: string; resolved: string }>)[0];
+    if (!row) return { total: 0, resolved: 0 };
+    return {
+      total: Number(row.total),
+      resolved: Number(row.resolved),
+    };
+  }
+
   /**
    * Patch facts for a slice of files (incremental): drop the changed files'
    * rows, then insert the non-empty ones. Unchanged files keep their facts.

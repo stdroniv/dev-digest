@@ -55,6 +55,12 @@ export interface BlastResponse {
   /** True when the underlying facade ran in degraded / ripgrep mode. */
   degraded: boolean;
   reason?: DegradedReason;
+  /**
+   * Honest cross-file resolution signal (Tier 4). When `limited` is true,
+   * many references stayed unresolved (imports across packages or path aliases
+   * didn't resolve) — some callers may be missing.
+   */
+  resolution: { limited: boolean; reason?: string };
 }
 
 /** Response from GET /pulls/:id/blast/summary. */

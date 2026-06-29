@@ -74,17 +74,33 @@ describe("BlastGraph — with callers", () => {
   });
 });
 
-describe("BlastGraph — empty (no callers)", () => {
-  it("shows the empty-graph message when there are no callers", () => {
-    renderGraph(SYMBOLS_NO_CALLERS);
+const NO_SYMBOLS: BlastSymbolGroup[] = [];
+
+describe("BlastGraph — empty (no symbols at all)", () => {
+  it("shows the empty-graph message when there are no symbols", () => {
+    renderGraph(NO_SYMBOLS);
     expect(
       screen.getByText("No downstream callers to graph."),
     ).toBeInTheDocument();
   });
 
-  it("does NOT render an svg when empty", () => {
-    renderGraph(SYMBOLS_NO_CALLERS);
+  it("does NOT render an svg when there are no symbols", () => {
+    renderGraph(NO_SYMBOLS);
     const svg = document.querySelector("svg");
     expect(svg).toBeNull();
+  });
+});
+
+describe("BlastGraph — symbols present with no callers", () => {
+  it("renders an svg when symbols exist even with no callers", () => {
+    renderGraph(SYMBOLS_NO_CALLERS);
+    const svg = document.querySelector("svg[aria-label]");
+    expect(svg).not.toBeNull();
+  });
+
+  it("renders the symbol name in the graph when there are no callers", () => {
+    renderGraph(SYMBOLS_NO_CALLERS);
+    // The graph renders the raw name (not displayName() with parens)
+    expect(screen.getByText("checkRateLimit")).toBeInTheDocument();
   });
 });

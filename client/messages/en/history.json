@@ -1,0 +1,12 @@
+{
+  "title": "Prior PRs touching these files",
+  "count": "{count}",
+  "toggle": {
+    "aria": "Toggle prior PRs"
+  },
+  "loading": "Loading prior PRs…",
+  "empty": "No prior merged PRs touched these files.",
+  "mergedAt": "merged {date}",
+  "note": "Touched {count} of these files",
+  "openOnGithub": "Open PR #{number} on GitHub"
+}

@@ -35,8 +35,18 @@ export const MAX_CALLERS_PER_SYMBOL = 20;
  *
  * v2 (T3): graph + decl_file resolution + file_rank + repo-map landed, so every
  * T2 `partial` index must be rebuilt to gain the rank-driven data.
+ *
+ * v3: monorepo-aware import edges (workspace/alias resolution) + type references
+ * (`type_identifier` pass in parseReferences). Every indexed repo must be
+ * Refreshed/resynced to rebuild file_edges with cross-package resolution and
+ * to pick up the new type-ref rows in `references`.
+ *
+ * v4: parseSymbols back-patches the `exported` flag for `export default <ident>`
+ * (the `const X = …; export default X;` form). `symbols.exported` is written at
+ * index time and gates both caller-resolution paths, so a reindex is required
+ * for default-exported symbols to resolve their callers.
  */
-export const INDEXER_VERSION = 2;
+export const INDEXER_VERSION = 4;
 
 // --- [T2] Full-index limits (documented now, enforced in the pipeline) ------
 export const MAX_INDEXED_FILES = 5000;

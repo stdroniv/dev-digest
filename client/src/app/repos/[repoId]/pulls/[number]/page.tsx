@@ -81,6 +81,8 @@ export default function PRDetailPage() {
 
   // Reviews come newest-first; each is its own run (grouped into accordions).
   const runs = reviews ?? [];
+  // Newest completed review with a verdict — used to surface the score on the Overview tab.
+  const latestReview = (reviews ?? []).find((r) => r.kind === "review" && r.verdict != null) ?? null;
   const allFindings: FindingRecord[] = React.useMemo(
     () => runs.flatMap((r) => r.findings),
     [reviews],
@@ -146,7 +148,7 @@ export default function PRDetailPage() {
       />
 
       <div style={{ padding: "24px 32px 44px", display: "flex", flexDirection: "column", gap: 24, maxWidth: 1080, margin: "0 auto" }}>
-        {tab === "overview" && <OverviewTab prBody={pr.body} prId={prId} repoFullName={repoFullName} />}
+        {tab === "overview" && <OverviewTab prBody={pr.body} prId={prId} repoFullName={repoFullName} latestReview={latestReview} />}
 
         {tab === "findings" && (
           <FindingsTab

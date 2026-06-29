@@ -299,3 +299,95 @@ describe('shapeBlastResponse — degraded propagation', () => {
     expect(result.degraded).toBe(false);
   });
 });
+
+// ---------------------------------------------------------------------------
+// Resolution field (Tier 4)
+// ---------------------------------------------------------------------------
+
+describe('shapeBlastResponse — resolution field', () => {
+  it('passes through resolution.limited = true from BlastResult', () => {
+    const blast = makeBlastResult({
+      resolution: { limited: true, reason: 'sparse_cross_file' },
+    });
+    const result = shapeBlastResponse(blast, BASE_INDEX_STATE);
+    expect(result.resolution.limited).toBe(true);
+    expect(result.resolution.reason).toBe('sparse_cross_file');
+  });
+
+  it('defaults to { limited: false } when result.resolution is absent', () => {
+    // makeBlastResult does not set resolution — exercises the ?? fallback.
+    const result = shapeBlastResponse(makeBlastResult(), BASE_INDEX_STATE);
+    expect(result.resolution.limited).toBe(false);
+    expect(result.resolution.reason).toBeUndefined();
+  });
+
+  it('passes through resolution.limited = false when explicitly set', () => {
+    const blast = makeBlastResult({ resolution: { limited: false } });
+    const result = shapeBlastResponse(blast, BASE_INDEX_STATE);
+    expect(result.resolution.limited).toBe(false);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Self-facts — route handler with 0 callers surfaces its own endpoints/crons
+// ---------------------------------------------------------------------------
+
+describe('shapeBlastResponse — self-facts (route handler, 0 callers)', () => {
+  it('attributes the changed file\'s own endpoint and cron facts when there are no callers', () => {
+    const blast: BlastResult = {
+      changedSymbols: [
+        { file: 'app/api/cron/foo/route.ts', name: 'GET', kind: 'function' },
+      ],
+      callers: [],
+      impactedEndpoints: ['GET /api/cron/foo'],
+      factsByFile: {
+        'app/api/cron/foo/route.ts': {
+          endpoints: ['GET /api/cron/foo'],
+          crons: ['cron:/api/cron/foo'],
+        },
+      },
+    };
+    const result = shapeBlastResponse(blast, BASE_INDEX_STATE);
+
+    const getGroup = result.symbols.find((s) => s.name === 'GET');
+    expect(getGroup).toBeDefined();
+    expect(getGroup!.endpoints).toContain('GET /api/cron/foo');
+    expect(getGroup!.crons).toContain('cron:/api/cron/foo');
+    expect(getGroup!.callers).toHaveLength(0);
+  });
+
+  it('accumulates totals.endpoints and totals.crons from self-facts with 0 callers', () => {
+    const blast: BlastResult = {
+      changedSymbols: [
+        { file: 'app/api/cron/foo/route.ts', name: 'GET', kind: 'function' },
+      ],
+      callers: [],
+      impactedEndpoints: ['GET /api/cron/foo'],
+      factsByFile: {
+        'app/api/cron/foo/route.ts': {
+          endpoints: ['GET /api/cron/foo'],
+          crons: ['cron:/api/cron/foo'],
+        },
+      },
+    };
+    const result = shapeBlastResponse(blast, BASE_INDEX_STATE);
+    expect(result.totals.endpoints).toBe(1);
+    expect(result.totals.crons).toBe(1);
+    expect(result.totals.callers).toBe(0);
+  });
+
+  it('does NOT affect existing caller-based attribution (no regression)', () => {
+    // Existing fixtures: facts only on caller files (api.ts/worker.ts/boot.ts),
+    // not on the changed files (svc.ts/utils.ts). The sym.file lookup for
+    // 'src/svc.ts' finds no entry in factsByFile → no self-fact leakage.
+    const result = shapeBlastResponse(makeBlastResult(), BASE_INDEX_STATE);
+    const doWork = result.symbols.find((s) => s.name === 'doWork')!;
+    // doWork is in src/svc.ts — no entry in factsByFile for that file.
+    // Its facts come only from callers (api.ts + worker.ts).
+    expect(doWork.endpoints).toContain('GET /api/data');
+    expect(doWork.crons).toContain('*/5 * * * * workerJob');
+    // Verify totals still correct.
+    expect(result.totals.endpoints).toBe(2);
+    expect(result.totals.crons).toBe(1);
+  });
+});

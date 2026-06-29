@@ -94,6 +94,13 @@ export interface BlastResponse {
   /** True when the underlying facade ran in degraded / ripgrep mode. */
   degraded: boolean;
   reason?: BlastDegradedReason;
+  /**
+   * Honest "limited cross-file resolution" signal — mirrored from
+   * server/src/modules/blast/types.ts. `limited: true` when a large share of
+   * references couldn't be resolved to a decl_file (sparse cross-file edges).
+   * Rendered as a DISTINCT informational note, NOT the degraded/partial badge.
+   */
+  resolution: { limited: boolean; reason?: string };
 }
 
 /** Response from GET /pulls/:id/blast/summary. */
@@ -101,6 +108,26 @@ export interface BlastSummaryResponse {
   summary: string | null;
   cached: boolean;
   skipped?: "no_key" | "no_data";
+}
+
+// ---------------------------------------------------------------------------
+// PR History (GET /pulls/:id/prior-prs) — mirrors vendored brief.ts PrHistory
+
+/** One prior merged PR that touched at least one of the current PR's files. */
+export interface PrHistoryItem {
+  pr_number: number;
+  title: string;
+  merged_at: string;
+  author: string;
+  /** Sorted array of files shared between the prior PR and the current PR. */
+  files_overlap: string[];
+  /** Deterministic note: "Touched N of these files". */
+  notes: string;
+}
+
+/** Response from GET /pulls/:id/prior-prs. */
+export interface PrHistory {
+  history: PrHistoryItem[];
 }
 
 // ---------------------------------------------------------------------------

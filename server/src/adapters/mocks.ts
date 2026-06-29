@@ -264,6 +264,13 @@ export interface MockGitOptions {
   syncedHead?: string;
   /** Override `defaultBranch()` so tests can simulate a non-`main` default (e.g. `master`). */
   defaultBranch?: string;
+  /**
+   * Per-path commit fixtures for `log(repo, path)`.
+   * Keys are repo-relative file paths; the value is the commit list to return.
+   * Lookups use `path ?? ''` so a path-less call (global log) uses the `''` key.
+   * Falls back to the default single-commit fixture when the key is absent.
+   */
+  logByPath?: Record<string, GitCommit[]>;
 }
 
 export class MockGitClient implements GitClient {
@@ -305,7 +312,10 @@ export class MockGitClient implements GitClient {
   async blame(): Promise<BlameLine[]> {
     return [{ line: 1, sha: 'a1b2c3d4', author: 'marisa.koch', date: '2026-06-01', summary: 'init' }];
   }
-  async log(): Promise<GitCommit[]> {
+  async log(_repo: RepoRef, path?: string): Promise<GitCommit[]> {
+    if (this.opts.logByPath) {
+      return this.opts.logByPath[path ?? ''] ?? [{ sha: 'a1b2c3d4', message: 'init', author: 'marisa.koch', date: '2026-06-01' }];
+    }
     return [{ sha: 'a1b2c3d4', message: 'init', author: 'marisa.koch', date: '2026-06-01' }];
   }
   async readFile(_repo: RepoRef, path: string): Promise<string> {

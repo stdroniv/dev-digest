@@ -38,8 +38,9 @@ export function shapeBlastResponse(result: BlastResult, state: IndexState): Blas
       .sort((a, b) => b.rank - a.rank)
       .slice(0, PER_SYMBOL_CAP);
 
-    // Attribute endpoints/crons to this symbol via factsByFile of its callers.
-    const callerFiles = [...new Set(callers.map((c) => c.file))];
+    // Attribute endpoints/crons to this symbol via factsByFile of its callers
+    // AND of the symbol's own file (handles route handlers with 0 callers).
+    const callerFiles = [...new Set([...callers.map((c) => c.file), sym.file])];
     const endpoints: string[] = [];
     const crons: string[] = [];
     if (result.factsByFile) {
@@ -102,6 +103,7 @@ export function shapeBlastResponse(result: BlastResult, state: IndexState): Blas
     },
     degraded: result.degraded ?? false,
     reason: result.reason,
+    resolution: result.resolution ?? { limited: false },
   };
 }
 

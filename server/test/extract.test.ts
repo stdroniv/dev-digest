@@ -100,3 +100,54 @@ jobs.register('poll_repo', handler);
     expect(crons).toContain('job:poll_repo');
   });
 });
+
+describe('extractEndpoints / extractCrons — Next.js App Router', () => {
+  it('emits GET and POST endpoints for a cron route file', () => {
+    const src = `
+export async function GET(req: Request) { return new Response("ok"); }
+export async function POST(req: Request) { return new Response("ok"); }
+`;
+    const relPath = 'apps/web/app/api/cron/foo/route.ts';
+    const eps = extractEndpoints(src, relPath);
+    expect(eps).toContain('GET /api/cron/foo');
+    expect(eps).toContain('POST /api/cron/foo');
+  });
+
+  it('emits cron fact for a route file under /api/cron/', () => {
+    const src = `
+export async function GET(req: Request) { return new Response("ok"); }
+`;
+    const relPath = 'apps/web/app/api/cron/foo/route.ts';
+    const crons = extractCrons(src, relPath);
+    expect(crons).toContain('cron:/api/cron/foo');
+  });
+
+  it('handles route groups and dynamic segments', () => {
+    const src = `export async function DELETE() {}`;
+    const relPath = 'app/api/(admin)/users/[id]/route.ts';
+    const eps = extractEndpoints(src, relPath);
+    expect(eps).toContain('DELETE /api/users/:id');
+    const crons = extractCrons(src, relPath);
+    expect(crons.some((c) => c.startsWith('cron:'))).toBe(false);
+  });
+
+  it('handles catch-all dynamic segments', () => {
+    const src = `export const GET = () => {};`;
+    const relPath = 'app/api/webhooks/[...slug]/route.ts';
+    const eps = extractEndpoints(src, relPath);
+    expect(eps).toContain('GET /api/webhooks/:slug');
+  });
+
+  it('back-compat: without relPath the Express fixture still returns GET /users', () => {
+    const src = `app.get('/users', handler);`;
+    const eps = extractEndpoints(src);
+    expect(eps).toContain('GET /users');
+  });
+
+  it('back-compat: a route.ts content WITHOUT relPath yields no verb-derived endpoints', () => {
+    const src = `export async function GET(req: Request) { return new Response("ok"); }`;
+    const eps = extractEndpoints(src);
+    // No relPath → no Next.js route detection → no verb-derived endpoint
+    expect(eps.some((e) => e.startsWith('GET '))).toBe(false);
+  });
+});

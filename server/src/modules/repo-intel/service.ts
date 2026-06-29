@@ -28,7 +28,7 @@ import {
 } from '../../adapters/astgrep/index.js';
 import { readFile } from 'node:fs/promises';
 import { extname, join } from 'node:path';
-import { RepoIntelRepository, type FullSymbolRow } from './repository.js';
+import { RepoIntelRepository, type FullSymbolRow, type ResolvedCallerRow } from './repository.js';
 import type {
   BlastCallerRow,
   BlastChangedSymbol,
@@ -114,6 +114,67 @@ export function capCallersPerSymbol(
     const n = counts.get(c.viaSymbol) ?? 0;
     if (n >= cap) continue;
     counts.set(c.viaSymbol, n + 1);
+    result.push(c);
+  }
+  return result;
+}
+
+// ---------------------------------------------------------------------------
+// Tier 4 — resolution-ratio signal
+// ---------------------------------------------------------------------------
+
+/**
+ * Minimum reference count before the limited-resolution signal fires.
+ * Avoids flagging tiny repos where a low ratio is statistically meaningless.
+ */
+const MIN_REFS_FOR_RESOLUTION_SIGNAL = 50;
+
+/**
+ * Threshold below which the cross-file resolution ratio is considered
+ * "limited" — fewer than 30 % of references resolved to a decl_file.
+ */
+const LIMITED_RESOLUTION_RATIO = 0.3;
+
+/**
+ * Compute the honest "limited cross-file resolution" flag from the ratio of
+ * resolved references to total references.
+ *
+ * Returns `{ limited: false }` when the total is below the floor (tiny repo)
+ * or when the resolved ratio is healthy. Returns `{ limited: true, reason:
+ * 'sparse_cross_file' }` when the large share of references stayed NULL
+ * (typically because cross-package / aliased imports couldn't be resolved).
+ *
+ * Exported for hermetic unit testing.
+ */
+export function computeResolution(
+  total: number,
+  resolved: number,
+): { limited: boolean; reason?: string } {
+  if (total < MIN_REFS_FOR_RESOLUTION_SIGNAL) return { limited: false };
+  if (resolved / total >= LIMITED_RESOLUTION_RATIO) return { limited: false };
+  return { limited: true, reason: 'sparse_cross_file' };
+}
+
+/**
+ * Merge edge-resolved callers with name-unique fallback callers.
+ *
+ * Concatenates `resolved` then `fallback`, deduplicating by key
+ * `${file}|${symbol}|${viaSymbol}` preserving FIRST occurrence (so an
+ * edge-resolved caller always wins over a same-key fallback duplicate).
+ * Sorting and capping stay the caller's job.
+ *
+ * Exported for hermetic unit testing (no DB, no Docker).
+ */
+export function mergeFallbackCallers(
+  resolved: BlastCallerRow[],
+  fallback: BlastCallerRow[],
+): BlastCallerRow[] {
+  const seen = new Set<string>();
+  const result: BlastCallerRow[] = [];
+  for (const c of [...resolved, ...fallback]) {
+    const key = `${c.file}|${c.symbol}|${c.viaSymbol}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
     result.push(c);
   }
   return result;
@@ -311,7 +372,7 @@ export class RepoIntelService implements RepoIntel {
       for (const file of callerFiles) {
         const content = await readClone(repo.clonePath, file);
         if (!content) continue;
-        for (const e of extractEndpoints(content)) endpoints.add(e);
+        for (const e of extractEndpoints(content, file)) endpoints.add(e);
       }
     }
 
@@ -359,9 +420,39 @@ export class RepoIntelService implements RepoIntel {
       return { changedSymbols, callers: [], impactedEndpoints: [], degraded: false };
     }
 
+    const changedSet = new Set(changedFiles);
+
     // Resolved cross-file callers.
     const callerRows = await this.repo.getResolvedCallers(repoId, changedFiles, [...nameSet]);
-    const callerFiles = [...new Set(callerRows.map((c) => c.fromPath))];
+
+    // --- Tier 1: name-unique fallback for symbols with no resolved callers ---
+    // For symbols that got zero edge-resolved callers, check whether the symbol
+    // is globally unique (exported by EXACTLY ONE file repo-wide, which must be
+    // a changed file). If so, attribute bare-name references from other files as
+    // callers (precision: same-named locals in the caller file are excluded).
+    const resolvedNames = new Set(callerRows.map((c) => c.toSymbol));
+    const missingNames = [...nameSet].filter((n) => !resolvedNames.has(n));
+    let fallbackRefs: ResolvedCallerRow[] = [];
+    if (missingNames.length > 0) {
+      const uniq = await this.repo.getUniqueExportFiles(repoId, missingNames);
+      // Only attribute names whose single export file is one of the changed files.
+      const safeNames = uniq.filter((u) => changedSet.has(u.path)).map((u) => u.name);
+      if (safeNames.length > 0) {
+        const allRefs = await this.repo.getReferencesByNames(repoId, safeNames);
+        // Exclude self-file references (changedSet ∋ fromPath).
+        fallbackRefs = allRefs.filter((r) => !changedSet.has(r.fromPath));
+      }
+    }
+
+    // Build the union of caller files so symsByFile covers both resolved +
+    // fallback files in a single getSymbolRows call (needed for the enclosing-
+    // symbol lookup AND the same-named-local precision guard below).
+    const callerFiles = [
+      ...new Set([
+        ...callerRows.map((c) => c.fromPath),
+        ...fallbackRefs.map((r) => r.fromPath),
+      ]),
+    ];
 
     // Enclosing caller symbol from the callers' persistent symbol rows.
     const callerSymRows = await this.repo.getSymbolRows(repoId, callerFiles);
@@ -372,7 +463,9 @@ export class RepoIntelService implements RepoIntel {
       else symsByFile.set(s.path, [s]);
     }
 
-    const callers: BlastCallerRow[] = [];
+    // Build resolved callers (edge-based, no precision guard needed beyond
+    // the decl_file uniqueness already enforced by resolveReferences).
+    const resolvedCallers: BlastCallerRow[] = [];
     const seenCaller = new Set<string>();
     for (const c of callerRows) {
       const enclosing =
@@ -382,7 +475,7 @@ export class RepoIntelService implements RepoIntel {
       const key = `${c.fromPath}|${enclosing}|${c.toSymbol}`;
       if (seenCaller.has(key)) continue;
       seenCaller.add(key);
-      callers.push({
+      resolvedCallers.push({
         file: c.fromPath,
         symbol: enclosing,
         viaSymbol: c.toSymbol,
@@ -390,11 +483,37 @@ export class RepoIntelService implements RepoIntel {
         rank: c.rank,
       });
     }
+
+    // Build fallback callers with the same-named-local precision guard:
+    // skip refs from files that locally declare a symbol of the same name.
+    const fallbackCallers: BlastCallerRow[] = [];
+    const seenFallback = new Set<string>();
+    for (const r of fallbackRefs) {
+      // Precision guard: skip if the caller file locally declares the same name.
+      if (symsByFile.get(r.fromPath)?.some((s) => s.name === r.toSymbol)) continue;
+      const enclosing =
+        enclosingFromRows(symsByFile.get(r.fromPath) ?? [], r.line) ??
+        r.fromPath.split('/').pop() ??
+        r.fromPath;
+      const key = `${r.fromPath}|${enclosing}|${r.toSymbol}`;
+      if (seenFallback.has(key)) continue;
+      seenFallback.add(key);
+      fallbackCallers.push({
+        file: r.fromPath,
+        symbol: enclosing,
+        viaSymbol: r.toSymbol,
+        line: r.line,
+        rank: r.rank,
+      });
+    }
+
+    // Merge: edge-resolved callers take precedence over fallback duplicates.
+    const callers = mergeFallbackCallers(resolvedCallers, fallbackCallers);
     callers.sort((a, b) => b.rank - a.rank);
 
-    // Precomputed facts per caller file (endpoints + crons), so consumers can
-    // attribute them to the changed symbol whose callers live in that file.
-    const facts = await this.repo.getFileFacts(repoId, callerFiles);
+    // Precomputed facts per caller file AND per changed file (so a route handler
+    // that is its own endpoint with 0 callers still surfaces its facts).
+    const facts = await this.repo.getFileFacts(repoId, [...new Set([...callerFiles, ...changedFiles])]);
     const endpoints = new Set<string>();
     const factsByFile: Record<string, { endpoints: string[]; crons: string[] }> = {};
     for (const f of facts) {
@@ -402,12 +521,18 @@ export class RepoIntelService implements RepoIntel {
       for (const e of f.endpoints) endpoints.add(e);
     }
 
+    // Tier 4 — compute the honest resolution signal at read time.
+    const { total: refTotal, resolved: refResolved } =
+      await this.repo.getReferenceResolutionStats(repoId);
+    const resolution = computeResolution(refTotal, refResolved);
+
     return {
       changedSymbols,
       callers: capCallersPerSymbol(callers),
       impactedEndpoints: [...endpoints],
       factsByFile,
       degraded: false,
+      resolution,
     };
   }
 

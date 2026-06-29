@@ -50,9 +50,7 @@ export function BlastGraph({ symbols, repoFullName, indexedSha }: BlastGraphProp
   const crons = Array.from(cronSet);
   const rightNodes = [...endpoints.map((ep) => ({ label: ep, kind: "endpoint" as const })), ...crons.map((cr) => ({ label: cr, kind: "cron" as const }))];
 
-  const hasContent = callers.length > 0 || rightNodes.length > 0;
-
-  if (!hasContent) {
+  if (symbols.length === 0) {
     return (
       <div
         style={{

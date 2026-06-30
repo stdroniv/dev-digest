@@ -20,10 +20,21 @@ import { parseUnifiedDiff } from './diff-parser.js';
 const RESYNC_FETCH_DEPTH = 50;
 
 /**
+ * Boundary for the lazy deepen in `ensureHistory`. Repos are cloned shallow
+ * (CLONE_DEPTH=1) for fast imports; prior-PR history needs real depth. On the
+ * first `log()` call for a shallow clone we fetch commits since this date —
+ * bounded so we don't pull the full history of huge monorepos.
+ */
+const HISTORY_DEEPEN_SINCE = '2 years ago';
+
+/**
  * GitClient over simple-git. Repos clone to
  * `<cloneDir>/<owner>/<repo>`. We NEVER execute repo code — only git ops.
  */
 export class SimpleGitClient implements GitClient {
+  /** Clones whose history has already been deepened this process — keyed by absolute path. */
+  private deepened = new Set<string>();
+
   constructor(private cloneDir: string) {
     // Force non-interactive auth so an unauthenticated/private clone fails in
     // ~1s with a clear error instead of hanging on a credential prompt until the
@@ -146,7 +157,29 @@ export class SimpleGitClient implements GitClient {
     return parseBlamePorcelain(raw);
   }
 
+  /**
+   * Repos are cloned shallow (CLONE_DEPTH=1) to keep imports fast, but the
+   * "Prior PRs" history feature needs real depth. The first time we read the
+   * log for a shallow clone, deepen it once to HISTORY_DEEPEN_SINCE (cached per
+   * clone for this process — a --shallow-since clone is STILL shallow, so the
+   * cache is what stops every call re-fetching). Requires network for the
+   * one-time deepen; HistoryService already degrades to an empty result on any
+   * git error, so offline/auth failure is non-fatal (and not cached, so a later
+   * online request can retry).
+   */
+  private async ensureHistory(repo: RepoRef): Promise<void> {
+    const dest = this.clonePathFor(repo);
+    if (this.deepened.has(dest)) return;
+    const g = simpleGit(dest);
+    const shallow = (await g.raw(['rev-parse', '--is-shallow-repository'])).trim();
+    if (shallow === 'true') {
+      await g.raw(['fetch', `--shallow-since=${HISTORY_DEEPEN_SINCE}`]);
+    }
+    this.deepened.add(dest);
+  }
+
   async log(repo: RepoRef, path?: string): Promise<GitCommit[]> {
+    await this.ensureHistory(repo);
     const log = await this.git(repo).log(path ? { file: path } : undefined);
     return log.all.map((c) => ({
       sha: c.hash,

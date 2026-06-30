@@ -1,7 +1,9 @@
 import { describe, it, expect } from 'vitest';
 import type { ReviewDto, ReviewDtoFinding } from '@devdigest/api/modules/reviews/helpers.js';
+import type { BlastResponse } from '@devdigest/api/modules/blast/types.js';
 import {
   projectFinding,
+  projectBlast,
   summarize,
   sortFindings,
   selectFindings,
@@ -69,6 +71,112 @@ describe('projectFinding', () => {
     expect(out.rationale).toBe('because');
     expect(out.suggestion).toBeNull();
     expect(out.confidence).toBe(0.9);
+  });
+});
+
+function blastResponse(over: Partial<BlastResponse> = {}): BlastResponse {
+  return {
+    symbols: over.symbols ?? [
+      {
+        file: 'src/payments.ts',
+        name: 'processPayment',
+        kind: 'function',
+        callers: [
+          { file: 'src/api/checkout.ts', symbol: 'handleCheckout', line: 42, rank: 9 },
+          { file: 'src/api/refunds.ts', symbol: 'handleRefund', line: 18, rank: 7 },
+        ],
+        endpoints: ['POST /api/checkout', 'POST /api/refunds'],
+        crons: [],
+      },
+      {
+        file: 'src/email.ts',
+        name: 'sendReceipt',
+        kind: 'function',
+        callers: [{ file: 'src/jobs/nightly.ts', symbol: 'runNightly', line: 3, rank: 4 }],
+        endpoints: [],
+        crons: ['0 2 * * *'],
+      },
+    ],
+    totals: over.totals ?? { symbols: 2, callers: 3, endpoints: 2, crons: 1 },
+    impactedEndpoints: over.impactedEndpoints ?? ['POST /api/checkout', 'POST /api/refunds'],
+    impactedCrons: over.impactedCrons ?? ['0 2 * * *'],
+    index: over.index ?? {
+      status: 'full',
+      degraded: false,
+      lastIndexedSha: 'def789abc',
+    },
+    degraded: over.degraded ?? false,
+    reason: over.reason,
+    resolution: over.resolution ?? { limited: false },
+  };
+}
+
+describe('projectBlast', () => {
+  it('snake-cases the wire shape and passes server totals through verbatim when unfiltered', () => {
+    const out = projectBlast('acme/payments-api#482', blastResponse());
+    expect(out.pr).toBe('acme/payments-api#482');
+    expect(out.symbol).toBeNull();
+    expect(out.symbols).toHaveLength(2);
+    expect(out.symbols[0]!.callers[0]).toEqual({
+      file: 'src/api/checkout.ts',
+      symbol: 'handleCheckout',
+      line: 42,
+      rank: 9,
+    });
+    // Verbatim server counts (not recomputed).
+    expect(out.totals).toEqual({ symbols: 2, callers: 3, endpoints: 2, crons: 1 });
+    expect(out.impacted_endpoints).toEqual(['POST /api/checkout', 'POST /api/refunds']);
+    expect(out.impacted_crons).toEqual(['0 2 * * *']);
+    expect(out.index.last_indexed_sha).toBe('def789abc');
+  });
+
+  it('normalizes undefined optionals (reason, resolution.reason, index.reason) to null', () => {
+    const out = projectBlast('a/b#1', blastResponse());
+    expect(out.reason).toBeNull();
+    expect(out.index.reason).toBeNull();
+    expect(out.resolution.reason).toBeNull();
+  });
+
+  it('surfaces degraded / partial-index / resolution signals honestly', () => {
+    const out = projectBlast(
+      'a/b#1',
+      blastResponse({
+        degraded: true,
+        reason: 'no_data',
+        index: { status: 'partial', degraded: true, reason: 'index_partial', lastIndexedSha: null },
+        resolution: { limited: true, reason: 'aliases unresolved' },
+      }),
+    );
+    expect(out.degraded).toBe(true);
+    expect(out.reason).toBe('no_data');
+    expect(out.index).toEqual({
+      status: 'partial',
+      degraded: true,
+      reason: 'index_partial',
+      last_indexed_sha: null,
+    });
+    expect(out.resolution).toEqual({ limited: true, reason: 'aliases unresolved' });
+  });
+
+  it('filters to one changed symbol and recomputes totals + impacted unions', () => {
+    const out = projectBlast('a/b#1', blastResponse(), 'sendReceipt');
+    expect(out.symbol).toBe('sendReceipt');
+    expect(out.symbols).toHaveLength(1);
+    expect(out.symbols[0]!.name).toBe('sendReceipt');
+    expect(out.totals).toEqual({ symbols: 1, callers: 1, endpoints: 0, crons: 1 });
+    expect(out.impacted_endpoints).toEqual([]);
+    expect(out.impacted_crons).toEqual(['0 2 * * *']);
+    // Index state is unaffected by the filter.
+    expect(out.index.status).toBe('full');
+  });
+
+  it('yields an empty result (not an error) when the symbol filter matches nothing', () => {
+    const out = projectBlast('a/b#1', blastResponse(), 'doesNotExist');
+    expect(out.symbol).toBe('doesNotExist');
+    expect(out.symbols).toEqual([]);
+    expect(out.totals).toEqual({ symbols: 0, callers: 0, endpoints: 0, crons: 0 });
+    expect(out.impacted_endpoints).toEqual([]);
+    expect(out.impacted_crons).toEqual([]);
   });
 });
 

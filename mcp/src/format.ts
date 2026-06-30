@@ -1,8 +1,9 @@
 import { rollupSeverities } from '@devdigest/api/modules/pulls/status.js';
 import type { ReviewDto, ReviewDtoFinding } from '@devdigest/api/modules/reviews/helpers.js';
+import type { BlastResponse } from '@devdigest/api/modules/blast/types.js';
 import type { Severity } from '@devdigest/shared';
 import { McpToolError } from './errors.js';
-import type { FindingOut, SeveritySummary } from './schemas.js';
+import type { FindingOut, SeveritySummary, BlastRadiusOut } from './schemas.js';
 
 /** Cap on findings inlined by devdigest_review_pr (token efficiency). */
 export const REVIEW_PR_FINDINGS_CAP = 50;
@@ -30,6 +31,82 @@ export function projectFinding(f: ReviewDtoFinding, detailed: boolean): FindingO
     rationale: f.rationale,
     suggestion: f.suggestion ?? null,
     confidence: f.confidence,
+  };
+}
+
+/**
+ * Project a server `BlastResponse` into the MCP wire shape (snake_cased,
+ * `undefined`→`null`).
+ *
+ * When `symbolFilter` is set, keep only the changed symbol whose name matches
+ * exactly and recompute `totals` + the impacted unions over the surviving groups
+ * so the numbers stay internally consistent. A non-matching filter yields an
+ * empty `symbols` list with zeroed totals — graceful, not an error ("no such
+ * changed symbol / no callers" is a valid answer). When unfiltered, the server's
+ * own faithful counts pass through verbatim (`totals.callers` is the pre-cap
+ * facade count, not the sum of the capped per-symbol caller lists). `index`,
+ * `degraded`, and `resolution` always reflect the real index state.
+ */
+export function projectBlast(
+  prRef: string,
+  response: BlastResponse,
+  symbolFilter?: string,
+): BlastRadiusOut {
+  const groups = symbolFilter
+    ? response.symbols.filter((s) => s.name === symbolFilter)
+    : response.symbols;
+
+  const symbols = groups.map((s) => ({
+    file: s.file,
+    name: s.name,
+    kind: s.kind,
+    callers: s.callers.map((c) => ({
+      file: c.file,
+      symbol: c.symbol,
+      line: c.line,
+      rank: c.rank,
+    })),
+    endpoints: s.endpoints,
+    crons: s.crons,
+  }));
+
+  let totals: BlastRadiusOut['totals'];
+  let impactedEndpoints: string[];
+  let impactedCrons: string[];
+  if (symbolFilter) {
+    impactedEndpoints = [...new Set(groups.flatMap((s) => s.endpoints))];
+    impactedCrons = [...new Set(groups.flatMap((s) => s.crons))];
+    totals = {
+      symbols: groups.length,
+      callers: groups.reduce((n, s) => n + s.callers.length, 0),
+      endpoints: impactedEndpoints.length,
+      crons: impactedCrons.length,
+    };
+  } else {
+    impactedEndpoints = response.impactedEndpoints;
+    impactedCrons = response.impactedCrons;
+    totals = response.totals;
+  }
+
+  return {
+    pr: prRef,
+    symbol: symbolFilter ?? null,
+    symbols,
+    totals,
+    impacted_endpoints: impactedEndpoints,
+    impacted_crons: impactedCrons,
+    index: {
+      status: response.index.status,
+      degraded: response.index.degraded,
+      reason: response.index.reason ?? null,
+      last_indexed_sha: response.index.lastIndexedSha,
+    },
+    degraded: response.degraded,
+    reason: response.reason ?? null,
+    resolution: {
+      limited: response.resolution.limited,
+      reason: response.resolution.reason ?? null,
+    },
   };
 }
 

@@ -103,10 +103,11 @@ describe('input defaults', () => {
     });
   });
 
-  it('get_blast_radius applies defaults', () => {
-    expect(S.GetBlastRadiusInput.parse({ pr: 'a/b#1' })).toMatchObject({
-      direction: 'both',
-      max_depth: 2,
+  it('get_blast_radius accepts a bare pr and an optional symbol', () => {
+    expect(S.GetBlastRadiusInput.parse({ pr: 'a/b#1' })).toEqual({ pr: 'a/b#1' });
+    expect(S.GetBlastRadiusInput.parse({ pr: 'a/b#1', symbol: 'foo' })).toEqual({
+      pr: 'a/b#1',
+      symbol: 'foo',
     });
   });
 });

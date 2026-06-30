@@ -67,10 +67,14 @@ describe("BlastGraph — with callers", () => {
     );
   });
 
-  it("renders a caller node without a link when indexedSha is null", () => {
+  it("falls back to a HEAD blob link when indexedSha is null", () => {
     renderGraph(SYMBOLS_WITH_CALLERS, null);
+    // Caller stays clickable via a HEAD-pinned blob URL (line may drift).
     const link = document.querySelector("a[href]");
-    expect(link).toBeNull();
+    expect(link).not.toBeNull();
+    expect(link!.getAttribute("href")).toBe(
+      `https://github.com/${REPO}/blob/HEAD/src/routes/auth.ts#L42`,
+    );
   });
 });
 

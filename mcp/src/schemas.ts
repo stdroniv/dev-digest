@@ -213,34 +213,63 @@ export const getBlastRadiusInput = {
   symbol: z
     .string()
     .optional()
-    .describe('Restrict to one changed symbol (function/class) by name; omit to analyze all.'),
-  direction: z
-    .enum(['callers', 'callees', 'both'])
-    .default('both')
-    .describe('Traverse who calls the symbol, what it calls, or both.'),
-  max_depth: z
-    .number()
-    .int()
-    .min(1)
-    .max(5)
-    .default(2)
-    .describe('Graph traversal depth.'),
+    .describe(
+      'Restrict to one CHANGED symbol (function/class) by exact name; omit to return all ' +
+        'changed symbols. Analysis is callers-only and single-hop — there is no callee or ' +
+        'multi-depth traversal.',
+    ),
 } satisfies z.ZodRawShape;
 export const GetBlastRadiusInput = z.object(getBlastRadiusInput);
 export type GetBlastRadiusInput = z.infer<typeof GetBlastRadiusInput>;
 
-export const ImpactedOut = z.object({
+/** One cross-file caller of a changed symbol. */
+export const BlastCallerOut = z.object({
   file: z.string(),
   symbol: z.string(),
-  relation: z.enum(['caller', 'callee']),
-  depth: z.number().int(),
+  line: z.number().int(),
+  rank: z.number(),
 });
-export type ImpactedOut = z.infer<typeof ImpactedOut>;
+export type BlastCallerOut = z.infer<typeof BlastCallerOut>;
+
+/** A changed symbol grouped with its callers + the endpoints/crons reachable
+ *  from those caller files. Callers are rank-desc, capped at 20 server-side. */
+export const BlastSymbolGroupOut = z.object({
+  file: z.string(),
+  name: z.string(),
+  kind: z.string(),
+  callers: z.array(BlastCallerOut),
+  endpoints: z.array(z.string()),
+  crons: z.array(z.string()),
+});
+export type BlastSymbolGroupOut = z.infer<typeof BlastSymbolGroupOut>;
+
+/** Index-state block — `status`/`reason` mirror repo-intel's
+ *  IndexStatus / DegradedReason (kept as a local enum + string so the wire
+ *  contract doesn't couple to the server's internal unions). */
+export const BlastIndexOut = z.object({
+  status: z.enum(['full', 'partial', 'degraded', 'failed']),
+  degraded: z.boolean(),
+  reason: z.string().nullable(),
+  last_indexed_sha: z.string().nullable(),
+});
+export type BlastIndexOut = z.infer<typeof BlastIndexOut>;
 
 export const getBlastRadiusOutput = {
-  status: z.enum(['ok', 'not_implemented']),
-  message: z.string(),
-  pr: z.string().nullable(),
+  pr: z.string(),
   symbol: z.string().nullable(),
-  impacted: z.array(ImpactedOut),
+  symbols: z.array(BlastSymbolGroupOut),
+  totals: z.object({
+    symbols: z.number().int(),
+    callers: z.number().int(),
+    endpoints: z.number().int(),
+    crons: z.number().int(),
+  }),
+  impacted_endpoints: z.array(z.string()),
+  impacted_crons: z.array(z.string()),
+  index: BlastIndexOut,
+  degraded: z.boolean(),
+  reason: z.string().nullable(),
+  resolution: z.object({ limited: z.boolean(), reason: z.string().nullable() }),
 } satisfies z.ZodRawShape;
+export const GetBlastRadiusOutput = z.object(getBlastRadiusOutput);
+export type BlastRadiusOut = z.infer<typeof GetBlastRadiusOutput>;

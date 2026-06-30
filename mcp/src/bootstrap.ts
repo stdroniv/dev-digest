@@ -4,6 +4,7 @@ import { Container, type ContainerOverrides } from '@devdigest/api/platform/cont
 import { AgentsService } from '@devdigest/api/modules/agents/service.js';
 import { ReviewService } from '@devdigest/api/modules/reviews/service.js';
 import { ConventionsService } from '@devdigest/api/modules/conventions/service.js';
+import { BlastService } from '@devdigest/api/modules/blast/service.js';
 import { stderrLogger, type Logger } from './logger.js';
 
 /**
@@ -22,6 +23,7 @@ export interface Services {
   agents: AgentsService;
   reviews: ReviewService;
   conventions: ConventionsService;
+  blast: BlastService;
 }
 
 export interface Bootstrap {
@@ -54,6 +56,7 @@ export function bootstrap(opts: BootstrapOptions = {}): Bootstrap {
     agents: new AgentsService(container),
     reviews: new ReviewService(container),
     conventions: new ConventionsService(container),
+    blast: new BlastService(container),
   };
 
   return {

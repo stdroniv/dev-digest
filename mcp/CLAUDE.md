@@ -51,8 +51,12 @@ integration only (Docker): `TESTCONTAINERS_RYUK_DISABLED=true node_modules/.bin/
   in-flight review owned by a concurrently-running API process.
 - **Test split by filename** (same as server): `*.it.test.ts` = DB-backed
   (testcontainers Postgres, Docker required); everything else is hermetic.
-- **`devdigest_get_blast_radius` is a stub** — contract is final but it returns
-  `status: "not_implemented"`; don't wire UI/clients to expect real output yet.
+- **`devdigest_get_blast_radius` reads the real blast feature** via
+  `services.blast.getBlast` (server `BlastService`) → `repoIntel` index, zero AI.
+  It is **callers-only and single-hop**: no callee traversal and no multi-depth
+  exist in `repo-intel`, so the tool exposes neither (the old speculative
+  `direction`/`max_depth` inputs were removed). The `index`/`degraded`/`resolution`
+  fields honestly report a partial index or unresolved references.
 
 ## Do not touch
 

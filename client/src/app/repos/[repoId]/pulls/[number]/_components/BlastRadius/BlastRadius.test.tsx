@@ -256,7 +256,7 @@ describe("BlastRadius — caller link URLs", () => {
     );
   });
 
-  it("renders plain text (no link) when indexedSha is null", async () => {
+  it("falls back to a HEAD blob link when indexedSha is null", async () => {
     const noSha = {
       ...BLAST_DATA,
       index: { ...BLAST_DATA.index, lastIndexedSha: null },
@@ -265,9 +265,13 @@ describe("BlastRadius — caller link URLs", () => {
     await waitFor(() =>
       expect(screen.getByText("src/routes/auth.ts:42")).toBeInTheDocument(),
     );
-    const el = screen.getByText("src/routes/auth.ts:42");
-    // Should be a span, not an anchor
-    expect(el.tagName.toLowerCase()).toBe("span");
+    // Still a working link (so the caller is clickable), pinned to HEAD since
+    // the index recorded no SHA. Line numbers may drift; clickability wins.
+    const link = screen.getByText("src/routes/auth.ts:42").closest("a");
+    expect(link).not.toBeNull();
+    expect(link!.getAttribute("href")).toBe(
+      `https://github.com/${REPO}/blob/HEAD/src/routes/auth.ts#L42`,
+    );
   });
 });
 

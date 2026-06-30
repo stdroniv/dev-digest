@@ -17,9 +17,10 @@ import { toJsonSchema, parseWithRepair } from './structured.js';
  * parse-with-repair loop live in ONE place instead of being duplicated.
  *
  * OpenRouter is OpenAI-compatible, so we drive it with the OpenAI SDK pointed at
- * its baseURL. Only completeStructured is needed by reviewPullRequest; the rest
- * are stubs. Cost attribution is INJECTED (`estimateCost`) so the engine stays
- * free of a pricing table — the server passes its own, the runner passes none.
+ * its baseURL. `completeStructured` (reviews/intent/risks) and `complete` (the
+ * free-text blast-radius summary) are both real; `embed` is the only stub.
+ * Cost attribution is INJECTED (`estimateCost`) so the engine stays free of a
+ * pricing table — the server passes its own, the runner passes none.
  */
 
 const NOT_SUPPORTED = 'OpenRouterProvider only implements completeStructured';
@@ -167,9 +168,47 @@ export class OpenRouterProvider implements LLMProvider {
       (a, b) => (a.pricing?.completionPerM ?? Infinity) - (b.pricing?.completionPerM ?? Infinity),
     );
   }
-  async complete(_req: CompletionRequest): Promise<CompletionResult> {
-    throw new Error(NOT_SUPPORTED);
+  /**
+   * Free-text completion (no JSON schema). Used by the blast-radius summary,
+   * which wants one short paragraph. Mirrors `completeStructured` minus the
+   * `response_format` + parse-with-repair loop: the SDK client already carries
+   * the timeout + retry/backoff, and OpenRouter usage accounting yields the
+   * real generation cost when available (else the injected estimator).
+   */
+  async complete(req: CompletionRequest): Promise<CompletionResult> {
+    const res = await this.client.chat.completions.create({
+      model: req.model,
+      messages: req.messages,
+      temperature: req.temperature ?? 0.2,
+      ...(req.maxTokens ? { max_tokens: req.maxTokens } : {}),
+      // OpenRouter usage accounting — ask it to return the REAL generation cost.
+      ...(this.id === 'openrouter' ? { usage: { include: true } } : {}),
+    });
+
+    // OpenRouter can return HTTP 200 with no `choices` (upstream provider
+    // error / moderation / free-tier limit in the body) — surface it.
+    const choice = res.choices?.[0];
+    if (!choice) {
+      const errMsg = (res as unknown as { error?: { message?: string } }).error?.message;
+      throw new Error(`OpenRouter returned no choices${errMsg ? `: ${errMsg}` : ''}`);
+    }
+
+    const tokensIn = res.usage?.prompt_tokens ?? 0;
+    const tokensOut = res.usage?.completion_tokens ?? 0;
+    // `usage.cost` is an OpenRouter extension (USD), absent from the OpenAI SDK type.
+    const apiCost = (res.usage as { cost?: number } | null | undefined)?.cost;
+    return {
+      text: choice.message?.content ?? '',
+      model: req.model,
+      tokensIn,
+      tokensOut,
+      costUsd:
+        typeof apiCost === 'number'
+          ? apiCost
+          : this.estimateCost?.(req.model, tokensIn, tokensOut) ?? null,
+    };
   }
+
   async embed(_texts: string[]): Promise<number[][]> {
     throw new Error(NOT_SUPPORTED);
   }

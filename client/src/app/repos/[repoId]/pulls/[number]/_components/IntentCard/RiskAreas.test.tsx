@@ -152,9 +152,11 @@ describe("RiskAreas — hover to reveal", () => {
 describe("RiskAreas — null response", () => {
   it("renders nothing when the server returns null", async () => {
     renderRiskAreas(null);
-    // Give time for the query to settle
-    await new Promise<void>((r) => setTimeout(r, 50));
-    expect(screen.queryByText("Risk Areas")).toBeNull();
+    // waitFor flushes the pending query state update inside act() so the
+    // absence assertion is checked after the component has settled.
+    await waitFor(() =>
+      expect(screen.queryByText("Risk Areas")).toBeNull(),
+    );
   });
 });
 
@@ -164,7 +166,8 @@ describe("RiskAreas — null response", () => {
 describe("RiskAreas — empty risks array", () => {
   it("renders nothing when the risks array is empty", async () => {
     renderRiskAreas({ risks: [] });
-    await new Promise<void>((r) => setTimeout(r, 50));
-    expect(screen.queryByText("Risk Areas")).toBeNull();
+    await waitFor(() =>
+      expect(screen.queryByText("Risk Areas")).toBeNull(),
+    );
   });
 });

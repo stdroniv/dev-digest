@@ -50,3 +50,43 @@ describe('OpenRouterProvider — seed + provider pinning request shape', () => {
     expect('provider' in captured[0]!).toBe(false);
   });
 });
+
+/**
+ * complete() — the free-text path used by the blast-radius summary. Before this
+ * existed, `complete` threw 'only implements completeStructured', so the summary
+ * broke whenever OpenRouter was the resolved provider.
+ */
+describe('OpenRouterProvider — complete (free-text)', () => {
+  const messages: ChatMessage[] = [{ role: 'user', content: 'summarise' }];
+
+  function recorder(provider: OpenRouterProvider, res: Record<string, unknown>) {
+    const captured: Record<string, unknown>[] = [];
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    (provider as any).client.chat.completions.create = async (arg: Record<string, unknown>) => {
+      captured.push(arg);
+      return res;
+    };
+    return captured;
+  }
+
+  it('returns choice text + token counts and prefers the OpenRouter usage cost', async () => {
+    const provider = new OpenRouterProvider('k', { id: 'openrouter' });
+    const captured = recorder(provider, {
+      choices: [{ message: { content: 'One short paragraph.' } }],
+      usage: { prompt_tokens: 12, completion_tokens: 34, cost: 0.0009 },
+    });
+    const res = await provider.complete({ model: 'm', messages, maxTokens: 300, temperature: 0.3 });
+    expect(res.text).toBe('One short paragraph.');
+    expect(res.tokensIn).toBe(12);
+    expect(res.tokensOut).toBe(34);
+    expect(res.costUsd).toBe(0.0009);
+    expect(captured[0]!.max_tokens).toBe(300);
+    expect(captured[0]!.usage).toEqual({ include: true });
+  });
+
+  it('throws (not silently empty) when OpenRouter returns no choices', async () => {
+    const provider = new OpenRouterProvider('k', { id: 'openrouter' });
+    recorder(provider, { choices: [], error: { message: 'rate limited' } });
+    await expect(provider.complete({ model: 'm', messages })).rejects.toThrow(/no choices: rate limited/);
+  });
+});

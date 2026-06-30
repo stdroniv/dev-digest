@@ -267,31 +267,56 @@ the web UI). Pending and rejected candidates are never returned.
 
 ### `devdigest_get_blast_radius` — Get the blast radius of changed symbols
 
-The input/output contract is final, but the analysis is **not yet
-implemented**. The tool validates that the PR exists (returning an actionable
-`isError` if not), then always returns `isError: false` with
-`status: "not_implemented"`.
+For each symbol changed by a PR, returns its cross-file **callers** plus the HTTP
+endpoints and cron jobs reachable from those caller files. Reads only the
+`repo-intel` index (zero AI calls). The analysis is **callers-only and
+single-hop** — there is no callee or multi-depth traversal in DevDigest's index,
+so those inputs do not exist. The tool validates the PR exists first (actionable
+`isError` if not).
 
 **Input**
 
 | Field | Type | Default | Description |
 |-------|------|---------|-------------|
 | `pr` | string | required | `owner/repo#number` |
-| `symbol` | string | — | Restrict to one changed symbol (function/class) by name; omit to analyze all |
-| `direction` | `callers` \| `callees` \| `both` | `both` | Graph traversal direction |
-| `max_depth` | integer (1–5) | `2` | Traversal depth |
+| `symbol` | string | — | Restrict to one **changed** symbol by exact name; omit for all. A non-matching name returns an empty result (not an error) |
 
-**Output** (stub — always returned in this build)
+**Output**
 
 ```json
 {
-  "status": "not_implemented",
-  "message": "Blast-radius analysis is not yet available in this DevDigest build. The contract is final; use devdigest_get_findings or devdigest_review_pr meanwhile.",
   "pr": "acme/payments-api#482",
   "symbol": null,
-  "impacted": []
+  "symbols": [
+    {
+      "file": "src/payments.ts",
+      "name": "processPayment",
+      "kind": "function",
+      "callers": [
+        { "file": "src/api/checkout.ts", "symbol": "handleCheckout", "line": 42, "rank": 9 }
+      ],
+      "endpoints": ["POST /api/checkout"],
+      "crons": []
+    }
+  ],
+  "totals": { "symbols": 1, "callers": 2, "endpoints": 2, "crons": 0 },
+  "impacted_endpoints": ["POST /api/checkout", "POST /api/refunds"],
+  "impacted_crons": [],
+  "index": {
+    "status": "full",
+    "degraded": false,
+    "reason": null,
+    "last_indexed_sha": "def789abc"
+  },
+  "degraded": false,
+  "reason": null,
+  "resolution": { "limited": false }
 }
 ```
+
+`callers` are rank-desc, capped at 20 per symbol. The `index`, `degraded`, and
+`resolution` fields honestly report when the index is partial/degraded or when
+many cross-file references stayed unresolved (some callers may be missing).
 
 ## Configuration
 
@@ -314,8 +339,10 @@ by `LocalSecretsProvider`.
   run; the API will mark it failed on its next boot.
 - **No importing.** The MCP tools do not import repos, PRs, or run the
   conventions extractor. Use the DevDigest web UI for those operations.
-- **`devdigest_get_blast_radius` is a stub.** Returns `not_implemented` for
-  all requests in this build.
+- **`devdigest_get_blast_radius` is callers-only and single-hop.** It surfaces the
+  cross-file callers of changed symbols (plus reachable endpoints/crons); it does
+  not compute callees or traverse multiple hops, because the `repo-intel` index
+  stores no callee/depth data.
 - **No `reapStaleRuns`.** Unlike the API, the MCP bootstrap deliberately does
   not call `reapStaleRunningRuns` — doing so would clobber in-flight reviews
   owned by a concurrently-running API process.

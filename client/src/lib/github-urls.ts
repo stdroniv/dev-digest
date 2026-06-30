@@ -68,12 +68,14 @@ export function githubPrFileUrl(
 /**
  * Build a GitHub blob URL for a blast-radius caller reference.
  *
- * Uses the INDEXED SHA (not the PR head SHA) because caller files live
- * OUTSIDE the PR diff — their line numbers come from the repo-intel index
- * and are only accurate against the commit that was indexed.
+ * Prefers the INDEXED SHA (not the PR head SHA) because caller files live
+ * OUTSIDE the PR diff — their line numbers come from the repo-intel index and
+ * are only accurate against the commit that was indexed. When the index has no
+ * recorded SHA (un-indexed repo / older index row), we fall back to `HEAD` so
+ * the caller stays a working file:line link instead of dead text — the line
+ * number may drift if the default branch has moved past the indexed commit.
  *
- * Returns `null` when either `repoFullName` or `indexedSha` is missing,
- * so callers can render the `file:line` text without a link.
+ * Returns `null` ONLY when `repoFullName` is missing (no repo → no GitHub URL).
  *
  * Deliberately uses `githubBlobUrl` (NOT `githubPrFileUrl`): the PR "Files
  * changed" view only contains files touched by the PR — caller files that
@@ -85,8 +87,8 @@ export function blastCallerUrl(
   file: string,
   line: number,
 ): string | null {
-  if (!repoFullName || !indexedSha) return null;
-  return githubBlobUrl(repoFullName, indexedSha, file, line);
+  if (!repoFullName) return null;
+  return githubBlobUrl(repoFullName, indexedSha || "HEAD", file, line);
 }
 
 /**

@@ -21,6 +21,26 @@ cold; never edit or delete existing entries.
   PRs via `ReviewRepository.getPullByNumber`. Raw `db.insert(t.x).values(...).returning()` is fine (no
   operator → server-typed throughout); only the operator imports clash. (reviewer-core dodges this entirely
   by being pure — it has no drizzle.)
+- The `ship-feature` skill and the `.claude/agents/*.md` roster **drift out of sync on an agent
+  rename**, and nothing catches it automatically. Renaming `planner`→`implementation-plan` (and adding
+  `spec-creator`/`spec-conformance`) left `.claude/skills/ship-feature/SKILL.md` still saying
+  "Spawn `planner`" — i.e. spawning a **deleted** agent — plus stale mentions in
+  `references/cost-discipline.md`, the skill `CHANGELOG`, and `docs/plans/*`. The agent files and
+  `agents/README.md` had been updated; the **orchestrator that drives them** had not. The skill body is
+  plain prose the harness never validates against the live agent roster, so a dead spawn target fails
+  **silently until `/ship-feature` runs**. **Fix/habit:** after renaming/adding/removing any agent,
+  `grep -rn '<old-name>' .claude/ docs/` for the OLD name and fix every spawn instruction, pipeline
+  diagram, and cross-reference. (Distinct from the skill⇄agent *conversion* catalog check under Tool &
+  Library Notes — this is same-role, name-changed drift in the orchestration prose.)
+- The "no `skills:` frontmatter, use an on-demand routing table" convention (see Tool & Library Notes)
+  is **not self-enforcing and does get violated in practice**: the `implementation-plan` agent (opus,
+  multi-turn) shipped with a **13-entry `skills:` block** preloading every SKILL.md plus a body line
+  "all skills are pre-loaded via the frontmatter" — re-billing all 13 files as cache-read on *every*
+  turn of an opus agent, the single worst preload in the roster. When auditing agents for cost,
+  `grep -n '^skills:' .claude/agents/*.md` to find preloads; convert each to the routing-table pattern,
+  copying the `implementer.md` / `test-writer.md` body shape (module→skill table + read 1–2 on demand).
+  Skill-free agents (`spec-creator`, `spec-conformance`) correctly attach **no** skills — they work at
+  the WHAT/plan level, where skills (which teach the HOW) would only leak implementation detail and burn tokens.
 
 ## Codebase Patterns
 

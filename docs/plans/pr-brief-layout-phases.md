@@ -3,7 +3,8 @@
 Bring the PR Details **Overview** tab in line with the "PR Brief" design mockup.
 This doc is the **phase breakdown / scope contract**. The in-depth technical plan
 (file-by-file changes, edge cases, test matrix) lives in
-[`pr-brief-layout.md`](./pr-brief-layout.md), authored by the planner agent.
+[`pr-brief-layout.md`](./pr-brief-layout.md), authored by the `implementation-plan`
+agent (formerly `planner`).
 
 ## Problem (grounded)
 
@@ -99,7 +100,7 @@ collapse on narrow widths.
 `1 → 2 → 3 → 4 → 5`. Phases 1–4 resolve every structural inconsistency; Phase 5 is
 pixel-fidelity. Each phase = one commit, its own tests, an independently visible result.
 
-## Cross-cutting edge cases (the planner must enumerate + handle)
+## Cross-cutting edge cases (the `implementation-plan` agent must enumerate + handle)
 
 - **No intent computed** (current empty state) — left card still renders; show
   Recalculate empty state; if risks exist, still show Risk Areas below it.

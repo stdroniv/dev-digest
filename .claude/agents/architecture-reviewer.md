@@ -11,7 +11,7 @@ description: >
   of changes, or the whole tree. High-signal by design (a few real findings, not
   a long list of nits).
 tools: Read, Grep, Glob
-model: opus
+model: sonnet
 ---
 
 # Architecture Reviewer

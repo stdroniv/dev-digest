@@ -7,11 +7,13 @@
 A real run's telemetry showed **cache-read is ~93% of all tokens** — i.e. each agent's
 context is re-billed on *every* turn — so the cost driver is **conversation length ×
 context size**, not the model tier (tiers are already set per agent:
-explorers→Haiku, executors→Sonnet, planner/reviewers→Opus). Optimise for *fewer,
-shorter, leaner* agent turns and *zero wasted runs*:
+explorers→Haiku, executors + the `plan-verifier`/`spec-conformance` gates→Sonnet,
+`spec-creator`/`implementation-plan`/reviewers→Opus). Optimise for *fewer, shorter,
+leaner* agent turns and *zero wasted runs*:
 
 - **One-retry-then-DIY on a dropped agent.** If a long single-shot agent (esp.
-  `planner`) drops its connection, resume it **at most once**. If it drops again,
+  `spec-creator` or `implementation-plan`) drops its connection, resume it **at most
+  once**. If it drops again,
   write the artifact yourself from the context you already gathered — don't burn a
   third resume (a real run wasted ~8.6M tokens / ~26 min doing exactly that).
 - **Split a big implementation by layer.** When a feature spans **more than one

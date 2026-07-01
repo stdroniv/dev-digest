@@ -4,6 +4,44 @@ All notable changes to the **ship-feature** skill are documented here.
 Format follows [Keep a Changelog](https://keepachangelog.com/); versioning is
 [SemVer](https://semver.org/).
 
+## [1.4.0] - 2026-07-01
+
+### Added
+- **Spec stage.** The pipeline now opens with `spec-creator` (Step 2) and a **spec
+  approval gate** — the WHAT/WHY is agreed as `specs/SPEC-NN-<date>-<slug>.md` (EARS
+  ACs) before any planning. Skippable only when the request is already a crisp, written
+  spec.
+- **`spec-conformance` gate (Step 4).** A fast, read-only `sonnet` **plan⊨spec** check
+  over the spec + plan *documents* (no code): every AC maps to an owning task, every task
+  traces back to an AC. Runs at the plan approval gate so the human approves a plan
+  already checked for spec coverage; gaps loop back to `implementation-plan`. It is the
+  pre-code mirror of `plan-verifier` (which stays the post-code **code-vs-plan** gate).
+- **Multi-agent implementer fan-out (Step 5).** When the plan's execution mode is
+  multi-agent, fan out one `implementer` per non-overlapping `Owned paths` group in
+  dependency order (`reviewer-core` → `server` → `client`), threading each layer's real
+  contract into the next agent's prompt. Below the >1-package / ~15-file threshold, one
+  implementer.
+
+### Changed
+- **Renamed `planner` → `implementation-plan`** throughout (the agent was renamed in
+  `.claude/agents/`); every spawn instruction, the diagram, the cost-discipline
+  reference, and prose shorthand updated. **The old skill spawned a now-deleted agent.**
+- **Two clarify gates are now sequenced.** `spec-creator` settles WHAT; `implementation-plan`
+  asks HOW only. A planner question the spec already answers is resolved from the spec,
+  never bounced back to the user — no double-questioning.
+- **Don't also run `/pr-self-review` inside the pipeline** — it routes files to the same
+  skills the Step-7 reviewer agents apply; running both double-bills the review.
+- Step numbering shifted (spec + conformance inserted): review is now Step 7, gate/loop-back
+  Step 8, doc-writer Step 9, report Step 10; all internal cross-references updated.
+
+### Rationale
+- The agent layer had moved to a spec-first flow (`spec-creator` + renamed
+  `implementation-plan`) and the README was updated to match, but this skill still drove
+  the old `researcher → planner` pipeline and would have spawned a deleted agent. This
+  release re-syncs the orchestrator with the agents, and adds the `spec-conformance` gate
+  that closes the previously-unowned "does the plan cover the spec?" check at the cheapest
+  point — before the implementer runs.
+
 ## [1.3.0] - 2026-06-28
 
 ### Added

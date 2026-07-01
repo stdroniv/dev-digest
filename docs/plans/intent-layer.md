@@ -1,8 +1,8 @@
 # Plan — Intent Layer
 
 > Status: **awaiting approval**. Authored by the orchestrator from verified codebase
-> exploration (the `planner` agent dropped its connection mid-write twice; grounding
-> below was confirmed against the actual files).
+> exploration (the `planner` agent — since renamed `implementation-plan` — dropped its
+> connection mid-write twice; grounding below was confirmed against the actual files).
 
 ## Goal
 

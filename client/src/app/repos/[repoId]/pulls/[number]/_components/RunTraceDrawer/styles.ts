@@ -98,6 +98,31 @@ export const s = {
   specsNone: { color: "var(--text-muted)" } satisfies CSSProperties,
   spec: { fontSize: 12, color: "var(--text-secondary)" } satisfies CSSProperties,
   statsRow: { display: "flex", gap: 10 } satisfies CSSProperties,
+
+  // ---- documents_read / documents_unavailable (T14) ----
+  docList: { display: "flex", flexDirection: "column", gap: 6, flex: 1 } satisfies CSSProperties,
+  docItem: {
+    display: "flex",
+    alignItems: "center",
+    gap: 8,
+    flexWrap: "wrap",
+    fontSize: 12,
+  } satisfies CSSProperties,
+  docPath: { color: "var(--text-secondary)" } satisfies CSSProperties,
+  docTokens: { color: "var(--text-muted)", fontSize: 11 } satisfies CSSProperties,
+  unavailableBox: {
+    display: "flex",
+    alignItems: "flex-start",
+    gap: 8,
+    flex: 1,
+    padding: "8px 10px",
+    borderRadius: 6,
+    border: "1px solid var(--warn)",
+    background: "var(--warn-bg)",
+  } satisfies CSSProperties,
+  unavailableIcon: { color: "var(--warn)", flexShrink: 0, marginTop: 1 } satisfies CSSProperties,
+  unavailableList: { display: "flex", flexDirection: "column", gap: 4 } satisfies CSSProperties,
+  unavailableChip: { fontSize: 12, color: "var(--warn)" } satisfies CSSProperties,
   rawPre: {
     margin: 0,
     padding: "12px 14px",

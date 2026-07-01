@@ -1,4 +1,5 @@
 import type {
+  DocumentRead,
   MemoryPulled,
   PromptAssembly,
   RunLogLine,
@@ -31,6 +32,9 @@ export interface BuildTraceInput {
   rawOutput: string;
   memoryPulled: MemoryPulled[];
   specsRead: string[];
+  // Optional (T9 populates these); default to empty (no project-context docs).
+  documentsRead?: DocumentRead[];
+  documentsUnavailable?: string[];
   log: RunLogLine[];
 }
 
@@ -50,6 +54,8 @@ export function buildRunTrace(input: BuildTraceInput): RunTrace {
     raw_output: input.rawOutput,
     memory_pulled: input.memoryPulled,
     specs_read: input.specsRead,
+    documents_read: input.documentsRead ?? [],
+    documents_unavailable: input.documentsUnavailable ?? [],
     log: input.log,
   };
   // Validate so a malformed trace fails loudly at write-time, not read-time.

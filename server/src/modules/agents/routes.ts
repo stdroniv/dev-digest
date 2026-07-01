@@ -6,6 +6,7 @@ import { getContext } from '../_shared/context.js';
 import { IdParams } from '../_shared/schemas.js';
 import { NotFoundError } from '../../platform/errors.js';
 import { AgentsService } from './service.js';
+import { RepoRelativePath } from '../documents/path-safety.js';
 
 /** `/providers/:id` addresses a provider by name, not a uuid. */
 const ProviderParams = z.object({ id: Provider });
@@ -26,6 +27,8 @@ const VersionParams = z.object({
  *   GET    /agents/:id/versions/:version → one config snapshot
  *   GET    /agents/:id/skills       → linked skills (ordered)
  *   POST   /agents/:id/skills       → set/reorder linked skills OR link one
+ *   GET    /agents/:id/documents    → linked documents (ordered, path-only)
+ *   POST   /agents/:id/documents    → wholesale replace + reorder linked documents
  *   GET    /agents/:id/models       → dynamic model list for the agent's provider
  *   GET    /providers/:id/models    → dynamic model list for a provider (editor)
  */
@@ -66,6 +69,16 @@ const SetSkillsBody = z
   .refine((b) => b.skill_ids !== undefined || b.skill_id !== undefined, {
     message: 'Provide skill_ids (set/reorder) or skill_id (link one)',
   });
+
+/**
+ * Wholesale replace + reorder of an agent's linked documents (path-only,
+ * AC-13). Each path is validated as repo-relative (no `..`/absolute escapes —
+ * `security`) BEFORE it's ever persisted, since it gets re-read from the
+ * clone on every future run.
+ */
+const SetDocumentsBody = z.object({
+  paths: z.array(RepoRelativePath),
+});
 
 export default async function agentsRoutes(appBase: FastifyInstance) {
   const app = appBase.withTypeProvider<ZodTypeProvider>();
@@ -159,6 +172,24 @@ export default async function agentsRoutes(appBase: FastifyInstance) {
         body.skill_ids !== undefined
           ? await service.setSkills(workspaceId, req.params.id, body.skill_ids)
           : await service.linkSkill(workspaceId, req.params.id, body.skill_id!, body.order);
+      if (!links) throw new NotFoundError('Agent not found');
+      return links;
+    },
+  );
+
+  app.get('/agents/:id/documents', { schema: { params: IdParams } }, async (req) => {
+    const { workspaceId } = await getContext(app.container, req);
+    const agent = await service.get(workspaceId, req.params.id);
+    if (!agent) throw new NotFoundError('Agent not found');
+    return service.documentLinks(req.params.id);
+  });
+
+  app.post(
+    '/agents/:id/documents',
+    { schema: { params: IdParams, body: SetDocumentsBody } },
+    async (req) => {
+      const { workspaceId } = await getContext(app.container, req);
+      const links = await service.setDocuments(workspaceId, req.params.id, req.body.paths);
       if (!links) throw new NotFoundError('Agent not found');
       return links;
     },

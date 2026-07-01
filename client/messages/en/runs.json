@@ -34,7 +34,14 @@
       "memoryPulled": "Memory pulled",
       "specsRead": "Specs read",
       "items": "{count, plural, one {# item} other {# items}}",
-      "none": "none"
+      "none": "none",
+      "documentsRead": "Documents read",
+      "documentsUnavailable": "Attached but unavailable",
+      "docTokens": "{count, plural, one {# token} other {# tokens}}",
+      "origin": {
+        "agent": "Agent",
+        "skill": "Skill"
+      }
     },
     "stat": {
       "duration": "DURATION",
@@ -48,7 +55,8 @@
       "skillsTokens": "+{count} tokens",
       "memory": "Memory (dynamic)",
       "repoMap": "Repo skeleton — repo-intel (dynamic)",
-      "specs": "Project context (dynamic)",
+      "specs": "Project context — untrusted (dynamic)",
+      "specsTokens": "+{count} tokens",
       "callers": "Callers of changed symbols — repo-intel (dynamic)",
       "user": "User / diff (dynamic)",
       "copy": "Copy",

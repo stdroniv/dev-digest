@@ -1,6 +1,7 @@
 import type { Container } from '../../platform/container.js';
 import type {
   Agent,
+  AgentDocumentLink,
   AgentSkillLink,
   AgentVersion,
   CiFailOn,
@@ -169,6 +170,27 @@ export class AgentsService {
     const resolvedOrder = order ?? existing.length;
     await this.repo.linkSkill(agentId, skillId, resolvedOrder);
     return this.skillLinks(agentId);
+  }
+
+  /** Linked documents for an agent (ordered, path-only — AC-13). */
+  async documentLinks(agentId: string): Promise<AgentDocumentLink[]> {
+    return this.repo.linkedDocuments(agentId);
+  }
+
+  /**
+   * Set / reorder the agent's linked documents (wholesale replace + reorder).
+   * Returns the resulting ordered links, or undefined if the agent isn't in
+   * this workspace.
+   */
+  async setDocuments(
+    workspaceId: string,
+    agentId: string,
+    paths: string[],
+  ): Promise<AgentDocumentLink[] | undefined> {
+    const agent = await this.repo.getById(workspaceId, agentId);
+    if (!agent) return undefined;
+    await this.repo.setDocuments(agentId, paths);
+    return this.documentLinks(agentId);
   }
 
   /**

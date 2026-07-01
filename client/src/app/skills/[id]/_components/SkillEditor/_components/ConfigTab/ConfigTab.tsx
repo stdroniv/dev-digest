@@ -17,6 +17,7 @@ import { useCreateSkill, useDeleteSkill, useUpdateSkill } from "@/lib/hooks/skil
 import { useToast } from "@/lib/toast";
 import { ApiError } from "@/lib/api";
 import { SKILL_TYPE_VALUES } from "../../constants";
+import { DocumentsSection } from "./_components/DocumentsSection";
 import { s } from "./styles";
 
 export interface ConfigCreateMode {
@@ -187,6 +188,8 @@ export function ConfigTab({ skill, create }: { skill?: Skill; create?: ConfigCre
       >
         <Textarea value={body} onChange={setBody} rows={18} mono />
       </FormField>
+
+      {!isCreate && skill && <DocumentsSection skillId={skill.id} />}
 
       <div style={s.actions}>
         <Button

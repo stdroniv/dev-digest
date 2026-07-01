@@ -92,6 +92,13 @@
       "when": 1782086341001,
       "tag": "0012_perfect_imperial_guard",
       "breakpoints": true
+    },
+    {
+      "idx": 13,
+      "version": "7",
+      "when": 1782935636585,
+      "tag": "0013_careless_william_stryker",
+      "breakpoints": true
     }
   ]
 }

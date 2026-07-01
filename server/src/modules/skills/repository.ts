@@ -1,7 +1,7 @@
 import { and, asc, desc, eq, gte, inArray, isNotNull, sql } from 'drizzle-orm';
 import type { Db } from '../../db/client.js';
 import * as t from '../../db/schema.js';
-import type { SkillSource, SkillType } from '@devdigest/shared';
+import type { SkillDocumentLink, SkillSource, SkillType } from '@devdigest/shared';
 import { INITIAL_SKILL_VERSION } from './constants.js';
 import { isBodyChange, type SkillStatsRaw } from './helpers.js';
 
@@ -224,5 +224,38 @@ export class SkillsRepository {
       .from(t.skillVersions)
       .where(and(eq(t.skillVersions.skillId, skillId), eq(t.skillVersions.version, version)));
     return row;
+  }
+
+  // ---- skill_documents link table (project-context attachments) -----------
+
+  /** Documents linked to a skill, in `order` ascending (path-only, never content). */
+  async linkedDocuments(skillId: string): Promise<SkillDocumentLink[]> {
+    const rows = await this.db
+      .select({ path: t.skillDocuments.path, order: t.skillDocuments.order })
+      .from(t.skillDocuments)
+      .where(eq(t.skillDocuments.skillId, skillId))
+      .orderBy(asc(t.skillDocuments.order));
+    return rows;
+  }
+
+  /**
+   * Replace the full set of linked documents for a skill with `paths`, assigning
+   * order = index. Mirrors `agents/repository.ts` `setSkills`: dedupe + a
+   * transaction-scoped advisory lock serializes concurrent calls for the SAME
+   * skill (the vendored Checkbox double-fires onChange), so the plain
+   * delete-all + insert can't deadlock or hit the (skill_id, path) PK twice.
+   * Attaching/detaching documents is metadata — it must NOT bump `skills.version`
+   * (versioning keys strictly on body changes, see `update()`/`isBodyChange`).
+   */
+  async setDocuments(skillId: string, paths: string[]): Promise<void> {
+    const uniquePaths = [...new Set(paths)];
+    await this.db.transaction(async (tx) => {
+      await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtext(${skillId}))`);
+      await tx.delete(t.skillDocuments).where(eq(t.skillDocuments.skillId, skillId));
+      if (uniquePaths.length === 0) return;
+      await tx
+        .insert(t.skillDocuments)
+        .values(uniquePaths.map((path, i) => ({ skillId, path, order: i })));
+    });
   }
 }

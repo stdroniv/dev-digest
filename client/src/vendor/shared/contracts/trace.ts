@@ -82,8 +82,23 @@ export const RunStats = z.object({
   // Tokens saved vs sending the full diff bodies for intent classification.
   // null/undefined when intent was already stored.
   intent_tokens_saved: z.number().int().nullish(),
+  // Tokens contributed by the assembled `## Project context` (specs/docs) block.
+  // null/undefined when no project documents were attached or on failed/cancelled runs.
+  specs_tokens: z.number().int().nullish(),
 });
 export type RunStats = z.infer<typeof RunStats>;
+
+/** Per-document read record for the run trace (AC-25/26/28). */
+export const DocumentRead = z.object({
+  path: z.string(),
+  tokens: z.number().int().nonnegative(),
+  origin: z.object({
+    type: z.enum(['agent', 'skill']),
+    skill_id: z.string().nullish(),
+    skill_name: z.string().nullish(),
+  }),
+});
+export type DocumentRead = z.infer<typeof DocumentRead>;
 
 /** The single-document trace stored in `run_traces.trace`. */
 export const RunTrace = z.object({
@@ -101,6 +116,12 @@ export const RunTrace = z.object({
   raw_output: z.string(),
   memory_pulled: z.array(MemoryPulled),
   specs_read: z.array(z.string()),
+  // Structured read-doc records (path + token estimate + origin); populated
+  // alongside specs_read. default([]) so legacy traces without this key still parse.
+  documents_read: z.array(DocumentRead).default([]),
+  // Attached-but-missing paths (repo clone doesn't have the file at run time).
+  // default([]) so legacy traces without this key still parse.
+  documents_unavailable: z.array(z.string()).default([]),
   log: z.array(RunLogLine),
 });
 export type RunTrace = z.infer<typeof RunTrace>;

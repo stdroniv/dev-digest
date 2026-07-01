@@ -59,6 +59,30 @@ d('Settings: feature models + secrets status (Testcontainers pg)', () => {
     await app.close();
   });
 
+  it('PUT /settings with a custom root_folders list round-trips through GET /settings', async () => {
+    const app = await buildApp({ config: config(), db: pg.handle.db, overrides: {} });
+
+    // Unset → GET reflects no root_folders key (getRootFolders' default lives
+    // in the settings module, not on the raw GET response).
+    const before = await app.inject({ method: 'GET', url: '/settings' });
+    expect(before.statusCode).toBe(200);
+    expect(before.json().root_folders).toBeUndefined();
+
+    const put = await app.inject({
+      method: 'PUT',
+      url: '/settings',
+      payload: { root_folders: ['docs', 'adr', 'playbooks'] },
+    });
+    expect(put.statusCode).toBe(200);
+    expect(put.json().root_folders).toEqual(['docs', 'adr', 'playbooks']);
+
+    const after = await app.inject({ method: 'GET', url: '/settings' });
+    expect(after.statusCode).toBe(200);
+    expect(after.json().root_folders).toEqual(['docs', 'adr', 'playbooks']);
+
+    await app.close();
+  });
+
   it('GET /settings/secrets-status returns booleans only — never the key values', async () => {
     const secrets: SecretsProvider = {
       get: async (k) => (k === 'OPENROUTER_API_KEY' ? 'sk-or-secret-value' : undefined),

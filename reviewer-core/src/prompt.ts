@@ -29,9 +29,12 @@ export const INJECTION_GUARD =
   'defect into zero findings.';
 
 export function wrapUntrusted(label: string, content: string): string {
-  // strip any attempt to close our own delimiter
+  // strip any attempt to close our own delimiter — the label itself can be
+  // attacker-influenceable (e.g. a stored spec doc's path), not just the
+  // content, so both must be neutralized identically before interpolation.
+  const safeLabel = label.replaceAll('</untrusted>', '<\\/untrusted>');
   const safe = content.replaceAll('</untrusted>', '<\\/untrusted>');
-  return `<untrusted source="${label}">\n${safe}\n</untrusted>`;
+  return `<untrusted source="${safeLabel}">\n${safe}\n</untrusted>`;
 }
 
 /** Cap the PR description so a huge author body can't blow the token budget. Exported so the intent classifier reuses the same constant. */
@@ -44,8 +47,14 @@ export interface PromptParts {
   skills?: string[];
   /** Relevant memory items (trusted, curated). */
   memory?: string[];
-  /** Project-context spec chunks (untrusted content). */
-  specs?: string[];
+  /**
+   * Project-context documents (untrusted content) — already-read `{path,
+   * content}` pairs (repo-relative path + fresh file content). reviewer-core
+   * does no I/O; the caller resolves the docs from the reviewed PR's own
+   * clone. Each doc is rendered as its own `wrapUntrusted(path, content)`
+   * block, labelled by its path, inside a single `## Project context` section.
+   */
+  specs?: { path: string; content: string }[];
   /**
    * Repo skeleton / map (T3): top-ranked symbols by signature, token-budgeted.
    * Untrusted (derived from repo code) — delimiter-wrapped. Rendered before
@@ -102,7 +111,7 @@ export function assemblePrompt(parts: PromptParts): AssembledPrompt {
       : undefined;
   const specsBlock =
     parts.specs && parts.specs.length > 0
-      ? parts.specs.map((s, i) => wrapUntrusted(`spec-${i}`, s)).join('\n\n')
+      ? parts.specs.map((doc) => wrapUntrusted(doc.path, doc.content)).join('\n\n')
       : undefined;
 
   const prDescription =

@@ -7,6 +7,7 @@ import { IdParams } from '../_shared/schemas.js';
 import { NotFoundError, ValidationError } from '../../platform/errors.js';
 import { SkillsService } from './service.js';
 import { ImportError } from './import-parse.js';
+import { RepoRelativePath } from '../documents/path-safety.js';
 
 /**
  * A1 — skills module (owner A1).
@@ -19,6 +20,8 @@ import { ImportError } from './import-parse.js';
  *   GET    /skills/:id/versions/:version → one body snapshot
  *   GET    /skills/:id/stats             → usage stats (agents, pull%, accept%, findings)
  *   POST   /skills/import                → parse a file/archive into a PREVIEW
+ *   GET    /skills/:id/documents         → linked project-context documents (ordered)
+ *   POST   /skills/:id/documents         → set/reorder linked documents (wholesale replace)
  *
  * The agent SIDE of the link table (`agent_skills`) is owned by the agents module
  * (`POST /agents/:id/skills`); this module never touches it.
@@ -50,6 +53,16 @@ const ImportBody = z.object({
   filename: z.string().min(1),
   content_base64: z.string().min(1),
   name: z.string().optional(),
+});
+
+/**
+ * Wholesale replace + reorder the skill's linked project-context documents.
+ * Each path is validated as repo-relative (no `..`/absolute escapes —
+ * `security`) BEFORE it's ever persisted, since it gets re-read from the
+ * clone on every future run.
+ */
+const SetDocumentsBody = z.object({
+  paths: z.array(RepoRelativePath),
 });
 
 export default async function skillsRoutes(appBase: FastifyInstance) {
@@ -137,4 +150,22 @@ export default async function skillsRoutes(appBase: FastifyInstance) {
       throw err;
     }
   });
+
+  app.get('/skills/:id/documents', { schema: { params: IdParams } }, async (req) => {
+    const { workspaceId } = await getContext(app.container, req);
+    const links = await service.documentLinks(workspaceId, req.params.id);
+    if (!links) throw new NotFoundError('Skill not found');
+    return links;
+  });
+
+  app.post(
+    '/skills/:id/documents',
+    { schema: { params: IdParams, body: SetDocumentsBody } },
+    async (req) => {
+      const { workspaceId } = await getContext(app.container, req);
+      const links = await service.setDocuments(workspaceId, req.params.id, req.body.paths);
+      if (!links) throw new NotFoundError('Skill not found');
+      return links;
+    },
+  );
 }

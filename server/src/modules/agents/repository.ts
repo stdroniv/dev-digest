@@ -1,7 +1,7 @@
 import { and, asc, desc, eq, sql } from 'drizzle-orm';
 import type { Db } from '../../db/client.js';
 import * as t from '../../db/schema.js';
-import type { CiFailOn, Provider, ReviewStrategy } from '@devdigest/shared';
+import type { AgentDocumentLink, CiFailOn, Provider, ReviewStrategy } from '@devdigest/shared';
 import { DEFAULT_AGENT_DESCRIPTION, INITIAL_AGENT_VERSION } from './constants.js';
 import { isConfigChange } from './helpers.js';
 
@@ -246,6 +246,37 @@ export class AgentsRepository {
       await tx
         .insert(t.agentSkills)
         .values(uniqueIds.map((skillId, i) => ({ agentId, skillId, order: i })));
+    });
+  }
+
+  // ---- agent_documents link table (T7 — project-context attachments) ------
+
+  /** Documents linked to an agent, in `order` ascending (path-only — AC-13). */
+  async linkedDocuments(agentId: string): Promise<AgentDocumentLink[]> {
+    return this.db
+      .select({ path: t.agentDocuments.path, order: t.agentDocuments.order })
+      .from(t.agentDocuments)
+      .where(eq(t.agentDocuments.agentId, agentId))
+      .orderBy(asc(t.agentDocuments.order));
+  }
+
+  /**
+   * Replace the full set of linked documents for an agent with `paths`, assigning
+   * order = index. Mirrors `setSkills` exactly (transaction-scoped advisory lock
+   * — see `setSkills` above for why plain delete+insert deadlocks/duplicate-keys
+   * under concurrent double-fires).
+   */
+  async setDocuments(agentId: string, paths: string[]): Promise<void> {
+    // Dedupe while preserving order: a repeated path in the request would
+    // otherwise produce two rows with the same (agent_id, path) PK in one insert.
+    const uniquePaths = [...new Set(paths)];
+    await this.db.transaction(async (tx) => {
+      await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtext(${agentId}))`);
+      await tx.delete(t.agentDocuments).where(eq(t.agentDocuments.agentId, agentId));
+      if (uniquePaths.length === 0) return;
+      await tx
+        .insert(t.agentDocuments)
+        .values(uniquePaths.map((path, i) => ({ agentId, path, order: i })));
     });
   }
 }

@@ -20,5 +20,20 @@
     "loadError": "Couldn’t load spec",
     "save": "Save",
     "saving": "Saving…"
-  }
+  },
+  "notCloned": {
+    "title": "Repo not cloned yet",
+    "body": "Project context documents can’t be listed until this repository has been cloned. Once it’s cloned, its Markdown files are discovered automatically."
+  },
+  "page": {
+    "docCount": "{count, plural, one {# document} other {# documents}} found",
+    "refresh": "Refresh",
+    "searchPlaceholder": "Filter by path…",
+    "noMatches": "No documents match your search."
+  },
+  "preview": {
+    "selectPrompt": "Select a document to preview its content.",
+    "loadError": "Couldn’t load this document."
+  },
+  "conventionsLink": "View project context →"
 }

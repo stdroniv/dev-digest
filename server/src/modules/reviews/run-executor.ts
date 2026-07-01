@@ -1,5 +1,13 @@
 import type { Container } from '../../platform/container.js';
-import type { FeatureModelChoice, Intent, Provider, Review, RunTrace, UnifiedDiff } from '@devdigest/shared';
+import type {
+  DocumentRead,
+  FeatureModelChoice,
+  Intent,
+  Provider,
+  Review,
+  RunTrace,
+  UnifiedDiff,
+} from '@devdigest/shared';
 import { reviewPullRequest, countBlockers } from '@devdigest/reviewer-core';
 import { RunLogger } from '../../platform/run-logger.js';
 import * as schema from '../../db/schema.js';
@@ -15,6 +23,9 @@ import { taskLine } from './helpers.js';
 import { loadDiff } from './diff-loader.js';
 import { IntentService } from './intent.service.js';
 import { BriefService } from './brief.service.js';
+import { SkillsRepository } from '../skills/repository.js';
+import { DocumentsService } from '../documents/service.js';
+import { computeEffectiveDocuments } from './effective-documents.js';
 
 /** Thrown by a run when the user cancels it mid-flight (between map files). */
 export class RunCancelledError extends Error {
@@ -285,6 +296,52 @@ export class ReviewRunExecutor {
         ? this.container.tokenizer.count(skillBodies.join('\n\n'))
         : null;
 
+      // T9 — project-context documents (SPEC-01). Effective set = the agent's
+      // own linked docs UNION every ENABLED linked skill's docs (reuses the
+      // same `skill.enabled` filter as the skills block above), deduped by
+      // path (agent position wins), agent-first then skill-order (T4's pure
+      // computeEffectiveDocuments — AC-17/18/19). Content is read FRESH from
+      // THIS PR's own repo clone (not any other repo's), never from another
+      // agent's clone. A missing attached path is recorded in
+      // `documents_unavailable` and logged via `runLog.info` (never `error`,
+      // per server/INSIGHTS — a missing doc must never fail the run — AC-24).
+      const skillsRepo = new SkillsRepository(this.container.db);
+      const agentDocs = await this.agents.linkedDocuments(agent.id);
+      const enabledSkillDocs = await Promise.all(
+        linkedSkills
+          .filter((l) => l.skill.enabled)
+          .map(async (l) => ({
+            skillId: l.skill.id,
+            skillName: l.skill.name,
+            docs: await skillsRepo.linkedDocuments(l.skill.id),
+          })),
+      );
+      const effectiveDocs = computeEffectiveDocuments(agentDocs, enabledSkillDocs);
+
+      const documentsService = new DocumentsService(this.container);
+      const readDocs: { path: string; content: string; origin: DocumentRead['origin'] }[] = [];
+      const documentsUnavailable: string[] = [];
+      for (const entry of effectiveDocs) {
+        const content = await documentsService.readContent(repo, entry.path);
+        if (content == null) {
+          documentsUnavailable.push(entry.path);
+          runLog.info(`⚠️ Attached document "${entry.path}" not found in the repo clone — skipping`);
+          continue;
+        }
+        readDocs.push({ path: entry.path, content, origin: entry.origin });
+      }
+      if (readDocs.length) {
+        runLog.info(`Injecting ${readDocs.length} project-context document(s) into the prompt`);
+      }
+      // Per-doc token estimate (for documents_read) + the summed block estimate
+      // (for stats.specs_tokens) — both locally-estimated, zero new model calls.
+      const readDocTokens = new Map(
+        readDocs.map((d) => [d.path, this.container.tokenizer.count(d.content)]),
+      );
+      const specsTokens = readDocs.length
+        ? this.container.tokenizer.count(readDocs.map((d) => d.content).join('\n\n'))
+        : null;
+
       // Soft nudge (log-only, never a block): gating merges on a cheap "flash/
       // mini" tier is the exact setup that produced the silent auto-approve —
       // those tiers emit lazy short completions. The re-sample guard below
@@ -317,6 +374,12 @@ export class ReviewRunExecutor {
         // L02 — ordered, enabled skill bodies. Omitted when empty so the prompt is
         // byte-identical to the no-skills baseline (the control experiment).
         ...(skillBodies.length ? { skills: skillBodies } : {}),
+        // T9 — effective project-context documents, read fresh from this PR's
+        // clone. Omitted when empty so the prompt is byte-identical to the
+        // pre-feature baseline (AC-23/R6 non-regression).
+        ...(readDocs.length
+          ? { specs: readDocs.map((d) => ({ path: d.path, content: d.content })) }
+          : {}),
         // T1.3 — pass the callers digest only when we built one. assemblePrompt
         // omits the section when this is empty/undefined.
         ...(callersDigest ? { callers: callersDigest } : {}),
@@ -403,6 +466,9 @@ export class ReviewRunExecutor {
           // computed on this run (null when a stored intent was reused).
           intent_tokens: intentCtx?.intentTokens ?? null,
           intent_tokens_saved: intentCtx?.intentTokensSaved ?? null,
+          // T9 — tokens contributed by the assembled `## Project context`
+          // block. null when no project documents were attached/read.
+          specs_tokens: specsTokens,
         },
         prompt_assembly: outcome.assembly,
         tool_calls: outcome.chunks.map((c) => ({
@@ -413,7 +479,17 @@ export class ReviewRunExecutor {
         })),
         raw_output: outcome.raw,
         memory_pulled: [],
-        specs_read: [],
+        // T9 — paths actually read this run (AC-25); documents_read carries
+        // each doc's own token estimate + origin (AC-26/28); documents_unavailable
+        // is the attached-but-missing set (AC-24). All derived from the same
+        // effective-set read above — no project documents attached/read → [].
+        specs_read: readDocs.map((d) => d.path),
+        documents_read: readDocs.map((d) => ({
+          path: d.path,
+          tokens: readDocTokens.get(d.path) ?? 0,
+          origin: d.origin,
+        })),
+        documents_unavailable: documentsUnavailable,
         // Persisted log = the run's FULL event buffer (incl. shared pre-work:
         // diff load + intent), not just events recorded inside this method.
         log: runLog.logFor(runId),
@@ -561,6 +637,8 @@ export class ReviewRunExecutor {
       raw_output: '',
       memory_pulled: [],
       specs_read: [],
+      documents_read: [],
+      documents_unavailable: [],
       log: this.container.runBus.buffer(runId).map((e) => ({ t: e.t, kind: e.kind, msg: e.msg })),
     };
   }

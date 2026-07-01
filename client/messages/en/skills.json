@@ -163,6 +163,22 @@
     "emptyTitle": "No versions yet",
     "emptyBody": "Save a change to the body to create the first snapshot."
   },
+  "documents": {
+    "title": "Project context to use",
+    "hint": "Attach Markdown docs discovered in a repo clone (specs, docs, insights). Only the path is stored — content is read fresh from the repo at run time.",
+    "tokenVolume": "{count} tokens attached",
+    "repoLabel": "Repository",
+    "unknownRoot": "attached",
+    "previewToggle": "Preview",
+    "previewLoading": "Loading preview…",
+    "noReposTitle": "No repos yet",
+    "noReposBody": "Add a repo to browse its project context documents.",
+    "notClonedTitle": "Repo not cloned",
+    "notClonedBody": "Clone this repo to discover its project context documents.",
+    "emptyTitle": "No project context docs",
+    "emptyBody": "No Markdown files were found under this repo's configured root folders.",
+    "untrustedNote": "Attached documents are injected into every run of this skill's agents as an untrusted, path-labelled block — vet them like any other imported content."
+  },
   "new": {
     "defaultName": "new-skill",
     "defaultBody": "# New skill\n\nDescribe the rule the reviewing agent should apply…",

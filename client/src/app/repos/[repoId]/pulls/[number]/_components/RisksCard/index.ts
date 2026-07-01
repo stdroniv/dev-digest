@@ -1,1 +1,0 @@
-export { RisksCard } from "./RisksCard";

@@ -3,16 +3,37 @@
     "symbols": "symbols",
     "callers": "callers",
     "endpoints": "endpoints",
-    "crons": "cron/jobs"
+    "crons": "cron"
   },
   "view": {
     "tree": "tree",
     "graph": "graph"
   },
   "callerCount": "{count} callers",
-  "noDownstream": "{count} changed symbol(s), no downstream callers found.",
+  "symbolToggle": "Toggle callers for {name}",
+  "empty": "No impacted symbols found for this PR.",
+  "noDownstream": "{count} changed symbol(s) with no in-repo callers — e.g. route handlers, exports, or framework entry points.",
   "graph": {
     "empty": "No downstream callers to graph.",
     "ariaLabel": "Blast radius graph"
+  },
+  "degraded": {
+    "badge": "Index degraded — results may be incomplete",
+    "explain": "The repo-intel index ran in degraded mode (ripgrep fallback). Caller data may be partial."
+  },
+  "partial": {
+    "badge": "Index incomplete — caller data may be missing",
+    "explain": "The repo-intel index for this repo is partial (a large repo hit the indexing time budget). Some callers and endpoints may not be resolved yet."
+  },
+  "summary": {
+    "show": "Explain impact (AI summary)",
+    "loading": "Generating summary…",
+    "empty": "No summary available."
+  },
+  "clickToCode": {
+    "aria": "Open {file} line {line} on GitHub"
+  },
+  "resolution": {
+    "note": "Cross-file resolution is limited for this repo — some callers may be missing because imports across packages or path aliases didn't resolve. Re-index after the next release for fuller results."
   }
 }

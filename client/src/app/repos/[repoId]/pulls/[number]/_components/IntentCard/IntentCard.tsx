@@ -2,10 +2,11 @@
 
 import React from "react";
 import { useTranslations } from "next-intl";
-import { SectionLabel, Button } from "@devdigest/ui";
+import { Icon, SectionLabel, Button, Skeleton } from "@devdigest/ui";
 import type { Intent } from "@devdigest/shared";
 import { useIntent, useRecalculateIntent } from "@/lib/hooks/brief";
 import { s } from "./styles";
+import { RiskAreas } from "./RiskAreas";
 
 interface IntentCardProps {
   prId: string | null | undefined;
@@ -27,7 +28,16 @@ export function IntentCard({ prId }: IntentCardProps) {
   };
 
   if (isLoading) {
-    return null;
+    return (
+      <section>
+        <SectionLabel icon="Target">{t("block.intent")}</SectionLabel>
+        <div style={s.card}>
+          <div style={{ padding: 16 }}>
+            <Skeleton height={88} />
+          </div>
+        </div>
+      </section>
+    );
   }
 
   const recalculateLabel = recalculate.isPending
@@ -55,6 +65,7 @@ export function IntentCard({ prId }: IntentCardProps) {
             recalculateLabel={recalculateLabel}
           />
         )}
+        <RiskAreas prId={prId} />
       </div>
     </section>
   );
@@ -109,7 +120,7 @@ function IntentContent({
   return (
     <>
       <div style={s.header}>
-        <p style={s.summaryText}>{intent.intent}</p>
+        <p style={s.summaryText}>{`"${intent.intent}"`}</p>
         <Button size="sm" kind="ghost" onClick={onRecalculate} disabled={isPending}>
           {recalculateLabel}
         </Button>
@@ -121,8 +132,11 @@ function IntentContent({
 
       <div style={s.scopeSection}>
         {intent.in_scope.length > 0 && (
-          <>
-            <p style={s.scopeLabel}>{inScopeLabel}</p>
+          <div style={s.scopeCol}>
+            <p style={{ ...s.scopeLabel, ...s.scopeLabelRow }}>
+              <Icon.Check size={12} style={{ color: "var(--ok)" }} aria-hidden="true" />
+              {inScopeLabel}
+            </p>
             <ul style={s.scopeList}>
               {intent.in_scope.map((item, i) => (
                 <li key={i} style={s.scopeItem}>
@@ -131,12 +145,15 @@ function IntentContent({
                 </li>
               ))}
             </ul>
-          </>
+          </div>
         )}
 
         {intent.out_of_scope.length > 0 && (
-          <>
-            <p style={s.scopeLabel}>{outOfScopeLabel}</p>
+          <div style={s.scopeCol}>
+            <p style={{ ...s.scopeLabel, ...s.scopeLabelRow }}>
+              <Icon.X size={12} style={{ color: "var(--crit)" }} aria-hidden="true" />
+              {outOfScopeLabel}
+            </p>
             <ul style={s.scopeList}>
               {intent.out_of_scope.map((item, i) => (
                 <li key={i} style={s.scopeItem}>
@@ -145,7 +162,7 @@ function IntentContent({
                 </li>
               ))}
             </ul>
-          </>
+          </div>
         )}
       </div>
     </>

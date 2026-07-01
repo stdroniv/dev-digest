@@ -61,6 +61,8 @@ describe('reviewPullRequest (engine)', () => {
     expect(outcome.grounding).toBe('1/2 passed');
     expect(outcome.review.findings).toHaveLength(1);
     expect(outcome.review.findings[0]!.start_line).toBe(11);
+    // Verdict is derived from the surviving CRITICAL, not the model's self-report.
+    expect(outcome.review.verdict).toBe('request_changes');
     expect(outcome.dropped).toHaveLength(1);
     // Score is derived from the SURVIVING findings, not the model's self-reported
     // 38: one CRITICAL remains after grounding ⇒ 100 − 35 = 65.
@@ -88,6 +90,47 @@ describe('reviewPullRequest (engine)', () => {
     });
 
     expect(outcome.review.findings).toHaveLength(0);
+    expect(outcome.review.score).toBe(100);
+  });
+
+  it('verdict is deterministic from findings: a self-reported request_changes with no grounded findings → approve', async () => {
+    // The screenshot bug: the model nitpicks in prose, self-reports verdict
+    // 'request_changes' and a low score, but its only finding is hallucinated (line
+    // 999, not in the diff) so grounding drops it. The engine must NOT surface the
+    // model's verdict — with zero surviving findings the verdict is 'approve' and
+    // the score 100, so the card can't read "100 / 0 findings / request changes".
+    const lyingVerdict = {
+      verdict: 'request_changes',
+      summary: 'prose worries about edge cases but files nothing real',
+      score: 40,
+      findings: [
+        {
+          id: 'f-hallucinated',
+          severity: 'WARNING',
+          category: 'bug',
+          title: 'phantom finding on a line not in the diff',
+          file: 'src/config.ts',
+          start_line: 999,
+          end_line: 999,
+          rationale: 'not real',
+          confidence: 0.3,
+          kind: 'finding',
+        },
+      ],
+    };
+    const llm = new MockLLMProvider('openai', { structured: lyingVerdict });
+    const diff = await new MockGitClient().diff();
+
+    const outcome = await reviewPullRequest({
+      systemPrompt: 'security reviewer',
+      model: 'gpt-4.1',
+      diff,
+      llm,
+      task: 'Review PR #6',
+    });
+
+    expect(outcome.review.findings).toHaveLength(0); // hallucinated finding dropped
+    expect(outcome.review.verdict).toBe('approve'); // NOT the model's 'request_changes'
     expect(outcome.review.score).toBe(100);
   });
 
@@ -202,7 +245,9 @@ describe('reviewPullRequest — false-negative re-sample guard', () => {
     expect(outcome.resampled).toBe(true);
     expect(outcome.samples).toBe(2);
     expect(outcome.review.findings).toHaveLength(1);
-    expect(outcome.review.verdict).toBe('request_changes'); // worst verdict wins
+    // Verdict is derived from the surviving CRITICAL (default 'critical' gate), not
+    // copied from the model — here it happens to match the model's request_changes.
+    expect(outcome.review.verdict).toBe('request_changes');
     expect(outcome.review.score).toBe(65); // one surviving CRITICAL ⇒ 100 − 35
     expect(events.some((m) => m.includes('re-sampling'))).toBe(true);
   });

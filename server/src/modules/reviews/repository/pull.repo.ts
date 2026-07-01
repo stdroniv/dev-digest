@@ -18,6 +18,31 @@ export async function getPull(
   return row;
 }
 
+/**
+ * Resolve a PR by its human-readable `(repo, number)` pair instead of its UUID.
+ * Additive read used by callers (e.g. the MCP server) that address PRs as
+ * `owner/repo#number`. Selects on the `pr_repo_number_uq` unique index, scoped to
+ * the workspace. Returns `undefined` when the PR has not been imported.
+ */
+export async function getPullByNumber(
+  db: Db,
+  workspaceId: string,
+  repoId: string,
+  number: number,
+): Promise<PullRow | undefined> {
+  const [row] = await db
+    .select()
+    .from(t.pullRequests)
+    .where(
+      and(
+        eq(t.pullRequests.workspaceId, workspaceId),
+        eq(t.pullRequests.repoId, repoId),
+        eq(t.pullRequests.number, number),
+      ),
+    );
+  return row;
+}
+
 export async function getRepo(
   db: Db,
   repoId: string,

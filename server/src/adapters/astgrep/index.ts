@@ -186,17 +186,32 @@ export function parseSymbols(file: string, source: string): ParsedSymbol[] {
     handleDecl(node, exported, out, declLineByName);
   }
 
-  // Re-export pass: `export { foo, bar as baz }` upgrades previously-declared
-  // local names to exported. Aliases aren't separate symbols; the original
-  // decl carries the truth.
+  // Re-export + default-export back-patch pass. Both `export { foo, bar as baz }`
+  // and `export default foo` (where `foo` is a previously-declared local) upgrade
+  // that local decl to exported. Aliases aren't separate symbols; the original
+  // decl carries the truth. Inline default decls (`export default function/class …`)
+  // are already exported via unwrapExport during the top-level walk.
+  const markExported = (name: string) => {
+    for (const s of out) {
+      if (s.name === name && declLineByName.get(name) === s.line) s.exported = true;
+    }
+  };
   for (const ex of root.findAll({ rule: { kind: 'export_statement' } })) {
+    // `export { foo, bar as baz }`
     const clause = childrenOfKind(ex, 'export_clause')[0];
-    if (!clause) continue;
-    for (const spec of childrenOfKind(clause, 'export_specifier')) {
-      const name = getField(spec, 'name')?.text();
-      if (!name) continue;
-      // mark every prior symbol with this name as exported
-      for (const s of out) if (s.name === name && declLineByName.get(name) === s.line) s.exported = true;
+    if (clause) {
+      for (const spec of childrenOfKind(clause, 'export_specifier')) {
+        const name = getField(spec, 'name')?.text();
+        if (name) markExported(name);
+      }
+      continue;
+    }
+    // `export default <identifier>` — the bare-identifier form unwrapExport can't
+    // unwrap into a declaration (e.g. `const x = …; export default x;`). Guard on
+    // the `default` keyword; the identifier is a direct child of the statement.
+    if (ex.children().some((c) => c.kind() === 'default')) {
+      const id = childrenOfKind(ex, 'identifier')[0];
+      if (id) markExported(id.text());
     }
   }
 
@@ -456,6 +471,25 @@ export function parseReferences(file: string, source: string): ParsedReference[]
         push(leftName, lineOf(n));
       }
     }
+  }
+
+  // Type-identifier pass — captures type annotations, array/element types,
+  // generic type arguments, and extends/implements heritage names.
+  // Runs for all languages (TS/JS); JS produces none since type syntax is TS-only.
+  for (const n of root.findAll({ rule: { kind: 'type_identifier' } })) {
+    // Exclude import type bindings (they're import declarations, not usages).
+    if (isInsideImport(n)) continue;
+    // Exclude generic-definition declarations (e.g. the `T` in `function foo<T>()`).
+    // These live inside `type_parameters`; usages live inside `type_arguments` or
+    // type annotations. Short-circuit at `type_arguments` — those are usages.
+    let insideTypeParams = false;
+    for (const anc of n.ancestors()) {
+      const k = anc.kind();
+      if (k === 'type_parameters') { insideTypeParams = true; break; }
+      if (k === 'type_arguments') break; // usage context — stop searching
+    }
+    if (insideTypeParams) continue;
+    push(n.text(), lineOf(n));
   }
 
   return out;

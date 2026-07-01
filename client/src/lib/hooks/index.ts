@@ -8,3 +8,4 @@ export * from "./trace";
 export * from "./repo-intel";
 export * from "./use-path-shas";
 export * from "./brief";
+export * from "./blast";

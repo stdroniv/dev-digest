@@ -1,4 +1,6 @@
 {
+  "prBrief": "PR Brief",
+  "riskAreas": "Risk Areas",
   "block": {
     "intent": "Intent",
     "blast": "Blast radius",

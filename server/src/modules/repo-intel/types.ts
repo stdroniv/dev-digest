@@ -84,6 +84,11 @@ export interface BlastResult {
   factsByFile?: Record<string, { endpoints: string[]; crons: string[] }>;
   degraded?: boolean;
   reason?: DegradedReason;
+  /**
+   * Honest cross-file resolution signal (Tier 4). Present on the persistent
+   * path; absent on the degraded ripgrep path (no references table scanned).
+   */
+  resolution?: { limited: boolean; reason?: string };
 }
 
 // ---------------------------------------------------------------------------

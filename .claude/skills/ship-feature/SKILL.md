@@ -3,9 +3,9 @@ name: ship-feature
 description: "Run the full DevDigest feature-delivery pipeline end-to-end by orchestrating the project's subagents. Use whenever the user invokes `/ship-feature`, or asks to 'ship a feature', 'build this end to end', 'run the full agent pipeline', 'take this from plan to merge-ready', or hands over a sizable feature request they want implemented with planning + tests + review (not just a quick edit). It sequences researcher → planner (with a human approval gate on the plan) → implementer → test-writer, then runs architecture-reviewer + security-reviewer + plan-verifier in parallel, loops blocking findings back to the implementer until the change is clean, and optionally finishes with doc-writer. Use it even when the user just describes a substantial feature and wants it done 'properly' — orchestrating the agents in the right order, in parallel where safe, with the approval gate and the review loop, is the whole value. For a one-line quick fix a single agent is enough; this is for multi-step features worth the full pipeline."
 allowed-tools: Task, Read, Grep, Glob, Bash
 metadata:
-  version: 1.1.0
+  version: 1.3.0
   tags: pipeline, orchestration, subagents, feature-delivery, planner, implementer, reviewers, definition-of-done
-  updated: 2026-06-24
+  updated: 2026-06-28
 ---
 
 # Ship Feature — pipeline orchestrator
@@ -30,9 +30,24 @@ researcher? → planner → [APPROVAL] → implementer → test-writer
                         └no→ doc-writer? → report
 ```
 
-Serialise stages 1–4 (each needs the previous one's output); **parallelise the three
+Serialise stages 1–4 (each needs the previous one's output); **parallelise the
 reviewers** (independent and read-only). Run the whole thing top to bottom; don't skip
 the approval gate or the review loop.
+
+## The two rules that actually change outcomes
+
+Most of this pipeline is what a careful engineer would do anyway — scope-check, plan,
+approval gate, parallel review. These two calls are the easy-to-miss ones that quietly
+go wrong without a checklist. If you remember nothing else, remember these:
+
+1. **A non-blocking finding is a note, never a loop-back.** Once you've judged a finding
+   non-blocking (Step 6's table), do *not* hand it to the implementer "while we're here."
+   That re-opens a clean change and turns a `WARNING` into churn — scope creep disguised
+   as efficiency. Record it in the report and move on.
+2. **Converge deliberately; adjudicate a dispute once, then escalate.** The review loop
+   must terminate (Step 6). When the implementer *disputes* a finding rather than failing
+   to fix it, don't re-loop it and don't silently drop it — have the *owning reviewer*
+   adjudicate the rebuttal exactly once, then stop and let the human decide if it stands.
 
 ## Step 0 — Capture the request and scope-check
 
@@ -62,6 +77,13 @@ makes the rest of the pipeline safe to run with less supervision.
 
 ## Step 3 — implementer
 
+**Pre-flight for greenfield / new-dependency work.** Before committing a long implementer
+run, do a ~30-second reachability check on anything the plan *assumes* but hasn't proven:
+can the new dependency actually install, is Docker up if the tests need it, does the
+external API authenticate? A cheap probe up front beats discovering a hard blocker 30
+minutes into an expensive run. Skip it when the change only touches code and tooling
+already present in the repo.
+
 Once approved, spawn `implementer` with the plan path (e.g. *"Execute
 docs/plans/<slug>.md"*). It writes the code and self-verifies with
 typecheck / lint / test / build. If it reports the plan is structurally wrong, stop and
@@ -72,6 +94,12 @@ take that back to the user / planner — don't push it to guess.
 Spawn `test-writer` to add behavior-focused tests for the change and **run** them. It
 pastes real test output; capture that as evidence for the review stage.
 
+**When the implementer already wrote comprehensive, passing tests** (it self-verifies in
+Step 3), you may fold this stage away to save a full agent run — but only if you make
+plan-verifier's coverage check (Step 5) a standing instruction, so an *independent*
+"is anything untested?" pass still happens. Folding without that backstop means the
+implementer graded its own homework.
+
 ## Step 5 — review, in parallel
 
 First compute the change set once so every reviewer shares one ground truth:
@@ -80,16 +108,33 @@ First compute the change set once so every reviewer shares one ground truth:
 git diff --name-only $(git merge-base main HEAD)..HEAD
 ```
 
-Then, **in a single message, spawn all three reviewers concurrently** (multiple `Task`
-calls at once). Give each the plan path, the diff base (`main`), and the changed-file
-list in its prompt — `architecture-reviewer` has **no Bash**, so it relies on the list
-you pass:
+Then **fan the reviewers out in parallel — in a single message** (multiple `Task` calls
+at once). Give each the plan path, the diff base (`main`), and the changed-file list in
+its prompt — `architecture-reviewer` has **no Bash**, so it relies on the list you pass.
 
-- **architecture-reviewer** — design, layering, dependency direction, boundaries.
-- **security-reviewer** — OWASP Top 10 + LLM lethal-trifecta over the diff.
-- **plan-verifier** — completeness *and* scope vs `docs/plans/<slug>.md`.
+**Right-size the set to the diff — don't reflexively spawn all three.** Each pass costs
+a full agent run, and a strong orchestrator already prunes; make that pruning explicit
+and safe rather than leaving it to chance:
 
-They have non-overlapping lanes by design; don't merge their roles.
+- **plan-verifier — always.** It's your completeness + scope gate *and* the standing
+  coverage backstop. Tell it to default to **blocking completeness** — missing
+  tools/requirements, unhonored locked decisions, scope creep — rather than an
+  exhaustive requirement-by-requirement matrix; the full matrix is the parallel
+  long-pole (it ran 2–3× the other reviewers on a real run), so reserve it for an
+  explicit deep pass. And always ask it to **assess test coverage and name any untested
+  critical path** — this is what makes folding `test-writer` (Step 4) safe.
+- **architecture-reviewer — when the diff changes structure**: new modules, moved
+  boundaries, dependency direction, cross-layer wiring. Skip it for a localized change
+  that touches no seams — say so in one line.
+- **security-reviewer — mandatory whenever the diff touches a real attack surface**:
+  auth, routes/endpoints, secrets, the LLM prompt path (lethal trifecta), file/path
+  access, DB queries or migrations, or any outbound call. **Otherwise you may skip it
+  with a one-line justification** — e.g. a pure client-side render/filter over
+  already-fetched data crosses no trust boundary — and do the trivial input/allowlist
+  check yourself. **When in doubt, run it:** a missed `High` costs far more than one
+  reviewer pass.
+
+The reviewers you run have non-overlapping lanes by design; don't merge their roles.
 
 ## Step 6 — gate and loop-back
 
@@ -113,10 +158,28 @@ If there are **no blocking findings**, go to step 7. Otherwise:
    security + plan-verifier for scope; skip architecture if untouched).
 4. Repeat.
 
-**Convergence guard — don't loop forever.** Stop the loop and surface to the user when
-any of these happens: reviews come back clean; a round produces **no new code changes**
-(the implementer disputes a finding or can't act on it); or you reach **3 rounds**. A
-disputed finding is a human decision, not an infinite loop.
+**Convergence guard — don't loop forever.** End the loop when reviews come back clean or
+you reach **3 rounds**. The tricky case is a **disputed finding** — the implementer
+argues a finding is wrong (e.g. *"that path isn't reachable"*) and makes no code change.
+Don't re-loop the implementer (you'll get the same dispute or a coerced, pointless edit)
+and don't silently drop it. **Adjudicate it once:**
+
+1. Re-check **only that finding** with the reviewer that **owns** it — reachability is
+   `security-reviewer`'s lane, a boundary question is `architecture-reviewer`'s. Spawn a
+   **fresh, minimal** agent (never *resuming* one — that re-bills its whole transcript,
+   see cost discipline) and hand it the implementer's **exact rebuttal as new evidence**.
+   Ask it to either **uphold** (refuting the argument point by point) or **drop** the
+   finding.
+2. **Dropped →** the change is clean; converge to Step 7/8, noting the adjudication.
+   **Upheld →** stop and surface it to the user as a decision: the finding (`file:line`,
+   severity), the implementer's rebuttal, the reviewer's counter, and your recommendation
+   under the threat model.
+
+This single adjudication is a cheap scoped re-check, **not** an implementer round, so it's
+worth doing even at the round cap — it can resolve the dispute without bothering the human.
+But adjudicate **at most once per finding**, and never open a **fourth** implementer round:
+a finding that survives one adjudication — or any finding still open at the **3-round
+implementer cap** — is a human call, not another loop.
 
 ## Step 7 — doc-writer (optional)
 
@@ -141,8 +204,8 @@ Summarise the run so the outcome is reviewable:
 - **Pass context explicitly.** Leaf agents can't see this conversation. Every `Task`
   prompt must carry the plan path, the diff base, the changed-file list, and (on
   loop-back) the precise findings. Vague delegation produces vague work.
-- **Parallel only where independent.** The three reviewers don't depend on each other,
-  so one message with three `Task` calls is ~3× faster than serial. Everything before
+- **Parallel only where independent.** The reviewers you run don't depend on each other,
+  so one message with all their `Task` calls is far faster than serial. Everything before
   them is a dependency chain — keep it serial.
 - **Respect the approval gate.** Never jump from plan to code without the user's go —
   it's the one place a wrong direction is cheap to correct.
@@ -152,39 +215,25 @@ Summarise the run so the outcome is reviewable:
 
 ## Cost & robustness discipline (keep the pipeline cheap)
 
-A real run's telemetry showed **cache-read is ~93% of all tokens** — i.e. each
-agent's context re-billed on *every* turn — so the cost driver is **conversation
-length × context size**, not the model tier (tiers are already set per agent:
-explorers→Haiku, executors→Sonnet, planner/reviewers→Opus). Optimise for *fewer,
-shorter, leaner* agent turns and *zero wasted runs*:
+A real run's telemetry showed **cache-read is ~93% of all tokens** — each agent's context
+re-bills on *every* turn — so cost scales with **conversation length × context size**, not
+model tier (tiers are already set per agent). Optimise for *fewer, shorter, leaner* agent
+turns and *zero wasted runs*. The four rules that matter most:
 
-- **One-retry-then-DIY on a dropped agent.** If a long single-shot agent (esp.
-  `planner`) drops its connection, resume it **at most once**. If it drops again,
-  write the artifact yourself from the context you already gathered — don't burn a
-  third resume (a real run wasted ~8.6M tokens / ~26 min doing exactly that).
-- **Split a big implementation by layer.** When a feature spans **more than one
-  package** (`reviewer-core`/`server`/`client`) or **~15+ files**, spawn focused
-  per-layer `implementer` tasks instead of one mega-run — cache-read grows
-  super-linearly with turn count, so three ~100-turn agents cost far less than one
-  ~300-turn agent. **Below that threshold, keep a single run** (splitting re-pays
-  base-context load + handoff per agent).
-- **Keep each agent's context lean.** Hand it the **exact file list / paths** (you
-  already compute the changed-file set) so it acts instead of rediscovering. Tell
-  `implementer`/`test-writer` to run the heaviest verification (full suites) as a
-  **final** step and not re-dump large tool output mid-run — every dumped log is
-  re-billed on all later turns.
-- **Scope re-validation tightly.** On loop-back, re-run each reviewer with "confirm
-  **only** these findings on these changed files," never a full re-review. (Scoped
-  re-checks finished in a handful of turns; an unscoped one rebuilt its whole matrix.)
-- **Lean exploration.** Prefer **1–2 broader explorers** (or pass a shared file list
-  so they don't each re-read the same files) over many overlapping ones. Lower
-  priority — explorers run on cheap Haiku.
-- **Don't poll background agents.** Completion notifications fire automatically;
-  avoid repeated status-checking and minimise main-session re-entries — the
-  orchestrator's own (large) context is the most expensive thing to re-bill.
-- **Escalate model only on purpose.** Per-agent `model:` is already tuned; override
-  via the `Task` `model` param only to bump `implementer` to `opus` when the plan
-  flags genuinely hard/ambiguous work — the default Sonnet handles mechanical edits.
+- **Split a big implementation by layer** when it spans **>1 package** or **~15+ files**;
+  keep a single run below that threshold.
+- **One-retry-then-DIY** on a dropped single-shot agent (esp. `planner`) — resume once,
+  then write the artifact yourself rather than burning a third resume.
+- **Scope every re-verify** to the specific findings/files, with a **fresh, minimal**
+  agent — never by *resuming* a reviewer (that re-bills its entire transcript). If you
+  already hold the evidence (e.g. pasted green test output), skip the agent entirely.
+- **Run verification foreground**; background a sub-agent only when there's parallel work
+  to overlap, and never *poll* one — completion notifications fire automatically.
+
+The full rationale plus the rest of the rules (lean per-agent context, exploration,
+model escalation, and *why* each holds — with the token figures from the real run) lives
+in **[`references/cost-discipline.md`](references/cost-discipline.md)**. Read it before a
+large, multi-package, or loop-heavy run.
 
 ## What this skill is NOT for
 

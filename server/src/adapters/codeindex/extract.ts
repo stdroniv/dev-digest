@@ -175,11 +175,64 @@ export function extractReferences(content: string, symbol: string): ExtractedRef
 }
 
 /**
+ * Derive an HTTP route path for Next.js App Router and legacy Pages API files.
+ *
+ * Returns a route string (e.g. `/api/cron/foo`) for recognised route files,
+ * or `null` for any other file.  The derivation is heuristic:
+ *   - Route groups `(name)` are dropped.
+ *   - `[...param]` → `:param`  (catch-all)
+ *   - `[param]`    → `:param`  (dynamic segment)
+ * A wrong derived path is worse than none, so unrecognised shapes return null.
+ */
+function nextRoutePath(relPath: string): string | null {
+  // App Router: app/**/route.<ext>
+  const appM = relPath.match(/(?:^|\/)app\/(.+)\/route\.(?:ts|tsx|js|jsx|mjs|cjs)$/);
+  if (appM) {
+    const segs = appM[1]!;
+    return '/' + deriveSegments(segs);
+  }
+  // Legacy Pages API: pages/api/**.<ext>
+  const pagesM = relPath.match(/(?:^|\/)pages\/api\/(.+)\.(?:ts|tsx|js|jsx|mjs|cjs)$/);
+  if (pagesM) {
+    const segs = pagesM[1]!;
+    return '/api/' + deriveSegments(segs);
+  }
+  return null;
+}
+
+/** Process path segment string: drop route groups, map dynamic segments. */
+function deriveSegments(middle: string): string {
+  return middle
+    .split('/')
+    .flatMap((seg) => {
+      if (/^\(.*\)$/.test(seg)) return []; // drop route group e.g. (admin)
+      const catchAll = seg.match(/^\[\.\.\.(.+)\]$/);
+      if (catchAll) return [':' + catchAll[1]!];
+      const dynamic = seg.match(/^\[(.+)\]$/);
+      if (dynamic) return [':' + dynamic[1]!];
+      return [seg];
+    })
+    .join('/');
+}
+
+// Exported-verb patterns for Next.js route handlers (top-of-line only).
+const NEXT_VERB_FN_RE =
+  /^\s*export\s+(?:async\s+)?function\s+(GET|POST|PUT|PATCH|DELETE|HEAD|OPTIONS)\b/;
+const NEXT_VERB_CONST_RE =
+  /^\s*export\s+const\s+(GET|POST|PUT|PATCH|DELETE|HEAD|OPTIONS)\s*=/;
+
+/**
  * Heuristic endpoint detector: HTTP route registrations in a file.
  * Catches Fastify/Express style `app.get('/path', ...)`, `router.post(...)`,
  * `app.get<...>('/path')`, and `route({ method, url })`. Returns "METHOD /path".
+ *
+ * When `relPath` is provided and identifies a Next.js App-Router route file
+ * (app dir route file) or legacy Pages API file, also emits one
+ * "VERB /derived/path" entry per exported HTTP-verb handler.
+ * Keeping `relPath` optional means all existing callers (and tests) that omit it
+ * continue to work byte-for-byte identically.
  */
-export function extractEndpoints(content: string): string[] {
+export function extractEndpoints(content: string, relPath?: string): string[] {
   const out = new Set<string>();
   const lines = content.split('\n');
   const verbRe =
@@ -191,6 +244,20 @@ export function extractEndpoints(content: string): string[] {
     const r = raw.match(routeObjRe);
     if (r) out.add(`${r[1]!.toUpperCase()} ${r[2]}`);
   }
+
+  // Next.js path-aware branch: only when relPath identifies a route file.
+  if (relPath) {
+    const routePath = nextRoutePath(relPath);
+    if (routePath) {
+      for (const raw of lines) {
+        const fn = raw.match(NEXT_VERB_FN_RE);
+        if (fn) { out.add(`${fn[1]!} ${routePath}`); continue; }
+        const cn = raw.match(NEXT_VERB_CONST_RE);
+        if (cn) out.add(`${cn[1]!} ${routePath}`);
+      }
+    }
+  }
+
   return [...out];
 }
 
@@ -198,8 +265,11 @@ export function extractEndpoints(content: string): string[] {
  * Heuristic cron/scheduled-job detector. Catches cron expressions in
  * `schedule('* * * * *')`, `cron.schedule(...)`, `CronJob(...)`, and
  * `jobs.register('kind')` / `enqueue(ws, 'kind')` style background work.
+ *
+ * When `relPath` is provided and identifies a Next.js cron-route file
+ * (derived route path starts with /api/cron/), also emits a "cron:<path>" entry.
  */
-export function extractCrons(content: string): string[] {
+export function extractCrons(content: string, relPath?: string): string[] {
   const out = new Set<string>();
   const lines = content.split('\n');
   const cronExprRe = /\b(?:cron|schedule|CronJob)\s*[.(]?\s*\(?\s*['"`]([^'"`]*(?:\*|\d+\s+\d+)[^'"`]*)['"`]/i;
@@ -210,5 +280,14 @@ export function extractCrons(content: string): string[] {
     const j = raw.match(jobKindRe);
     if (j && /poll|index|clone|digest|cron|sync|schedule|job/i.test(raw)) out.add(`job:${j[1]}`);
   }
+
+  // Next.js cron-route: a route file whose path starts with /api/cron/ is itself a cron.
+  if (relPath) {
+    const routePath = nextRoutePath(relPath);
+    if (routePath && routePath.startsWith('/api/cron/')) {
+      out.add(`cron:${routePath}`);
+    }
+  }
+
   return [...out];
 }

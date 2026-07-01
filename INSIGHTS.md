@@ -8,6 +8,20 @@ cold; never edit or delete existing entries.
 
 ## What Doesn't Work
 
+- A NEW top-level package that BOTH imports the server's Drizzle schema (`@devdigest/api/db/schema.js`)
+  AND imports `drizzle-orm` operators (`eq`/`and`/`inArray`) from its OWN `node_modules/drizzle-orm`
+  gets a TYPECHECK-ONLY nominal clash even when the versions are byte-identical:
+  `error TS2769 … Types have separate declarations of a private property 'shouldInlineParams'`. Cause:
+  two physical drizzle copies (`mcp/node_modules/drizzle-orm` vs `server/node_modules/.pnpm/drizzle-orm@…`).
+  The server schema's columns are typed by SERVER's copy, so an `eq()` from a DIFFERENT copy won't
+  accept them. Runtime is fine (drizzle operators are structural) — it's purely `tsc`. Hit while building
+  `mcp/`. **Fix that works:** do NOT add `drizzle-orm` to the new package and do NOT import its operators
+  in tests — drive all DB access through the application services/repositories (which use server's own
+  drizzle internally): resolve agents via `AgentsService.list`, run status via `ReviewService.listRuns`,
+  PRs via `ReviewRepository.getPullByNumber`. Raw `db.insert(t.x).values(...).returning()` is fine (no
+  operator → server-typed throughout); only the operator imports clash. (reviewer-core dodges this entirely
+  by being pure — it has no drizzle.)
+
 ## Codebase Patterns
 
 - Skills live in project-level `.claude/skills/` (checked into git); there is no global
@@ -95,6 +109,24 @@ cold; never edit or delete existing entries.
   (`server/src/modules/reviews/repository/pull.repo.ts`), and the `review_intent`
   feature-model slot. Wire these up rather than re-creating tables/contracts (also explains
   why CLAUDE.md says the schema "already contains EVERY table — don't delete them").
+- The `mcp/` package (`@devdigest/mcp`, the stdio MCP server) is a 5th standalone package that runs the
+  server's services IN-PROCESS — it is pure presentation/adapter, NO business logic. It boots the DI
+  `Container` directly (`loadConfig` + `createDb` + `new Container`, mirroring `app.ts:buildApp` minus
+  Fastify) and consumes server source via a tsconfig path alias `@devdigest/api/*` → `../server/src/*`
+  (same trick reviewer-core uses). Two consequences worth knowing cold: (a) at BOTH typecheck and `tsx`
+  runtime, server source resolves its OWN heavy deps (drizzle/postgres/openai/octokit/ast-grep/…) from
+  `server/node_modules` (Bundler/node walk up from `server/src`), so `mcp/` only needs to install
+  `@modelcontextprotocol/sdk` + `zod-to-json-schema` + `zod` — do NOT mirror the whole server dep set;
+  (b) under `mcp/tsconfig.json`, server source's `import '@devdigest/shared'` re-resolves to `mcp/src/vendor/shared`
+  (mcp's OWN copied vendor), so that copy MUST stay byte-aligned with `server/src/vendor/shared` (re-copy on
+  upstream change — same situation as reviewer-core aliasing into server's vendor).
+- The MCP "block until the async review finishes" pattern (`mcp/src/tools/review-pr.ts`): call the
+  fire-and-forget `ReviewService.runReview` for the run ids, then `Promise.race` `Promise.all(runIds.map(id =>
+  new Promise(res => runBus.onDone(id, res))))` against a `setTimeout`. `RunBus.onDone` (`server/src/platform/sse.ts`)
+  fires IMMEDIATELY via `queueMicrotask` for an already-completed run, so there is no subscribe-after-complete
+  race. On timeout, detach the `onDone` unsubscribe fns and return `completed:false` with `status:'running'` —
+  NEVER cancel the runs (they keep running in-process) and NEVER call `reapStaleRuns` from `mcp/` (it fails
+  EVERY `status='running'` row regardless of owner, clobbering a concurrent API process's in-flight runs).
 
 ## Tool & Library Notes
 
@@ -183,12 +215,40 @@ cold; never edit or delete existing entries.
   `security-reviewer`/`plan-verifier`, which can derive it themselves; (d) add a convergence guard (cap
   rounds, stop on no-new-changes) so a disputed finding doesn't loop the implementer↔reviewers forever.
 
+- `@modelcontextprotocol/sdk@1.29.0` (used by `mcp/`): its package.json `exports` uses a `"./*"` wildcard,
+  so `@modelcontextprotocol/sdk/server/mcp.js`, `/server/stdio.js`, `/types.js` all resolve even though no
+  literal key exists for them — a `node -e "pkg.exports['./types.js']"` membership check returns `false`,
+  so don't trust that probe; just `import` and let the wildcard catch it. `McpServer.registerTool(name,
+  {title, description, inputSchema, outputSchema, annotations}, handler)` takes RAW Zod shapes
+  (`Record<string, ZodType>`, zod v3 fine — pass the shape object, NOT `z.object(...)`). The SDK validates
+  input args and throws a JSON-RPC protocol error for invalid args BEFORE the handler runs; it validates
+  `structuredContent` against `outputSchema` ONLY when the result's `isError` is falsy (error results skip
+  output validation, so an `{isError:true, content:[text]}` result needs no structuredContent); and the
+  CallTool request handler wraps the callback in try/catch, converting ANY thrown error into an `isError`
+  result — so a handler throw can't crash the stdio transport (still prefer curated `isError` results via an
+  `McpToolError` + a `runTool` wrapper so messages stay actionable).
+- The design reference (`~/Downloads/DevDigest Design (standalone) (3).html`) is NOT
+  plain HTML — grepping it for visible UI strings (`Intent`, `Scope`, `symbols`,
+  `downstream`) returns ZERO hits. It's a `__bundler` export: all component source is
+  gzip+base64 inside a single `<script type="__bundler/manifest">` JSON
+  (`{uuid:{mime,compressed,data}}`), and the only readable JSX (near EOF) is the
+  `DesignCanvas` wrapper (`window.ScreenPRDetail`/`window.BlastRadius` are *referenced*,
+  never defined in cleartext). To read the real components: parse the manifest JSON,
+  `base64.b64decode` → `gzip.decompress` → utf-8 each `data`, then grep the decoded
+  files. Component map: PR-overview layout = `screen_pr_detail.jsx`
+  (`BriefCard`/`IntentBlock`/`RiskPillRow`/`HistoryAccordion`), blast tree+graph =
+  `blast.jsx`, verdict/score gauge = `findings.jsx` (`VerdictBanner` → `CircularScore`
+  "PR SCORE"), mock data (`VERDICT.score`, `INTENT`, `BLAST`) = `data.jsx`. One-shot
+  Python decoded all 44 resources to `scratchpad/` in seconds — don't try to read the
+  raw file.
+
 ## Recurring Errors & Fixes
 
 - A Claude Code **`stop` hook fires at the end of EVERY response turn**, not when the conversation session closes. A hook body that evaluates "has the session ended?" will fire on each turn, get the right answer ("no"), but also re-trigger on the assistant's acknowledgment reply — creating an infinite feedback loop at any human approval gate (e.g. the `ship-feature` plan-approval checkpoint). Design stop hooks for end-of-turn cleanup (e.g. "if the last tool call was a commit, run lint"); for true end-of-session actions that should only run once, the hook logic must itself detect and skip repeated firings (e.g. check a sentinel file or whether any code was actually changed this session).
 
 - To measure sub-agent **token cost**, do NOT trust the `subagent_tokens` figure in a `Task` result — it reports only **output** tokens (~1% of real consumption). Cost is dominated by **cache-read** (each agent's context re-billed every turn ≈ 93% of total in a real ship-feature run). Ground truth lives in the per-agent transcript JSONL at `<session-tmp>/tasks/<agentId>.output` (path is in the Task tool result): each `type:"assistant"` line has `message.usage` with `input_tokens`, `cache_creation_input_tokens`, `cache_read_input_tokens`, `output_tokens` — sum those across lines per file. The actual model is in `message.model`. Doing this revealed the ship-feature agents' `model:` tiering is **already in effect** (explorers→`claude-haiku-4-5`, `implementer`/`test-writer`/`plan-verifier`→`claude-sonnet-4-6`, `planner`/`architecture-reviewer`/`security-reviewer`→`claude-opus-4-8`), so the real cost lever is **conversation length**, not model tier — don't "optimise" by downgrading models that are already tiered.
 - In this environment, BOTH `pnpm <script>` (e.g. `pnpm test`, `pnpm typecheck`) and even `pnpm exec <tool>` run a pre-flight deps-status check (`runDepsStatusCheck`) that does an implicit `pnpm install`, which HARD-FAILS with `ERR_PNPM_IGNORED_BUILDS` (esbuild build scripts unapproved) → exit 1, so the underlying tool never runs. Setting `npm_config_verify_deps_before_run=false` does NOT bypass it. Workaround that reliably runs typecheck/tests: invoke the package-local binary directly, skipping pnpm — `node_modules/.bin/tsc --noEmit` and `node_modules/.bin/vitest run [pattern]` (each of the 4 packages has its own `node_modules/.bin`). For server DB-backed it-tests, prefix `TESTCONTAINERS_RYUK_DISABLED=true` (Podman/rootless, per server/INSIGHTS.md). (`pnpm approve-builds` would also fix it but is interactive.)
+- Delegating a multi-phase task to a **background `implementer` agent that commits per-phase** has a hidden failure mode: the agent runs a plain `git commit`, which commits **everything already staged in the index** — so any changes sitting STAGED at delegation time get swept into the agent's FIRST phase commit and mislabeled under that commit's message. This session, 9 unrelated pre-staged files (`CLAUDE.md`, `mcp/CLAUDE.md`, `mcp/INSIGHTS.md`, `reviewer-core/INSIGHTS.md` + 5 `reviewer-core` src/test files) landed inside the client-only "Phase 1 — PR Brief two-column grid" commit (`e6509b1`), muddling history (verify with `git show --stat <phase1-sha>`). **Mitigation:** before delegating, run `git status --short` and either commit/stash the pre-staged index or tell the agent to `git add` only its own paths (never bare `git commit -a`/`git commit` of the whole index). Detect after the fact with `git show --stat` on the first commit; fixing means a history rewrite, so prevention is cheaper.
 
 ## Session Notes
 

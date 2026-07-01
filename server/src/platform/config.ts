@@ -1,7 +1,18 @@
 import 'dotenv/config';
 import { z } from 'zod';
 import { homedir } from 'node:os';
-import { join, isAbsolute, resolve } from 'node:path';
+import { join, isAbsolute, resolve, dirname } from 'node:path';
+import { fileURLToPath } from 'node:url';
+
+/**
+ * Absolute path to the `server/` package root — stable regardless of the process
+ * cwd. This file lives at `server/src/platform/config.ts`, so go up two levels.
+ * Used to anchor a relative DEVDIGEST_CLONE_DIR so the API (cwd=server/) and the
+ * MCP server (cwd=mcp/) resolve the SAME clone directory. Previously this was
+ * resolved against `process.cwd()`, so the MCP process looked for clones under a
+ * non-existent dir and every blast read degraded to `no_data`.
+ */
+const SERVER_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..', '..');
 
 /**
  * Central, zod-validated environment config. Loaded once at startup.
@@ -42,7 +53,11 @@ export type AppConfig = {
   databaseUrl: string;
   apiPort: number;
   webPort: number;
-  /** Absolute path where repos are cloned (~/.devdigest/workspace by default). */
+  /**
+   * Absolute path where repos are cloned (`<server>/clones` by default). A
+   * relative DEVDIGEST_CLONE_DIR is anchored to the server package dir, NOT the
+   * process cwd, so every process (API, MCP, scripts) resolves the same path.
+   */
   cloneDir: string;
   /** Absolute path to the writable secrets store (BYO keys from the UI). */
   secretsPath: string;
@@ -63,9 +78,8 @@ export type AppConfig = {
 
 export function loadConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
   const parsed = EnvSchema.parse(env);
-  const cloneDirRaw =
-    parsed.DEVDIGEST_CLONE_DIR ?? join(homedir(), '.devdigest', 'workspace');
-  const cloneDir = isAbsolute(cloneDirRaw) ? cloneDirRaw : resolve(process.cwd(), cloneDirRaw);
+  const cloneDirRaw = parsed.DEVDIGEST_CLONE_DIR ?? 'clones';
+  const cloneDir = isAbsolute(cloneDirRaw) ? cloneDirRaw : resolve(SERVER_ROOT, cloneDirRaw);
   return {
     databaseUrl: parsed.DATABASE_URL,
     apiPort: parsed.API_PORT,

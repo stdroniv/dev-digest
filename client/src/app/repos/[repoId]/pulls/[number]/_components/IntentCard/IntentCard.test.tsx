@@ -5,6 +5,10 @@
  * - Renders summary + in/out-of-scope when intent is present.
  * - Shows empty state when no intent is stored.
  * - Clicking Recalculate fires the mutation.
+ *
+ * P3 note: IntentCard now mounts RiskAreas (→ useRisks → GET /pulls/:id/risks).
+ * All fetch mocks branch by URL so /risks → null and /intent → fixture, preventing
+ * the intent fixture from being fed to useRisks (shape mismatch).
  */
 import React from "react";
 import { describe, it, expect, afterEach, vi } from "vitest";
@@ -24,8 +28,28 @@ const INTENT = {
   out_of_scope: ["Auth changes", "Database schema migration"],
 };
 
+function jsonRespFor(body: unknown, status = 200): Response {
+  return new Response(JSON.stringify(body), {
+    status,
+    headers: { "content-type": "application/json" },
+  });
+}
+
+/**
+ * Build a URL-branching fetch mock: /risks → null (no chips), /intent → intentBody.
+ * IntentCard now also mounts RiskAreas (→ useRisks → GET /pulls/:id/risks), so the
+ * mock must dispatch by URL to avoid feeding the intent fixture to useRisks.
+ */
+function buildFetchMock(intentBody: unknown): (_url?: unknown) => Promise<Response> {
+  return (_url?: unknown) => {
+    const path = typeof _url === "string" ? _url : String(_url ?? "");
+    if (path.includes("/risks")) return Promise.resolve(jsonRespFor(null));
+    return Promise.resolve(jsonRespFor(intentBody));
+  };
+}
+
 /** Wrap with both providers needed by IntentCard. */
-function renderCard(prId: string | null, fetchImpl: () => Promise<Response>) {
+function renderCard(prId: string | null, fetchImpl: (_url?: unknown) => Promise<Response>) {
   global.fetch = vi.fn(fetchImpl) as unknown as typeof fetch;
   const qc = new QueryClient({
     defaultOptions: { queries: { retry: false } },
@@ -39,23 +63,17 @@ function renderCard(prId: string | null, fetchImpl: () => Promise<Response>) {
   );
 }
 
-function jsonResp(body: unknown, status = 200): Response {
-  return new Response(JSON.stringify(body), {
-    status,
-    headers: { "content-type": "application/json" },
-  });
-}
-
 describe("IntentCard — with intent data", () => {
   it("renders the summary text", async () => {
-    renderCard(PR_ID, () => Promise.resolve(jsonResp(INTENT)));
+    renderCard(PR_ID, buildFetchMock(INTENT));
     await waitFor(() =>
-      expect(screen.getByText("Add rate limiting to public API endpoints.")).toBeInTheDocument(),
+      // Substring regex — robust to the curly-quote wrapper added by Phase 5a
+      expect(screen.getByText(/Add rate limiting to public API endpoints\./)).toBeInTheDocument(),
     );
   });
 
   it("renders in-scope items", async () => {
-    renderCard(PR_ID, () => Promise.resolve(jsonResp(INTENT)));
+    renderCard(PR_ID, buildFetchMock(INTENT));
     await waitFor(() => {
       expect(screen.getByText("Rate limiting on /api routes")).toBeInTheDocument();
       expect(screen.getByText("Redis-backed counter")).toBeInTheDocument();
@@ -63,7 +81,7 @@ describe("IntentCard — with intent data", () => {
   });
 
   it("renders out-of-scope items", async () => {
-    renderCard(PR_ID, () => Promise.resolve(jsonResp(INTENT)));
+    renderCard(PR_ID, buildFetchMock(INTENT));
     await waitFor(() => {
       expect(screen.getByText("Auth changes")).toBeInTheDocument();
       expect(screen.getByText("Database schema migration")).toBeInTheDocument();
@@ -71,7 +89,7 @@ describe("IntentCard — with intent data", () => {
   });
 
   it("shows the Recalculate button", async () => {
-    renderCard(PR_ID, () => Promise.resolve(jsonResp(INTENT)));
+    renderCard(PR_ID, buildFetchMock(INTENT));
     await waitFor(() =>
       expect(screen.getByText("Recalculate")).toBeInTheDocument(),
     );
@@ -80,7 +98,7 @@ describe("IntentCard — with intent data", () => {
 
 describe("IntentCard — empty state (no intent)", () => {
   it("shows the empty state message when intent is null", async () => {
-    renderCard(PR_ID, () => Promise.resolve(jsonResp(null)));
+    renderCard(PR_ID, buildFetchMock(null));
     await waitFor(() =>
       expect(
         screen.getByText(/No intent computed/i),
@@ -89,7 +107,7 @@ describe("IntentCard — empty state (no intent)", () => {
   });
 
   it("shows the Recalculate button in empty state", async () => {
-    renderCard(PR_ID, () => Promise.resolve(jsonResp(null)));
+    renderCard(PR_ID, buildFetchMock(null));
     await waitFor(() =>
       expect(screen.getByText("Recalculate")).toBeInTheDocument(),
     );
@@ -98,12 +116,14 @@ describe("IntentCard — empty state (no intent)", () => {
 
 describe("IntentCard — recalculate mutation", () => {
   it("clicking Recalculate fires a POST mutation", async () => {
-    let callCount = 0;
-    renderCard(PR_ID, () => {
-      callCount++;
-      // First call: GET intent (null), second: POST recalculate
-      if (callCount === 1) return Promise.resolve(jsonResp(null));
-      return Promise.resolve(jsonResp(INTENT));
+    let intentCallCount = 0;
+    renderCard(PR_ID, (_url?: unknown) => {
+      const path = typeof _url === "string" ? _url : String(_url ?? "");
+      if (path.includes("/risks")) return Promise.resolve(jsonRespFor(null));
+      // intent calls: first GET → null, POST recalculate → INTENT
+      intentCallCount++;
+      if (intentCallCount === 1) return Promise.resolve(jsonRespFor(null));
+      return Promise.resolve(jsonRespFor(INTENT));
     });
 
     // Wait for empty state
@@ -113,6 +133,6 @@ describe("IntentCard — recalculate mutation", () => {
     fireEvent.click(screen.getByText("Recalculate"));
 
     // A POST to /pulls/<id>/intent should have been made
-    await waitFor(() => expect(callCount).toBeGreaterThan(1));
+    await waitFor(() => expect(intentCallCount).toBeGreaterThan(1));
   });
 });

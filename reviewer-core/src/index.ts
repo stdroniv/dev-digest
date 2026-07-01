@@ -65,6 +65,7 @@ export {
   toReviewPayload,
   gateTriggered,
   countBlockers,
+  verdictFromFindings,
   type ToReviewOptions,
 } from './output/to-review.js';
 

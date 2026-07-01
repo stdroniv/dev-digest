@@ -20,6 +20,7 @@ import type { RepoRef } from '@devdigest/shared';
 import type { Container } from '../../../platform/container.js';
 import { withTimeout } from '../../../platform/resilience.js';
 import { parseSymbols, parseReferences, langForFile } from '../../../adapters/astgrep/index.js';
+import { buildResolverContext, collectImports, resolveImportEdges, unionEdges } from './import-edges.js';
 import { extractEndpoints, extractCrons } from '../../../adapters/codeindex/extract.js';
 import {
   DEFAULT_REPO_MAP_TOKEN_BUDGET,
@@ -190,8 +191,8 @@ export async function runIncremental(
           contentHash,
         });
       }
-      const endpoints = extractEndpoints(source);
-      const crons = extractCrons(source);
+      const endpoints = extractEndpoints(source, relPath);
+      const crons = extractCrons(source, relPath);
       if (endpoints.length > 0 || crons.length > 0) {
         factsBuf.push({ filePath: relPath, endpoints, crons });
       }
@@ -216,8 +217,12 @@ export async function runIncremental(
   let edgeRows: IndexerEdgeRow[] = [];
   try {
     const allFiles = (await walkClone(repo.clonePath)).files;
-    const edges = await container.depgraph.buildEdges(repo.clonePath, allFiles);
-    edgeRows = edges.map((e) => ({ fromFile: e.from, toFile: e.to }));
+    const cruiseEdges = await container.depgraph.buildEdges(repo.clonePath, allFiles);
+    // Union with monorepo-aware resolver edges (same as full pipeline).
+    const imports = await collectImports(repo.clonePath, allFiles);
+    const ctx = await buildResolverContext(repo.clonePath, allFiles);
+    const allEdges = unionEdges(cruiseEdges, resolveImportEdges(imports, ctx));
+    edgeRows = allEdges.map((e) => ({ fromFile: e.from, toFile: e.to }));
     await repository.replaceEdges(repoId, edgeRows);
     // reset: a changed decl-file can invalidate a prior resolution.
     await repository.resolveReferences(repoId, { reset: true });

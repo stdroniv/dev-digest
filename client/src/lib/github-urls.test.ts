@@ -1,5 +1,10 @@
 import { describe, it, expect } from "vitest";
-import { githubBlobUrl, githubPrFileUrl, githubPrUrl } from "./github-urls";
+import {
+  blastCallerUrl,
+  githubBlobUrl,
+  githubPrFileUrl,
+  githubPrUrl,
+} from "./github-urls";
 
 describe("githubPrUrl", () => {
   it("builds the PR conversation URL", () => {
@@ -45,5 +50,27 @@ describe("githubPrFileUrl", () => {
     const url = githubPrFileUrl("acme/payments-api", 482, "src/config.ts", 12, 12, "abc");
     expect(url).toContain("/pull/482/files");
     expect(url).not.toContain("/blob/");
+  });
+});
+
+describe("blastCallerUrl", () => {
+  it("pins to the indexed SHA when present", () => {
+    expect(blastCallerUrl("acme/payments-api", "abc123", "src/db/queries.ts", 88)).toBe(
+      "https://github.com/acme/payments-api/blob/abc123/src/db/queries.ts#L88",
+    );
+  });
+
+  it("falls back to HEAD when the indexed SHA is missing (still clickable)", () => {
+    expect(blastCallerUrl("acme/payments-api", null, "src/db/queries.ts", 88)).toBe(
+      "https://github.com/acme/payments-api/blob/HEAD/src/db/queries.ts#L88",
+    );
+    expect(blastCallerUrl("acme/payments-api", "", "src/db/queries.ts", 88)).toBe(
+      "https://github.com/acme/payments-api/blob/HEAD/src/db/queries.ts#L88",
+    );
+  });
+
+  it("returns null only when the repo full name is missing", () => {
+    expect(blastCallerUrl(null, "abc123", "src/db/queries.ts", 88)).toBeNull();
+    expect(blastCallerUrl(undefined, null, "src/db/queries.ts", 88)).toBeNull();
   });
 });

@@ -15,6 +15,7 @@ const TRACE: RunTrace = {
   specs_read: [],
   documents_read: [],
   documents_unavailable: [],
+  documents_repo_excluded: [],
   log: [
     { t: "00.10", kind: "info", msg: "Starting review with agent Security" },
     { t: "00.90", kind: "result", msg: "Citation grounding: 2/2 passed" },

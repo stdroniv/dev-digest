@@ -1,4 +1,4 @@
-# Spec: Project Context  |  Spec ID: SPEC-01  |  Status: draft
+# Spec: Project Context  |  Spec ID: SPEC-01  |  Status: approved
 
 **Supersedes:** none
 
@@ -52,12 +52,19 @@ between "the rule is written down" and "the reviewer actually applies and quotes
   code indexer.
 
 ## User stories
+- As a reviewer-agent author, I want to reach a repository's Project Context from the
+  primary navigation whenever that repository is active, so that I can find it directly
+  instead of hunting for a link buried on another page.
 - As a reviewer-agent author, I want to browse the project documents that exist in a
   repository, so that I know what grounding is available to attach.
 - As a reviewer-agent author, I want to attach specific documents to an agent and order
   them, so that the agent reviews changes against our written specs and invariants.
 - As a skill author, I want to attach documents to a skill, so that every agent using that
   skill inherits the same grounding without re-attaching it per agent.
+- As a reviewer-agent (or skill) author who reviews pull requests across several
+  repositories, I want each repository to keep its own independent attachment list on the
+  same agent (or skill), so that switching the active repository shows me exactly the
+  documents relevant to that repository without mixing, clearing, or losing the others.
 - As a reviewer-agent author, I want to see how many tokens the attached documents add
   before I run, so that I can make an informed cost decision.
 - As someone reading a completed run, I want to see exactly which documents were read and
@@ -89,6 +96,17 @@ between "the rule is written down" and "the reviewer actually applies and quotes
 - **AC-7** — The system shall provide a filter that narrows the displayed document list by a
   user-entered search term.
 
+### Discoverability & navigation
+- **AC-33** — WHILE a repository is selected/active, the system shall present a persistent
+  navigation entry point to that repository's Project Context screen alongside the
+  repository's other primary navigation entries, so that the screen is discoverable without
+  first opening another page.
+- **AC-34** — WHEN a user activates that navigation entry point, the system shall open the
+  Project Context screen for the currently active repository directly, without requiring the
+  user to navigate through an intermediate page.
+- **AC-35** — WHILE no repository is selected/active, the system shall not present the
+  Project Context navigation entry point.
+
 ### Configurable roots
 - **AC-8** — The system shall default the set of root folders to `specs`, `docs`, and
   `insights`.
@@ -105,8 +123,9 @@ between "the rule is written down" and "the reviewer actually applies and quotes
 - **AC-12** — WHEN a user reorders attached documents, the system shall persist that order
   and preserve it across reloads.
 - **AC-13** — WHEN a user attaches a document, the system shall store the document's
-  repository-relative path in the agent's (or skill's) metadata, and shall never inline the
-  document's text into the agent's or skill's stored prompt/body at attach time.
+  repository-relative path in the agent's (or skill's) attachment list for the repository
+  under which it was attached, and shall never inline the document's text into the agent's
+  or skill's stored prompt/body at attach time.
 - **AC-14** — WHEN a user views a document row in the Context tab, the system shall let the
   user preview that document's content without leaving the editor.
 - **AC-15** — The system shall display, in the agent (or skill) Context tab, the estimated
@@ -114,11 +133,25 @@ between "the rule is written down" and "the reviewer actually applies and quotes
   selection changes.
 - **AC-16** — The system shall indicate, in the Context tab, that attached documents are
   injected into each run as an untrusted block.
+- **AC-36** — The system shall provide, within the agent (or skill) Context tab's document
+  list, a filter that narrows the displayed documents by a user-entered search term over
+  their repository-relative paths, independently of the filter on the standalone Project
+  Context screen (AC-7).
+- **AC-37** — The system shall display, within the agent (or skill) Context tab, a count of
+  the documents currently attached to that agent (or skill) for the active repository, and
+  WHILE a filter (AC-36) is active shall also show how many of the total discovered
+  documents are currently shown; this count is distinct from the estimated token volume
+  (AC-15).
+- **AC-38** — IF no repository is globally active when a user opens an agent (or skill)
+  Context tab, THEN the system shall show a state prompting the user to select a repository
+  before documents can be listed or attached, instead of an empty document list or an error.
+  This state is distinct from the repository-selected-but-no-documents empty state (AC-4).
 
 ### Run-time assembly
 - **AC-17** — WHEN a review run executes, the system shall compute the effective set of
-  attached documents as the union of the agent's own attached documents and the attached
-  documents of every enabled skill that agent uses.
+  attached documents — each entity's documents taken from its attachment list for the
+  reviewed pull request's repository — as the union of the agent's own attached documents
+  and the attached documents of every enabled skill that agent uses.
 - **AC-18** — WHEN the effective set is computed, the system shall de-duplicate documents by
   repository-relative path so that a document attached at both the agent and skill level
   appears exactly once.
@@ -154,6 +187,24 @@ between "the rule is written down" and "the reviewer actually applies and quotes
 - **AC-28** — The system shall record each read document's origin (the agent itself, or the
   specific skill it came from) so the effective set is traceable.
 
+### Per-repository attachment lists
+- **AC-29** — The system shall maintain, for each agent and each skill, an independent
+  ordered attachment list per repository, such that a document attached while a given
+  repository is active is recorded only under that repository's list for that agent (or
+  skill) and never appears in, mixes with, or affects any other repository's list.
+- **AC-30** — WHEN the globally active repository changes while an agent (or skill) Context
+  tab is open, the system shall show and allow editing of only that agent's (or skill's)
+  attachment list for the newly active repository, without clearing, invalidating, requiring
+  confirmation for, or otherwise affecting any other repository's list; a repository the
+  entity has not yet attached documents under shall present an empty list.
+- **AC-31** — WHEN a review run executes, the system shall draw the agent's and each enabled
+  skill's attached documents solely from their attachment lists for the reviewed pull
+  request's own repository; IF an entity has no attachment list for that repository, THEN
+  the system shall treat that entity as having no attached documents for the run, and the
+  run shall execute normally.
+- **AC-32** — The system shall apply the per-repository attachment model (AC-29, AC-30,
+  AC-31) identically whether the attachment lists belong to an agent or a skill.
+
 ## Edge cases
 - **No documents found** — configured roots exist but contain no `.md` → empty state
   (AC-4), not an error; attach tabs show an empty document list.
@@ -170,9 +221,25 @@ between "the rule is written down" and "the reviewer actually applies and quotes
 - **Duplicate file names in different roots** (e.g. `specs/public-api.md` vs
   `docs/public-api.md`) → treated as distinct documents; disambiguated by full
   repository-relative path (AC-2, AC-13).
-- **Attached path absent in a different repository the same agent reviews** — a portable
-  repository-relative path may exist in one repo but not another; each run resolves paths
-  against the reviewed PR's own clone, skipping absent ones (AC-20, AC-24).
+- **Same agent (or skill) used across several repositories** — each repository keeps its own
+  independent, always-valid ordered attachment list on that agent (or skill) (AC-29);
+  documents attached under one repository never appear in, mix with, or invalidate another
+  repository's list.
+- **User switches the globally active repository while a Context tab is open** — the tab
+  switches to show and edit only the newly active repository's attachment list for that
+  agent (or skill) (AC-30); nothing is cleared, invalidated, or requires confirmation,
+  because each repository's list is independent and always valid.
+- **Review run for a repository the agent (or skill) has never attached documents under** —
+  that repository's attachment list is empty, so the run proceeds with no attached documents
+  for that entity (AC-31), identical to the no-documents-attached behaviour (AC-23), never a
+  hard failure. Because a run only ever reads the list keyed to the reviewed PR's own
+  repository, its documents always belong to that repository by construction — there is no
+  cross-repository mismatch to reconcile.
+- **No repository active when a Context tab is opened** — the tab prompts the user to select
+  a repository before documents can be listed or attached (AC-38), rather than showing an
+  empty list or an error. This is distinct from the **repository selected but has zero
+  discovered documents** case (AC-4), which shows the existing "no spec files yet" empty
+  state: AC-38 covers "no repo selected at all", AC-4 covers "repo selected, no docs".
 - **Large document or many attached documents** — token volume is measured and displayed
   (AC-15, AC-26); this version imposes no cap or warning (non-goal).
 - **Non-TypeScript / non-code repository** — discovery is Markdown-only and independent of
@@ -183,6 +250,8 @@ between "the rule is written down" and "the reviewer actually applies and quotes
   already excluded from the prompt.
 - **Document list changes on disk while the screen is open** — a refresh (AC-6) reconciles
   the displayed list with the current clone contents.
+- **No repository selected/active** — the Project Context navigation entry is not shown
+  (AC-35); the entry is repo-scoped and appears only once a repository is active (AC-33).
 
 ## Cross-module interactions
 <!-- Behavioural hand-offs only — what information must flow and when, not the wiring. -->
@@ -190,11 +259,14 @@ between "the rule is written down" and "the reviewer actually applies and quotes
   shall make available the set of discovered `.md` documents (their repository-relative
   paths and origin roots) sourced from that repository's clone.
 - WHEN a user attaches or reorders documents, the system shall make the ordered set of
-  attached document paths durable against the agent or skill, so that later runs and later
-  editor sessions observe the same attachment.
+  attached document paths durable against the agent or skill under the repository active at
+  attach time, so that later runs for that repository and later editor sessions with that
+  repository active observe the same attachment, while other repositories' lists on the same
+  entity are unaffected.
 - WHEN a review run starts, the system shall make the agent's effective attached-document
-  set (agent-level documents unioned with enabled-skill-level documents, de-duplicated and
-  ordered per AC-18/AC-19) available to the review-assembly step.
+  set (agent-level documents unioned with enabled-skill-level documents, each drawn from the
+  attachment list keyed to the reviewed pull request's repository, de-duplicated and ordered
+  per AC-18/AC-19) available to the review-assembly step.
 - WHEN the review prompt is assembled, the system shall make each effective document's
   current on-disk content available to the existing untrusted `## Project context` prompt
   block, and make the read-document list, per-document origin, and estimated token volume
@@ -214,12 +286,18 @@ between "the rule is written down" and "the reviewer actually applies and quotes
   shall be identical to the pre-feature behaviour (AC-23).
 - **Trust boundary** — attached document content is foreign text and shall never be treated
   as instructions (see Untrusted inputs).
+- **Per-repository isolation** — every agent's (and skill's) attachment lists are isolated
+  per repository (AC-29); an editor session only ever shows and edits the list for the
+  active repository (AC-30), and a run only ever reads the list keyed to the reviewed pull
+  request's repository (AC-31). Documents from different repositories therefore can never
+  mix into one effective set — not by an anchor or a confirmation flow, but by construction,
+  and no run-time cross-repository mismatch state can arise.
 
 ## Inputs (provenance)
 - Discovered `.md` document paths (recursive scan of configured roots in the clone) —
   [deterministic: filesystem scan of the repo clone]; no LLM call.
-- Attached document paths (agent-level and skill-level) — [new: user-provided selection,
-  stored as metadata]; no LLM call.
+- Attached document paths (agent-level and skill-level, kept as an independent ordered list
+  per repository) — [new: user-provided selection, stored as metadata]; no LLM call.
 - Document content read at run time — [deterministic: read verbatim from the reviewed PR's
   repo clone]; no LLM call.
 - Estimated token volume of read documents — [deterministic: local token estimation];

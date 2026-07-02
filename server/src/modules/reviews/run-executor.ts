@@ -306,17 +306,17 @@ export class ReviewRunExecutor {
       // `documents_unavailable` and logged via `runLog.info` (never `error`,
       // per server/INSIGHTS — a missing doc must never fail the run — AC-24).
       const skillsRepo = new SkillsRepository(this.container.db);
-      const agentDocs = await this.agents.linkedDocuments(agent.id);
+      const agentDocs = await this.agents.linkedDocuments(agent.id, repo.id);
       const enabledSkillDocs = await Promise.all(
         linkedSkills
           .filter((l) => l.skill.enabled)
           .map(async (l) => ({
             skillId: l.skill.id,
             skillName: l.skill.name,
-            docs: await skillsRepo.linkedDocuments(l.skill.id),
+            docs: await skillsRepo.linkedDocuments(l.skill.id, repo.id),
           })),
       );
-      const effectiveDocs = computeEffectiveDocuments(agentDocs, enabledSkillDocs);
+      const { documents: effectiveDocs } = computeEffectiveDocuments(agentDocs, enabledSkillDocs);
 
       const documentsService = new DocumentsService(this.container);
       const readDocs: { path: string; content: string; origin: DocumentRead['origin'] }[] = [];
@@ -490,6 +490,10 @@ export class ReviewRunExecutor {
           origin: d.origin,
         })),
         documents_unavailable: documentsUnavailable,
+        // Repo-mismatch exclusion no longer exists (T3/T6/T7): links are fetched
+        // scoped to this PR's own repo, so no mismatch can occur by construction.
+        // Field stays present-but-empty to satisfy the existing RunTrace contract.
+        documents_repo_excluded: [],
         // Persisted log = the run's FULL event buffer (incl. shared pre-work:
         // diff load + intent), not just events recorded inside this method.
         log: runLog.logFor(runId),
@@ -639,6 +643,7 @@ export class ReviewRunExecutor {
       specs_read: [],
       documents_read: [],
       documents_unavailable: [],
+      documents_repo_excluded: [],
       log: this.container.runBus.buffer(runId).map((e) => ({ t: e.t, kind: e.kind, msg: e.msg })),
     };
   }

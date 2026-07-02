@@ -42,22 +42,27 @@ export function useDocumentPreview(repoId: string | null | undefined, path: stri
 
 // ---- agent ↔ document links (Agent editor → Context tab) --------------------
 
-export function useAgentDocuments(agentId: string | null | undefined) {
+export function useAgentDocuments(agentId: string | null | undefined, repoId: string | null | undefined) {
   return useQuery({
-    queryKey: ["agent-documents", agentId],
-    queryFn: () => api.get<AgentDocumentLink[]>(`/agents/${agentId}/documents`),
-    enabled: !!agentId,
+    queryKey: ["agent-documents", agentId, repoId],
+    queryFn: () => api.get<AgentDocumentLink[]>(`/agents/${agentId}/documents?repo_id=${repoId}`),
+    enabled: !!agentId && !!repoId,
   });
 }
 
-/** Replace the full ordered set of an agent's linked documents (attach + reorder). */
+/** Replace the full ordered set of an agent's linked documents (attach + reorder).
+ *  `repoId` anchors the same-repository invariant (AC-29) and is always sent as
+ *  `repo_id` — the server scopes both the read and the replace to one repo. */
 export function useSetAgentDocuments(agentId: string) {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (paths: string[]) =>
-      api.post<AgentDocumentLink[]>(`/agents/${agentId}/documents`, { paths }),
-    onSuccess: (data) => {
-      qc.setQueryData(["agent-documents", agentId], data);
+    mutationFn: ({ paths, repoId }: { paths: string[]; repoId: string }) =>
+      api.post<AgentDocumentLink[]>(`/agents/${agentId}/documents`, {
+        paths,
+        repo_id: repoId,
+      }),
+    onSuccess: (data, { repoId }) => {
+      qc.setQueryData(["agent-documents", agentId, repoId], data);
       qc.invalidateQueries({ queryKey: ["agent", agentId] });
     },
   });
@@ -65,22 +70,27 @@ export function useSetAgentDocuments(agentId: string) {
 
 // ---- skill ↔ document links (Skill editor → "Project context to use") ------
 
-export function useSkillDocuments(skillId: string | null | undefined) {
+export function useSkillDocuments(skillId: string | null | undefined, repoId: string | null | undefined) {
   return useQuery({
-    queryKey: ["skill-documents", skillId],
-    queryFn: () => api.get<SkillDocumentLink[]>(`/skills/${skillId}/documents`),
-    enabled: !!skillId,
+    queryKey: ["skill-documents", skillId, repoId],
+    queryFn: () => api.get<SkillDocumentLink[]>(`/skills/${skillId}/documents?repo_id=${repoId}`),
+    enabled: !!skillId && !!repoId,
   });
 }
 
-/** Replace the full ordered set of a skill's linked documents (attach + reorder). */
+/** Replace the full ordered set of a skill's linked documents (attach + reorder).
+ *  `repoId` anchors the same-repository invariant (AC-29) and is always sent as
+ *  `repo_id` — the server scopes both the read and the replace to one repo. */
 export function useSetSkillDocuments(skillId: string) {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (paths: string[]) =>
-      api.post<SkillDocumentLink[]>(`/skills/${skillId}/documents`, { paths }),
-    onSuccess: (data) => {
-      qc.setQueryData(["skill-documents", skillId], data);
+    mutationFn: ({ paths, repoId }: { paths: string[]; repoId: string }) =>
+      api.post<SkillDocumentLink[]>(`/skills/${skillId}/documents`, {
+        paths,
+        repo_id: repoId,
+      }),
+    onSuccess: (data, { repoId }) => {
+      qc.setQueryData(["skill-documents", skillId, repoId], data);
       qc.invalidateQueries({ queryKey: ["skill", skillId] });
     },
   });

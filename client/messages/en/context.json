@@ -34,6 +34,5 @@
   "preview": {
     "selectPrompt": "Select a document to preview its content.",
     "loadError": "Couldn’t load this document."
-  },
-  "conventionsLink": "View project context →"
+  }
 }

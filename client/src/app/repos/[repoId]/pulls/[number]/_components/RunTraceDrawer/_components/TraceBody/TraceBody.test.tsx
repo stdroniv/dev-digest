@@ -16,7 +16,15 @@ function renderWithIntl(ui: React.ReactElement) {
   );
 }
 
-const BASE: Omit<RunTrace, "specs_read" | "documents_read" | "documents_unavailable" | "prompt_assembly" | "stats"> = {
+const BASE: Omit<
+  RunTrace,
+  | "specs_read"
+  | "documents_read"
+  | "documents_unavailable"
+  | "documents_repo_excluded"
+  | "prompt_assembly"
+  | "stats"
+> = {
   config: { agent: "Security", version: "1", provider: "openai", model: "gpt-4.1", pr: 482, source: "local" },
   tool_calls: [],
   raw_output: '{"verdict":"request_changes"}',
@@ -54,6 +62,14 @@ describe("TraceBody — project-context trace fields (T14)", () => {
         },
       ],
       documents_unavailable: ["specs/removed.md"],
+      // AC-31 — a whole skill-level attached set excluded for a repo mismatch,
+      // coexisting with the per-document `documents_unavailable` case above.
+      documents_repo_excluded: [
+        {
+          origin: { type: "skill", skill_id: "sk_2", skill_name: "Naming Convention" },
+          paths: ["specs/other-repo-a.md", "specs/other-repo-b.md"],
+        },
+      ],
     };
 
     renderWithIntl(<TraceBody trace={trace} findings={[]} />);
@@ -70,6 +86,15 @@ describe("TraceBody — project-context trace fields (T14)", () => {
     // documents_unavailable renders as a distinct note, not silently absent.
     expect(screen.getByText("Attached but unavailable")).toBeInTheDocument();
     expect(screen.getByText("specs/removed.md")).toBeInTheDocument();
+
+    // documents_repo_excluded renders as a SECOND, visually/textually DISTINCT
+    // block (different label from "Attached but unavailable") — never merged
+    // into the same list, and never lists the individual excluded paths (they
+    // were never resolved), only the origin + count.
+    expect(screen.getByText("Excluded — different repository")).toBeInTheDocument();
+    expect(screen.getByText("Naming Convention")).toBeInTheDocument();
+    expect(screen.getByText("2 documents")).toBeInTheDocument();
+    expect(screen.queryByText("specs/other-repo-a.md")).not.toBeInTheDocument();
 
     // Prompt assembly section defaults to collapsed — open it to reach the specs block.
     fireEvent.click(screen.getByText("Prompt assembly"));
@@ -106,6 +131,7 @@ describe("TraceBody — project-context trace fields (T14)", () => {
       specs_read: [],
       documents_read: [],
       documents_unavailable: [],
+      documents_repo_excluded: [],
     };
 
     renderWithIntl(<TraceBody trace={trace} findings={[]} />);
@@ -114,6 +140,40 @@ describe("TraceBody — project-context trace fields (T14)", () => {
     expect(screen.getByText("none")).toBeInTheDocument();
     expect(screen.queryByText("Documents read")).not.toBeInTheDocument();
     expect(screen.queryByText("Attached but unavailable")).not.toBeInTheDocument();
+    expect(screen.queryByText("Excluded — different repository")).not.toBeInTheDocument();
     expect(screen.queryByText("Project context — untrusted (dynamic)")).not.toBeInTheDocument();
+  });
+
+  it("renders without error when documents_repo_excluded is entirely MISSING from the trace object (older/legacy trace, relying on the client-side ?? [] guard)", () => {
+    // Cast past the compile-time-required field to prove the RUNTIME guard in
+    // TraceBody (not just the server-side Zod default) tolerates a genuinely
+    // absent key — e.g. a trace persisted before this migration and read back
+    // without ever being re-parsed through the current RunTrace schema.
+    const legacyTrace = {
+      ...BASE,
+      stats: {
+        duration_ms: 1000,
+        tokens_in: 100,
+        tokens_out: 50,
+        findings: 0,
+        grounding: "1/1 passed",
+        cost_usd: 0.01,
+      },
+      prompt_assembly: {
+        system: "You are a reviewer.",
+        skills: null,
+        memory: null,
+        specs: null,
+        user: "Review PR #1",
+      },
+      specs_read: [],
+      documents_read: [],
+      documents_unavailable: [],
+      // documents_repo_excluded intentionally OMITTED.
+    } as unknown as RunTrace;
+
+    expect(() => renderWithIntl(<TraceBody trace={legacyTrace} findings={[]} />)).not.toThrow();
+    expect(screen.getByText("Configuration")).toBeInTheDocument();
+    expect(screen.queryByText("Excluded — different repository")).not.toBeInTheDocument();
   });
 });

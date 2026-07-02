@@ -1,15 +1,15 @@
 import { describe, it, expect, afterEach, vi } from "vitest";
 import { render, screen, cleanup, fireEvent } from "@testing-library/react";
 import { NextIntlClientProvider } from "next-intl";
-import type { Agent, AgentDocumentLink, ProjectDocument, Repo } from "@devdigest/shared";
-import messages from "../../../../../../../../messages/en/agents.json";
+import type { ProjectDocument, Repo, SkillDocumentLink } from "@devdigest/shared";
+import messages from "../../../../../../../../messages/en/skills.json";
 
 const REPO: Repo = {
   id: "r1",
   workspace_id: "w1",
   owner: "acme",
-  name: "payments-api",
-  full_name: "acme/payments-api",
+  name: "widgets",
+  full_name: "acme/widgets",
   default_branch: "main",
   clone_path: "/clones/r1",
   last_polled_at: null,
@@ -40,9 +40,9 @@ const setMutate = vi.fn();
 // `useDocumentAttachment` depends on the `links` reference, so returning a
 // fresh array literal per render (even per repo) would infinite-loop the
 // component (client/INSIGHTS.md).
-const LINKS_R1: AgentDocumentLink[] = [{ path: "specs/SPEC-01.md", order: 0, repo_id: "r1" }];
-const LINKS_R2: AgentDocumentLink[] = [];
-let linksByRepo: Record<string, AgentDocumentLink[]> = { r1: LINKS_R1, r2: LINKS_R2 };
+const LINKS_R1: SkillDocumentLink[] = [{ path: "specs/SPEC-01.md", order: 0, repo_id: "r1" }];
+const LINKS_R2: SkillDocumentLink[] = [];
+let linksByRepo: Record<string, SkillDocumentLink[]> = { r1: LINKS_R1, r2: LINKS_R2 };
 
 // Mutable "active repo" the mocked `useActiveRepo()` reads — tests reassign
 // this then call RTL's `rerender` to simulate switching the global nav repo
@@ -63,11 +63,11 @@ vi.mock("@/lib/repo-context", () => ({
 
 vi.mock("@/lib/hooks/documents", () => ({
   useRepoDocuments: () => ({ data: repoDocsOverride ?? REPO_DOCS_READY, isLoading: false }),
-  useAgentDocuments: (_id: string, repoId: string | null) => ({
+  useSkillDocuments: (_id: string, repoId: string | null) => ({
     data: repoId ? linksByRepo[repoId] : undefined,
     isLoading: false,
   }),
-  useSetAgentDocuments: () => ({ mutate: setMutate, isPending: false }),
+  useSetSkillDocuments: () => ({ mutate: setMutate, isPending: false }),
   useDocumentPreview: () => ({ data: undefined, isLoading: false }),
 }));
 
@@ -81,32 +81,17 @@ afterEach(() => {
   repoDocsOverride = null;
 });
 
-const AGENT: Agent = {
-  id: "ag1",
-  name: "Security Reviewer",
-  description: "",
-  provider: "openai",
-  model: "gpt-4.1",
-  system_prompt: "x",
-  output_schema: null,
-  strategy: "single-pass",
-  ci_fail_on: "critical",
-  repo_intel: true,
-  enabled: true,
-  version: 1,
-};
-
 function renderWithIntl(ui: React.ReactElement) {
   return render(
-    <NextIntlClientProvider locale="en" messages={{ agents: messages }}>
+    <NextIntlClientProvider locale="en" messages={{ skills: messages }}>
       {ui}
     </NextIntlClientProvider>,
   );
 }
 
-describe("Agent ContextTab", () => {
+describe("Skill ContextTab", () => {
   it("lists the repo's documents with an origin-root badge and the summed token volume", () => {
-    renderWithIntl(<ContextTab agent={AGENT} />);
+    renderWithIntl(<ContextTab skillId="sk1" />);
     expect(screen.getByText("specs/SPEC-01.md")).toBeInTheDocument();
     expect(screen.getByText("docs/architecture.md")).toBeInTheDocument();
     expect(screen.getByText("specs")).toBeInTheDocument();
@@ -116,12 +101,12 @@ describe("Agent ContextTab", () => {
   });
 
   it("renders the untrusted-block note", () => {
-    renderWithIntl(<ContextTab agent={AGENT} />);
+    renderWithIntl(<ContextTab skillId="sk1" />);
     expect(screen.getByRole("note")).toHaveTextContent(/untrusted/i);
   });
 
   it("has no repo dropdown and no repo-mismatch confirm modal", () => {
-    renderWithIntl(<ContextTab agent={AGENT} />);
+    renderWithIntl(<ContextTab skillId="sk1" />);
     expect(screen.queryByRole("combobox")).not.toBeInTheDocument();
     expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
   });
@@ -129,7 +114,7 @@ describe("Agent ContextTab", () => {
   it("coalesces the Checkbox's double-fire into one mutation (no add-back)", () => {
     // The vendored Checkbox (<button> in <label>) fires onChange twice per click.
     // Without the in-flight guard the second fire re-attaches the just-detached doc.
-    renderWithIntl(<ContextTab agent={AGENT} />);
+    renderWithIntl(<ContextTab skillId="sk1" />);
     // specs/SPEC-01.md is the only linked doc; its checkbox is the first row's.
     const checkbox = screen.getAllByRole("checkbox")[0]!;
     fireEvent.click(checkbox); // genuine click → detach
@@ -140,7 +125,7 @@ describe("Agent ContextTab", () => {
   });
 
   it("updates the token-volume label as the attached selection changes", () => {
-    renderWithIntl(<ContextTab agent={AGENT} />);
+    renderWithIntl(<ContextTab skillId="sk1" />);
     expect(screen.getByText("120 tokens attached")).toBeInTheDocument();
 
     // Attach the second doc too (single click — genuine attach, not a double-fire).
@@ -160,7 +145,7 @@ describe("Agent ContextTab", () => {
       { path: "specs/SPEC-01.md", order: 0, repo_id: "r1" },
       { path: "docs/architecture.md", order: 1, repo_id: "r1" },
     ];
-    renderWithIntl(<ContextTab agent={AGENT} />);
+    renderWithIntl(<ContextTab skillId="sk1" />);
 
     const rows = screen.getAllByRole("checkbox").map((cb) => cb.closest("div[draggable]")!);
     const [firstRow, secondRow] = rows;
@@ -183,7 +168,7 @@ describe("Agent ContextTab", () => {
       linksByRepo.r1 = [{ path: "specs/SPEC-01.md", order: 0, repo_id: "r1" }];
       linksByRepo.r2 = [{ path: "docs/architecture.md", order: 0, repo_id: "r2" }];
 
-      const { rerender } = renderWithIntl(<ContextTab agent={AGENT} />);
+      const { rerender } = renderWithIntl(<ContextTab skillId="sk1" />);
       // repo r1: only specs/SPEC-01.md attached.
       expect(screen.getAllByRole("checkbox")[0]).toBeChecked();
       expect(screen.getAllByRole("checkbox")[1]).not.toBeChecked();
@@ -191,8 +176,8 @@ describe("Agent ContextTab", () => {
       // Switch the globally active repo (no dialog, no gating).
       activeRepo = REPO_2;
       rerender(
-        <NextIntlClientProvider locale="en" messages={{ agents: messages }}>
-          <ContextTab agent={AGENT} />
+        <NextIntlClientProvider locale="en" messages={{ skills: messages }}>
+          <ContextTab skillId="sk1" />
         </NextIntlClientProvider>,
       );
 
@@ -216,11 +201,11 @@ describe("Agent ContextTab", () => {
       linksByRepo.r1 = [{ path: "specs/SPEC-01.md", order: 0, repo_id: "r1" }];
       linksByRepo.r2 = [];
 
-      const { rerender } = renderWithIntl(<ContextTab agent={AGENT} />);
+      const { rerender } = renderWithIntl(<ContextTab skillId="sk1" />);
       activeRepo = REPO_2;
       rerender(
-        <NextIntlClientProvider locale="en" messages={{ agents: messages }}>
-          <ContextTab agent={AGENT} />
+        <NextIntlClientProvider locale="en" messages={{ skills: messages }}>
+          <ContextTab skillId="sk1" />
         </NextIntlClientProvider>,
       );
 
@@ -238,7 +223,7 @@ describe("Agent ContextTab", () => {
   describe("AC-38 — no active repo", () => {
     it("renders the select-a-repository prompt when there is no active repo", () => {
       activeRepo = null;
-      renderWithIntl(<ContextTab agent={AGENT} />);
+      renderWithIntl(<ContextTab skillId="sk1" />);
 
       expect(screen.getByText(messages.context.selectRepoTitle)).toBeInTheDocument();
       expect(screen.getByText(messages.context.selectRepoBody)).toBeInTheDocument();
@@ -250,7 +235,7 @@ describe("Agent ContextTab", () => {
     it("renders the distinct AC-4 empty state (not the AC-38 prompt) when a repo is active but has zero docs", () => {
       repoDocsOverride = REPO_DOCS_EMPTY;
       linksByRepo.r1 = [];
-      renderWithIntl(<ContextTab agent={AGENT} />);
+      renderWithIntl(<ContextTab skillId="sk1" />);
 
       expect(screen.getByText(messages.context.emptyTitle)).toBeInTheDocument();
       expect(screen.queryByText(messages.context.selectRepoTitle)).not.toBeInTheDocument();
@@ -259,12 +244,12 @@ describe("Agent ContextTab", () => {
 
   describe("AC-36 / AC-37 — filter and counts", () => {
     it("always shows the attached count, independent of the filter", () => {
-      renderWithIntl(<ContextTab agent={AGENT} />);
+      renderWithIntl(<ContextTab skillId="sk1" />);
       expect(screen.getByText("1 attached")).toBeInTheDocument();
     });
 
     it("narrows the visible rows by case-insensitive path substring", () => {
-      renderWithIntl(<ContextTab agent={AGENT} />);
+      renderWithIntl(<ContextTab skillId="sk1" />);
       expect(screen.getByText("specs/SPEC-01.md")).toBeInTheDocument();
       expect(screen.getByText("docs/architecture.md")).toBeInTheDocument();
 
@@ -277,7 +262,7 @@ describe("Agent ContextTab", () => {
     });
 
     it("shows the 'N of M shown' badge only while filtering, matching the visible row count", () => {
-      renderWithIntl(<ContextTab agent={AGENT} />);
+      renderWithIntl(<ContextTab skillId="sk1" />);
       expect(screen.queryByText(/of 2 shown/)).not.toBeInTheDocument();
 
       fireEvent.change(screen.getByPlaceholderText(messages.context.filterPlaceholder), {

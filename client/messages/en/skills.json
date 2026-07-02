@@ -111,6 +111,7 @@
   "tabs": {
     "config": "Config",
     "preview": "Preview",
+    "context": "Context",
     "stats": "Stats",
     "versions": "Versions"
   },
@@ -163,16 +164,18 @@
     "emptyTitle": "No versions yet",
     "emptyBody": "Save a change to the body to create the first snapshot."
   },
-  "documents": {
-    "title": "Project context to use",
+  "context": {
+    "title": "Context",
     "hint": "Attach Markdown docs discovered in a repo clone (specs, docs, insights). Only the path is stored — content is read fresh from the repo at run time.",
     "tokenVolume": "{count} tokens attached",
-    "repoLabel": "Repository",
     "unknownRoot": "attached",
     "previewToggle": "Preview",
     "previewLoading": "Loading preview…",
-    "noReposTitle": "No repos yet",
-    "noReposBody": "Add a repo to browse its project context documents.",
+    "filterPlaceholder": "Filter by path…",
+    "attachedCount": "{count} attached",
+    "filterShown": "{shown} of {total} shown",
+    "selectRepoTitle": "Select a repository",
+    "selectRepoBody": "Pick a repository from the nav switcher to browse and attach its project context documents.",
     "notClonedTitle": "Repo not cloned",
     "notClonedBody": "Clone this repo to discover its project context documents.",
     "emptyTitle": "No project context docs",

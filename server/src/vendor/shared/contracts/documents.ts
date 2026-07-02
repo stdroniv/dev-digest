@@ -22,6 +22,9 @@ export type ProjectDocument = z.infer<typeof ProjectDocument>;
 export const AgentDocumentLink = z.object({
   path: z.string(),
   order: z.number().int(),
+  // Anchor repo (same-repository invariant, AC-29). NULL = not yet anchored
+  // (pre-migration legacy row, or fully cleared) — see server/INSIGHTS.
+  repo_id: z.string().uuid().nullable(),
 });
 export type AgentDocumentLink = z.infer<typeof AgentDocumentLink>;
 
@@ -29,5 +32,8 @@ export type AgentDocumentLink = z.infer<typeof AgentDocumentLink>;
 export const SkillDocumentLink = z.object({
   path: z.string(),
   order: z.number().int(),
+  // Anchor repo (same-repository invariant, AC-29). NULL = not yet anchored
+  // (pre-migration legacy row, or fully cleared) — see server/INSIGHTS.
+  repo_id: z.string().uuid().nullable(),
 });
 export type SkillDocumentLink = z.infer<typeof SkillDocumentLink>;

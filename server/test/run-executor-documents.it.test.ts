@@ -142,7 +142,7 @@ d('run-executor: project-context documents (Testcontainers pg)', () => {
     await app.inject({
       method: 'POST',
       url: `/agents/${agent.id}/documents`,
-      payload: { paths: ['specs/agent-doc.md', 'specs/missing.md'] },
+      payload: { paths: ['specs/agent-doc.md', 'specs/missing.md'], repo_id: pr.repoId },
     });
 
     // Enabled skill with its own attached doc, linked to the agent.
@@ -162,7 +162,7 @@ d('run-executor: project-context documents (Testcontainers pg)', () => {
     await app.inject({
       method: 'POST',
       url: `/skills/${skill.id}/documents`,
-      payload: { paths: ['specs/skill-doc.md'] },
+      payload: { paths: ['specs/skill-doc.md'], repo_id: pr.repoId },
     });
     await app.inject({
       method: 'POST',
@@ -265,7 +265,7 @@ d('run-executor: project-context documents (Testcontainers pg)', () => {
     await app.inject({
       method: 'POST',
       url: `/agents/${agent.id}/documents`,
-      payload: { paths: ['specs/agent-doc.md'] },
+      payload: { paths: ['specs/agent-doc.md'], repo_id: pr.repoId },
     });
 
     const res = await app.inject({
@@ -281,6 +281,120 @@ d('run-executor: project-context documents (Testcontainers pg)', () => {
     expect(trace.documents_unavailable).toEqual(['specs/agent-doc.md']);
     expect(trace.specs_read).toEqual([]);
     expect(trace.prompt_assembly.specs).toBeNull();
+
+    await app.close();
+  });
+
+  it('documents attached under a DIFFERENT repo than the reviewed PR never leak into that PR\'s review, and documents_repo_excluded stays empty', async () => {
+    const app = await appWith();
+    // repoX owns docs attached under IT specifically; repoY (a different
+    // repo) owns the PR actually being reviewed. Since `linkedDocuments` is
+    // now fetched scoped to the reviewed PR's OWN repo (repoY), repoX's
+    // attachment is simply a different, unrelated list — there is no
+    // "mismatch" to detect or record any more (that whole exclusion-tracking
+    // mechanism, and the `excludedByRepoMismatch`/per-origin exclusion shape,
+    // was removed; `documents_repo_excluded` is now always written as `[]`).
+    const { repo: repoX } = await setupRepoAndPr(pg.handle.db, workspaceId, clonePath);
+    const { pr: prY } = await setupRepoAndPr(pg.handle.db, workspaceId, clonePath);
+
+    const agent = (
+      await app.inject({
+        method: 'POST',
+        url: '/agents',
+        payload: {
+          name: 'Cross Repo Agent',
+          provider: 'openai',
+          model: 'gpt-4.1',
+          system_prompt: 'sec',
+        },
+      })
+    ).json();
+    // Attach the agent's docs under repoX only.
+    await app.inject({
+      method: 'POST',
+      url: `/agents/${agent.id}/documents`,
+      payload: { paths: ['specs/agent-doc.md', 'specs/skill-doc.md'], repo_id: repoX.id },
+    });
+
+    // Review a PR that belongs to repoY, not repoX.
+    const res = await app.inject({
+      method: 'POST',
+      url: `/pulls/${prY.id}/review`,
+      payload: { agentId: agent.id },
+    });
+    expect(res.statusCode).toBe(200);
+    const runId = res.json().runs[0].run_id;
+
+    const runs = await waitForPrRuns(pg.handle.db, prY.id, { expected: 1 });
+    expect(runs.find((r) => r.id === runId)?.status).toBe('done');
+
+    const trace = (await app.inject({ method: 'GET', url: `/runs/${runId}/trace` })).json();
+
+    // repoX's docs are simply not part of repoY's effective set — no
+    // ## Project context block, nothing read.
+    expect(trace.prompt_assembly.specs).toBeNull();
+    expect(trace.prompt_assembly.user).not.toContain('## Project context');
+    expect(trace.specs_read).toEqual([]);
+    expect(trace.documents_read).toEqual([]);
+
+    // `documents_repo_excluded` is always written as `[]` now — a repo
+    // mismatch can no longer occur by construction, so there is nothing to
+    // record here (this is the field this test exists to guard).
+    expect(trace.documents_repo_excluded).toEqual([]);
+
+    // repoX's paths were never even attempted against repoY's clone, so they
+    // must NOT appear as "unavailable" either — they were simply never part
+    // of the effective set in the first place.
+    expect(trace.documents_unavailable).toEqual([]);
+
+    await app.close();
+  });
+
+  it("documents are drawn only from the reviewed PR's own repo: repo X's attached docs stay invisible to a repo Y review, while repo Y's own attachment is read normally", async () => {
+    const app = await appWith();
+    const { repo: repoX } = await setupRepoAndPr(pg.handle.db, workspaceId, clonePath);
+    const { repo: repoY, pr: prY } = await setupRepoAndPr(pg.handle.db, workspaceId, clonePath);
+
+    const agent = (
+      await app.inject({
+        method: 'POST',
+        url: '/agents',
+        payload: {
+          name: 'Own Repo Only Agent',
+          provider: 'openai',
+          model: 'gpt-4.1',
+          system_prompt: 'sec',
+        },
+      })
+    ).json();
+
+    // Same agent has DIFFERENT docs attached under each repo independently.
+    await app.inject({
+      method: 'POST',
+      url: `/agents/${agent.id}/documents`,
+      payload: { paths: ['specs/agent-doc.md'], repo_id: repoX.id },
+    });
+    await app.inject({
+      method: 'POST',
+      url: `/agents/${agent.id}/documents`,
+      payload: { paths: ['specs/skill-doc.md'], repo_id: repoY.id },
+    });
+
+    const res = await app.inject({
+      method: 'POST',
+      url: `/pulls/${prY.id}/review`,
+      payload: { agentId: agent.id },
+    });
+    const runId = res.json().runs[0].run_id;
+    await waitForPrRuns(pg.handle.db, prY.id, { expected: 1 });
+
+    const trace = (await app.inject({ method: 'GET', url: `/runs/${runId}/trace` })).json();
+
+    // Only repoY's own attached doc is read — repoX's stays entirely absent.
+    expect(trace.specs_read).toEqual(['specs/skill-doc.md']);
+    expect(trace.prompt_assembly.user).toContain('specs/skill-doc.md');
+    expect(trace.prompt_assembly.user).not.toContain('specs/agent-doc.md');
+    expect(trace.documents_repo_excluded).toEqual([]);
 
     await app.close();
   });

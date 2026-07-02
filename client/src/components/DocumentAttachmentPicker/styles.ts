@@ -7,6 +7,8 @@ export const s = {
   hint: { fontSize: 12.5, color: "var(--text-muted)", marginBottom: 14, lineHeight: 1.5 } as CSSProperties,
   repoPicker: { display: "flex", alignItems: "center", gap: 10, marginBottom: 14 } as CSSProperties,
   repoLabel: { fontSize: 13, fontWeight: 600, color: "var(--text-secondary)", flexShrink: 0 } as CSSProperties,
+  filterRow: { display: "flex", alignItems: "center", gap: 12, marginBottom: 10 } as CSSProperties,
+  countRow: { display: "flex", alignItems: "center", gap: 8, flexShrink: 0 } as CSSProperties,
   list: { display: "flex", flexDirection: "column", gap: 6 } as CSSProperties,
   row: (attached: boolean): CSSProperties => ({
     display: "flex",

@@ -228,34 +228,57 @@ export class SkillsRepository {
 
   // ---- skill_documents link table (project-context attachments) -----------
 
-  /** Documents linked to a skill, in `order` ascending (path-only, never content). */
-  async linkedDocuments(skillId: string): Promise<SkillDocumentLink[]> {
+  /**
+   * Documents linked to a skill under a specific repository, in `order`
+   * ascending (path-only, never content). Scoped by `(skillId, repoId)` — the
+   * composite PK `(skill_id, repo_id, path)` means each repo keeps its own
+   * independent ordered list (AC-29).
+   */
+  async linkedDocuments(skillId: string, repoId: string): Promise<SkillDocumentLink[]> {
     const rows = await this.db
-      .select({ path: t.skillDocuments.path, order: t.skillDocuments.order })
+      .select({
+        path: t.skillDocuments.path,
+        order: t.skillDocuments.order,
+        repoId: t.skillDocuments.repoId,
+      })
       .from(t.skillDocuments)
-      .where(eq(t.skillDocuments.skillId, skillId))
+      .where(and(eq(t.skillDocuments.skillId, skillId), eq(t.skillDocuments.repoId, repoId)))
       .orderBy(asc(t.skillDocuments.order));
-    return rows;
+    return rows.map((r) => ({ path: r.path, order: r.order, repo_id: r.repoId }));
   }
 
   /**
-   * Replace the full set of linked documents for a skill with `paths`, assigning
-   * order = index. Mirrors `agents/repository.ts` `setSkills`: dedupe + a
-   * transaction-scoped advisory lock serializes concurrent calls for the SAME
-   * skill (the vendored Checkbox double-fires onChange), so the plain
-   * delete-all + insert can't deadlock or hit the (skill_id, path) PK twice.
-   * Attaching/detaching documents is metadata — it must NOT bump `skills.version`
-   * (versioning keys strictly on body changes, see `update()`/`isBodyChange`).
+   * Replace the linked-documents list for a skill WITHIN one repository with
+   * `paths`, assigning order = index. Mirrors `agents/repository.ts`
+   * `setDocuments`: dedupe + a transaction-scoped advisory lock serializes
+   * concurrent calls for the SAME skill (the vendored Checkbox double-fires
+   * onChange), so the plain delete-all + insert can't deadlock or hit the
+   * `(skill_id, repo_id, path)` PK twice. Attaching/detaching documents is
+   * metadata — it must NOT bump `skills.version` (versioning keys strictly on
+   * body changes, see `update()`/`isBodyChange`).
+   *
+   * Per-repo scoping (AC-29/AC-30/AC-31/AC-32): the delete + insert are both
+   * scoped to `(skillId, repoId)`, so replacing/clearing repo A's list never
+   * touches repo B's rows — each repo's list is fully independent.
    */
-  async setDocuments(skillId: string, paths: string[]): Promise<void> {
+  async setDocuments(
+    skillId: string,
+    paths: string[],
+    repoId: string,
+  ): Promise<SkillDocumentLink[]> {
     const uniquePaths = [...new Set(paths)];
     await this.db.transaction(async (tx) => {
       await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtext(${skillId}))`);
-      await tx.delete(t.skillDocuments).where(eq(t.skillDocuments.skillId, skillId));
-      if (uniquePaths.length === 0) return;
+
       await tx
-        .insert(t.skillDocuments)
-        .values(uniquePaths.map((path, i) => ({ skillId, path, order: i })));
+        .delete(t.skillDocuments)
+        .where(and(eq(t.skillDocuments.skillId, skillId), eq(t.skillDocuments.repoId, repoId)));
+      if (uniquePaths.length > 0) {
+        await tx
+          .insert(t.skillDocuments)
+          .values(uniquePaths.map((path, i) => ({ skillId, path, order: i, repoId })));
+      }
     });
+    return this.linkedDocuments(skillId, repoId);
   }
 }

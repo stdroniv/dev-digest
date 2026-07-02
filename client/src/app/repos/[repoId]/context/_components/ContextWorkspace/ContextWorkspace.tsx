@@ -48,7 +48,7 @@ export function ContextWorkspace({ repoId }: { repoId: string }) {
     router.push(`${pathname}?${params.toString()}`, { scroll: false });
   };
 
-  const crumb = [{ label: repoName, mono: true }, { label: t("title") }];
+  const crumb = [{ label: repoName, mono: true, href: `/repos/${repoId}/pulls` }, { label: t("title") }];
 
   if (repoNotFound) {
     return (

@@ -6,6 +6,10 @@ import type { AgentDocumentLink, SkillDocumentLink } from '@devdigest/shared';
  * agent's + enabled skills' linked documents and reads their content; this
  * function only decides WHICH paths are in scope, in WHAT order, and tags each
  * with its origin for the run trace (`DocumentRead.origin`).
+ *
+ * The same-repository invariant (AC-31) is enforced upstream of this function:
+ * callers pass in links already scoped to the reviewed PR's own repo, so no
+ * mismatch can exist here by construction.
  */
 
 /** One enabled skill's linked documents, keyed for origin-tagging. Disabled
@@ -26,6 +30,10 @@ export interface EffectiveDocument {
   origin: EffectiveDocumentOrigin;
 }
 
+export interface EffectiveDocumentsResult {
+  documents: EffectiveDocument[];
+}
+
 /**
  * Compute the effective, ordered, deduped set of documents for a run:
  * - AC-17 (union): the agent's own docs plus every enabled skill's docs.
@@ -39,15 +47,15 @@ export interface EffectiveDocument {
 export function computeEffectiveDocuments(
   agentDocs: AgentDocumentLink[],
   enabledSkillDocs: EnabledSkillDocuments[],
-): EffectiveDocument[] {
+): EffectiveDocumentsResult {
   const seen = new Set<string>();
-  const result: EffectiveDocument[] = [];
+  const documents: EffectiveDocument[] = [];
 
   const sortedAgentDocs = [...agentDocs].sort((a, b) => a.order - b.order);
   for (const doc of sortedAgentDocs) {
     if (seen.has(doc.path)) continue;
     seen.add(doc.path);
-    result.push({ path: doc.path, origin: { type: 'agent' } });
+    documents.push({ path: doc.path, origin: { type: 'agent' } });
   }
 
   for (const skill of enabledSkillDocs) {
@@ -55,12 +63,12 @@ export function computeEffectiveDocuments(
     for (const doc of sortedSkillDocs) {
       if (seen.has(doc.path)) continue;
       seen.add(doc.path);
-      result.push({
+      documents.push({
         path: doc.path,
         origin: { type: 'skill', skill_id: skill.skillId, skill_name: skill.skillName },
       });
     }
   }
 
-  return result;
+  return { documents };
 }

@@ -1,5 +1,6 @@
 import type {
   DocumentRead,
+  DocumentsRepoExclusion,
   MemoryPulled,
   PromptAssembly,
   RunLogLine,
@@ -35,6 +36,9 @@ export interface BuildTraceInput {
   // Optional (T9 populates these); default to empty (no project-context docs).
   documentsRead?: DocumentRead[];
   documentsUnavailable?: string[];
+  // Optional (same-repository invariant, AC-31); default to empty (no
+  // attached set was excluded for a repo mismatch this run).
+  documentsRepoExcluded?: DocumentsRepoExclusion[];
   log: RunLogLine[];
 }
 
@@ -56,6 +60,7 @@ export function buildRunTrace(input: BuildTraceInput): RunTrace {
     specs_read: input.specsRead,
     documents_read: input.documentsRead ?? [],
     documents_unavailable: input.documentsUnavailable ?? [],
+    documents_repo_excluded: input.documentsRepoExcluded ?? [],
     log: input.log,
   };
   // Validate so a malformed trace fails loudly at write-time, not read-time.

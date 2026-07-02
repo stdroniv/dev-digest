@@ -97,6 +97,29 @@ export function TraceBody({ trace, findings }: { trace: RunTrace; findings: Find
               </div>
             </Row>
           )}
+          {/* AC-31 — same-repository invariant: a whole attached set excluded
+              because its anchor repo differs from this PR's repo. Distinct
+              from the per-document "unavailable" block above: different
+              icon/color (neutral --info + GitBranch, not warn/AlertTriangle)
+              and copy, since these paths were never individually resolved. */}
+          {(trace.documents_repo_excluded ?? []).length > 0 && (
+            <Row label={t("trace.config.documentsRepoExcluded")}>
+              <div style={s.repoExcludedBox}>
+                {(trace.documents_repo_excluded ?? []).map((exclusion, i) => (
+                  <div key={i} style={s.repoExcludedEntry}>
+                    <Icon.GitBranch size={13} style={s.repoExcludedIcon} />
+                    <div style={s.repoExcludedMeta}>
+                      <OriginBadge origin={exclusion.origin} t={t} />
+                      <span style={s.repoExcludedCount}>
+                        {t("trace.config.excludedCount", { count: exclusion.paths.length })}
+                      </span>
+                    </div>
+                  </div>
+                ))}
+                <span style={s.repoExcludedNote}>{t("trace.config.excludedNote")}</span>
+              </div>
+            </Row>
+          )}
         </div>
       </TraceSection>
 

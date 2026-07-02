@@ -151,7 +151,14 @@ Once approved, execute the plan:
   layer produced into the next agent's prompt — subagents share no memory, so a
   downstream agent that has to guess the upstream interface re-introduces the drift the
   split was meant to avoid. Prefer this split when the feature spans **>1 package** or
-  **~15+ files** (see cost discipline); below that, one implementer is cheaper.
+  **~15+ files** or a single run you expect to exceed **~150 turns** (see cost discipline);
+  below that, one implementer is cheaper. **The file/turn threshold applies *within* a
+  single package too** — a big client-only build (App-Router screen + i18n + nav + hooks +
+  ~6 components + page/wiring) is over the line even though it's one package: split it **by
+  sub-layer** (foundation → components → page/state-wiring), not one T8–T14 mega-agent. A
+  ~274-turn single-package client implementer that dropped mid-run once cost a whole
+  recovery agent re-reading already-built siblings — a sub-layer split keeps a drop's blast
+  radius to one small piece.
 
 If any implementer reports the plan is structurally wrong, stop and take that back to the
 user / the `implementation-plan` agent — don't push it to guess.
@@ -296,8 +303,10 @@ re-bills on *every* turn — so cost scales with **conversation length × contex
 model tier (tiers are already set per agent). Optimise for *fewer, shorter, leaner* agent
 turns and *zero wasted runs*. The rules that matter most:
 
-- **Split a big implementation by layer** when it spans **>1 package** or **~15+ files**;
-  keep a single run below that threshold. In multi-agent mode this is Step 5's fan-out.
+- **Split a big implementation by layer** when it spans **>1 package**, **~15+ files**, or
+  an expected **~150+ turns** — the file/turn threshold applies *within* a single package
+  too (split a big client-only build by sub-layer: foundation → components → wiring). Keep a
+  single run below that threshold. In multi-agent mode this is Step 5's fan-out.
 - **Sequence the two clarify gates so the user is never asked the same thing twice** —
   the spec settles WHAT (Step 2), the plan asks only HOW (Step 3). Resolve any
   `implementation-plan` question the spec already answers from the spec, not the user.

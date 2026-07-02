@@ -33,6 +33,14 @@ export {
   type GenerateRiskBriefResult,
 } from './brief/risks.js';
 
+// Onboarding Tour section synthesiser (SPEC-02) — pure, provider-injected.
+export {
+  generateOnboardingSection,
+  type OnboardingGrounding,
+  type GenerateOnboardingSectionInput,
+  type GenerateOnboardingSectionResult,
+} from './onboarding/generate.js';
+
 // Citation grounding — the mandatory mechanical gate for diff findings.
 export { groundFindings, groundingSummary, type GroundingResult } from './grounding.js';
 

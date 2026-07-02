@@ -142,6 +142,24 @@ entire document in a single final write — an incrementally-saved file is resum
 if the connection drops; a long one-shot write loses everything on a mid-generation
 error. When done, return the file path plus a 2–4 line summary.
 
+**Failure- & edge-state completeness (plan these explicitly — don't leave them to the
+implementer).** For any feature that generates, persists, or mutates state, walk this
+checklist and give each answer an owning task + acceptance criterion, because these are
+the coverage gaps a downstream spec-conformance / plan-verifier pass most often catches
+*after* the plan (each such miss forces a full plan-revision resume, the most expensive
+kind of rework):
+- **First-ever vs. subsequent failure** — a failure on the *first* attempt (no prior
+  artifact) usually needs a *different* observable state than a failure when a prior
+  good artifact already exists (which must stay intact + readable). Plan both.
+- **Partial / one-of-N failure isolation** — when a job fans out over N units, one unit
+  failing must not corrupt or discard the other N-1; name the isolation behaviour.
+- **Preserve-prior-on-retry** — a failed regenerate/update must retain the prior
+  content/cost/timestamp, never null it out. Say which layer carries the prior values.
+- **In-progress + navigate-away** — does work survive the user leaving; what shows on return.
+- **Unavailable / not-ready precondition** — a distinct state from "empty", not an error.
+Draw these from the spec's own edge-case and failure ACs; if the spec is silent on one
+that clearly applies, raise it as a HOW-level clarifying question rather than guessing.
+
 ## Project map — what exists (load only what is relevant)
 
 ### Read-when routing
@@ -264,6 +282,9 @@ to a task. Every task below should serve at least one requirement listed here.>
 - [ ] No edits to existing shared contracts without an explicit callout
 - [ ] `*/src/vendor/**` is not modified in any task
 - [ ] No DB table deletions or edits to existing migrations
+- [ ] Failure & edge states are covered by owning tasks — first-ever vs. prior-artifact
+      failure, partial/one-of-N failure isolation, preserve-prior-on-retry, in-progress +
+      navigate-away, and unavailable-precondition (see Step 3's completeness checklist)
 ```
 
 ## When you cannot produce a plan

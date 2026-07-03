@@ -4,7 +4,7 @@
  * no testcontainers.
  */
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
-import { mkdtemp, mkdir, writeFile, rm } from 'node:fs/promises';
+import { mkdtemp, mkdir, writeFile, rm, symlink } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { DocumentsService } from '../src/modules/documents/service.js';
@@ -93,6 +93,29 @@ describe('DocumentsService.readContent', () => {
       const result = await service.readContent(
         { id: 'repo1', workspaceId: 'ws1', clonePath },
         absPath,
+      );
+      expect(result).toBeNull();
+    } finally {
+      await rm(outsideDir, { recursive: true, force: true });
+    }
+  });
+
+  it('returns null (never file contents) for a symlink committed inside the clone that resolves outside clonePath', async () => {
+    // Defense-in-depth: a malicious cloned repo can commit a real OS symlink
+    // under a root folder that points outside the clone. resolve()-based
+    // string-prefix containment does NOT follow symlinks, so this proves the
+    // realpath containment check catches what the cheap check would miss.
+    const outsideDir = await mkdtemp(join(tmpdir(), 'documents-service-symlink-outside-'));
+    try {
+      const secretPath = join(outsideDir, 'secret.md');
+      await writeFile(secretPath, 'TOP SECRET');
+      await mkdir(join(clonePath, 'specs'), { recursive: true });
+      await symlink(secretPath, join(clonePath, 'specs', 'escape.md'));
+
+      const service = new DocumentsService(makeContainer());
+      const result = await service.readContent(
+        { id: 'repo1', workspaceId: 'ws1', clonePath },
+        'specs/escape.md',
       );
       expect(result).toBeNull();
     } finally {

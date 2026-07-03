@@ -33,6 +33,20 @@ export const FEATURE_MODELS: FeatureModelDef[] = [
     defaultModel: "gpt-4.1",
   },
   {
+    id: "why_risk_brief",
+    label: "Why+Risk Brief",
+    description: "Synthesizes the why/intent + risk brief for a pull request.",
+    defaultProvider: "openai",
+    defaultModel: "gpt-4o-mini",
+  },
+  {
+    id: "file_summary",
+    label: "File Summary",
+    description: "Summarizes what one file’s change does, on demand.",
+    defaultProvider: "openai",
+    defaultModel: "gpt-4o-mini",
+  },
+  {
     id: "conformance",
     label: "Conformance",
     description: "Checks a PR against the project spec.",

@@ -1,17 +1,18 @@
 /**
- * RiskAreas — RTL + Vitest tests for the co-located chip component.
+ * RiskAreas — RTL + Vitest tests for the co-located section component.
  *
  * Acceptance:
- * - Chips render the risk titles.
- * - The explanation is NOT in the DOM until expanded.
- * - fireEvent.click on a chip reveals the explanation and file_refs.
- * - fireEvent.mouseEnter on a chip reveals the explanation (hover path).
- * - The chip carries aria-expanded="false" initially and "true" after click.
+ * - Risk titles are always visible.
+ * - `file_refs` render as always-visible clickable links (anchors with an
+ *   href) — no click required (AC-8).
+ * - The `explanation` is reachable as the title element's title/aria-label
+ *   (hover affordance), not hidden behind a click reveal.
+ * - When `repoFullName` is missing, refs render as inert mono text.
  * - null / empty-array responses render nothing (component returns null).
  */
 import React from "react";
 import { describe, it, expect, afterEach, vi } from "vitest";
-import { render, screen, fireEvent, cleanup, waitFor } from "@testing-library/react";
+import { render, screen, cleanup, waitFor } from "@testing-library/react";
 import { NextIntlClientProvider } from "next-intl";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import briefMessages from "../../../../../../../../messages/en/brief.json";
@@ -20,6 +21,8 @@ import { RiskAreas } from "./RiskAreas";
 afterEach(cleanup);
 
 const PR_ID = "pr-uuid-risk-areas-1";
+const REPO = "acme/payments-api";
+const PR_NUMBER = 482;
 
 /** Minimal Risks fixture matching the shared `Risks` contract. */
 const RISKS = {
@@ -30,7 +33,7 @@ const RISKS = {
       explanation:
         "User input is concatenated directly into the SQL query without sanitization.",
       severity: "high",
-      file_refs: ["src/db/queries.ts"],
+      file_refs: ["src/db/queries.ts:42"],
     },
   ],
 };
@@ -42,7 +45,13 @@ function jsonResp(body: unknown, status = 200): Response {
   });
 }
 
-function renderRiskAreas(risksBody: unknown) {
+function renderRiskAreas(
+  risksBody: unknown,
+  props: { repoFullName: string | null | undefined; prNumber: number } = {
+    repoFullName: REPO,
+    prNumber: PR_NUMBER,
+  },
+) {
   global.fetch = vi.fn((_url?: unknown) => {
     return Promise.resolve(jsonResp(risksBody));
   }) as unknown as typeof fetch;
@@ -51,98 +60,74 @@ function renderRiskAreas(risksBody: unknown) {
   return render(
     <QueryClientProvider client={qc}>
       <NextIntlClientProvider locale="en" messages={{ brief: briefMessages }}>
-        <RiskAreas prId={PR_ID} />
+        <RiskAreas prId={PR_ID} repoFullName={props.repoFullName} prNumber={props.prNumber} />
       </NextIntlClientProvider>
     </QueryClientProvider>,
   );
 }
 
 // ---------------------------------------------------------------------------
-// Chips render risk titles
+// Risk titles always visible
 // ---------------------------------------------------------------------------
-describe("RiskAreas — chips render titles", () => {
-  it("renders the chip button with the risk title", async () => {
+describe("RiskAreas — titles always visible", () => {
+  it("renders the risk title with no click", async () => {
     renderRiskAreas(RISKS);
     await waitFor(() =>
-      expect(
-        screen.getByRole("button", { name: /SQL injection in user query/i }),
-      ).toBeInTheDocument(),
+      expect(screen.getByText("SQL injection in user query")).toBeInTheDocument(),
     );
   });
 });
 
 // ---------------------------------------------------------------------------
-// Explanation hidden until expanded
+// file_refs render as always-visible clickable links (AC-8)
 // ---------------------------------------------------------------------------
-describe("RiskAreas — explanation hidden until expanded", () => {
-  it("does NOT show the explanation before clicking the chip", async () => {
+describe("RiskAreas — always-visible clickable file_refs", () => {
+  it("renders the ref as an anchor with a non-empty href containing /pull/{n}/files, with no click", async () => {
     renderRiskAreas(RISKS);
-    // Wait for chip to appear
+    const link = await waitFor(() => screen.getByText("src/db/queries.ts:42"));
+    expect(link.closest("a")).not.toBeNull();
+    const href = link.closest("a")?.getAttribute("href") ?? "";
+    expect(href).toContain(`/pull/${PR_NUMBER}/files`);
+  });
+
+  it("has no aria-expanded toggle button (no click-accordion)", async () => {
+    renderRiskAreas(RISKS);
     await waitFor(() =>
-      expect(
-        screen.getByRole("button", { name: /SQL injection/i }),
-      ).toBeInTheDocument(),
+      expect(screen.getByText("SQL injection in user query")).toBeInTheDocument(),
     );
-    // Explanation must be absent (not expanded)
-    expect(
-      screen.queryByText(/concatenated directly/),
-    ).toBeNull();
+    expect(screen.queryByRole("button", { name: /SQL injection/i })).toBeNull();
+    expect(document.querySelector("[aria-expanded]")).toBeNull();
   });
 });
 
 // ---------------------------------------------------------------------------
-// Click reveals explanation + file_refs
+// Explanation is a hover tooltip (title/aria-label), not hidden until click
 // ---------------------------------------------------------------------------
-describe("RiskAreas — click to expand", () => {
-  it("clicking the chip reveals the explanation and file_refs", async () => {
+describe("RiskAreas — explanation is a hover tooltip", () => {
+  it("exposes the explanation via the title element's title/aria-label", async () => {
     renderRiskAreas(RISKS);
-    const chip = await waitFor(() =>
-      screen.getByRole("button", { name: /SQL injection/i }),
+    const titleEl = await waitFor(() =>
+      screen.getByText("SQL injection in user query").parentElement,
     );
-
-    fireEvent.click(chip);
-
-    await waitFor(() =>
-      expect(
-        screen.getByText(
-          "User input is concatenated directly into the SQL query without sanitization.",
-        ),
-      ).toBeInTheDocument(),
+    expect(titleEl).toHaveAttribute(
+      "title",
+      "User input is concatenated directly into the SQL query without sanitization.",
     );
-    expect(screen.getByText("src/db/queries.ts")).toBeInTheDocument();
-  });
-
-  it("chip aria-expanded is false initially and true after click", async () => {
-    renderRiskAreas(RISKS);
-    const chip = await waitFor(() =>
-      screen.getByRole("button", { name: /SQL injection/i }),
+    expect(titleEl).toHaveAttribute(
+      "aria-label",
+      "User input is concatenated directly into the SQL query without sanitization.",
     );
-
-    expect(chip).toHaveAttribute("aria-expanded", "false");
-    fireEvent.click(chip);
-    expect(chip).toHaveAttribute("aria-expanded", "true");
   });
 });
 
 // ---------------------------------------------------------------------------
-// Hover reveals explanation
+// repoFullName absent → inert text, no href
 // ---------------------------------------------------------------------------
-describe("RiskAreas — hover to reveal", () => {
-  it("mouseEnter on the chip reveals the explanation", async () => {
-    renderRiskAreas(RISKS);
-    const chip = await waitFor(() =>
-      screen.getByRole("button", { name: /SQL injection/i }),
-    );
-
-    fireEvent.mouseEnter(chip);
-
-    await waitFor(() =>
-      expect(
-        screen.getByText(
-          "User input is concatenated directly into the SQL query without sanitization.",
-        ),
-      ).toBeInTheDocument(),
-    );
+describe("RiskAreas — repo-absent fallback", () => {
+  it("renders the ref as inert text (no href) when repoFullName is null", async () => {
+    renderRiskAreas(RISKS, { repoFullName: null, prNumber: PR_NUMBER });
+    const ref = await waitFor(() => screen.getByText("src/db/queries.ts:42"));
+    expect(ref.closest("a")).toBeNull();
   });
 });
 

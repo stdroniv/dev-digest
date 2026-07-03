@@ -83,6 +83,9 @@ export default function PRDetailPage() {
   const runs = reviews ?? [];
   // Newest completed review with a verdict — used to surface the score on the Overview tab.
   const latestReview = (reviews ?? []).find((r) => r.kind === "review" && r.verdict != null) ?? null;
+  // The run behind that review (joined on run_id) — carries the cost/token totals
+  // shown under the PR score in the overview card.
+  const latestRun = (prRuns ?? []).find((r) => r.run_id === latestReview?.run_id) ?? null;
   const allFindings: FindingRecord[] = React.useMemo(
     () => runs.flatMap((r) => r.findings),
     [reviews],
@@ -148,7 +151,16 @@ export default function PRDetailPage() {
       />
 
       <div style={{ padding: "24px 32px 44px", display: "flex", flexDirection: "column", gap: 24, maxWidth: 1080, margin: "0 auto" }}>
-        {tab === "overview" && <OverviewTab prBody={pr.body} prId={prId} repoFullName={repoFullName} latestReview={latestReview} />}
+        {tab === "overview" && (
+          <OverviewTab
+            prBody={pr.body}
+            prId={prId}
+            repoFullName={repoFullName}
+            latestReview={latestReview}
+            latestRun={latestRun}
+            prNumber={pr.number}
+          />
+        )}
 
         {tab === "findings" && (
           <FindingsTab

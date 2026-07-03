@@ -1,0 +1,18 @@
+{
+  "stale": "Stale",
+  "docsTruncated": "Some context docs were left out of this brief (over budget).",
+  "reviewFocus": {
+    "title": "Review focus — read these first",
+    "count": "{count, plural, one {# file} other {# files}}"
+  },
+  "emptyState": {
+    "heading": "No brief yet",
+    "subtitle": "Generate a Why+Risk brief for this PR."
+  },
+  "generate": "Generate brief",
+  "generating": "Generating…",
+  "regenerate": "Regenerate brief",
+  "regenerating": "Regenerating…",
+  "notAvailableHint": "Compute intent first to generate a Why+Risk brief.",
+  "skippedNoModel": "Skipped — no model configured for this feature."
+}

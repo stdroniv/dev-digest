@@ -1,4 +1,4 @@
-import { access, readFile } from 'node:fs/promises';
+import { access, readFile, realpath } from 'node:fs/promises';
 import { constants } from 'node:fs';
 import { join, resolve, sep } from 'node:path';
 import type { ProjectDocument } from '@devdigest/shared';
@@ -106,6 +106,18 @@ export class DocumentsService {
    * inside the resolved clone dir (trailing separator check so `/repo` doesn't
    * prefix-match `/repo-evil`). Returns `null` — the existing "unavailable"
    * signal — rather than throwing, consistent with this service's "never throws" contract.
+   *
+   * The cheap string-prefix check above only guards against `../`-style escapes;
+   * it does NOT catch a malicious cloned repo committing a real OS symlink under
+   * a root folder that points outside the clone (`resolve()` never follows
+   * symlinks). Mirrors `onboarding/language-heuristics.ts` `safeReadFile`:
+   * realpath both the clone root and the resolved target (following symlinks)
+   * and re-check containment before ever reading bytes. Both sides must be
+   * realpath'd — not just the target — since on macOS `TMPDIR`/`/tmp` itself
+   * resolves through a symlink (`/var` -> `/private/var`), so comparing a
+   * realpath'd target against the un-resolved clone root would falsely reject
+   * every file in a legitimate clone. A missing file or an escaping symlink
+   * both degrade to `null`, never a throw.
    */
   private async readFromClone(clonePath: string, path: string): Promise<string | null> {
     const resolvedClone = resolve(clonePath);
@@ -113,6 +125,13 @@ export class DocumentsService {
     if (resolvedTarget !== resolvedClone && !resolvedTarget.startsWith(resolvedClone + sep)) {
       return null;
     }
-    return readFile(resolvedTarget, 'utf8').catch(() => null);
+    const realClone = await realpath(resolvedClone).catch(() => null);
+    if (realClone == null) return null;
+    const realTarget = await realpath(resolvedTarget).catch(() => null);
+    if (realTarget == null) return null;
+    if (realTarget !== realClone && !realTarget.startsWith(realClone + sep)) {
+      return null;
+    }
+    return readFile(realTarget, 'utf8').catch(() => null);
   }
 }

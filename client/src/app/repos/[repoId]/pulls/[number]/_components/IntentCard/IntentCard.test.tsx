@@ -21,6 +21,8 @@ import { IntentCard } from "./IntentCard";
 afterEach(cleanup);
 
 const PR_ID = "pr-uuid-1234";
+const REPO = "acme/payments-api";
+const PR_NUMBER = 482;
 
 const INTENT = {
   intent: "Add rate limiting to public API endpoints.",
@@ -57,7 +59,7 @@ function renderCard(prId: string | null, fetchImpl: (_url?: unknown) => Promise<
   return render(
     <QueryClientProvider client={qc}>
       <NextIntlClientProvider locale="en" messages={{ brief: briefMessages }}>
-        <IntentCard prId={prId} />
+        <IntentCard prId={prId} repoFullName={REPO} prNumber={PR_NUMBER} />
       </NextIntlClientProvider>
     </QueryClientProvider>,
   );

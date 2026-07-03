@@ -16,6 +16,8 @@ export const FeatureModelId = z.enum([
   'onboarding',
   'review_intent',
   'risk_brief',
+  'why_risk_brief',
+  'file_summary',
   'conformance',
   'conventions',
 ]);
@@ -62,6 +64,20 @@ export const FEATURE_MODELS: FeatureModelDef[] = [
     description: 'Assesses merge risks for a pull request.',
     defaultProvider: 'openai',
     defaultModel: 'gpt-4.1',
+  },
+  {
+    id: 'why_risk_brief',
+    label: 'Why+Risk Brief',
+    description: 'Synthesizes the why/intent + risk brief for a pull request.',
+    defaultProvider: 'openai',
+    defaultModel: 'gpt-4o-mini',
+  },
+  {
+    id: 'file_summary',
+    label: 'File Summary',
+    description: 'Summarizes what one file’s change does, on demand.',
+    defaultProvider: 'openai',
+    defaultModel: 'gpt-4o-mini',
   },
   {
     id: 'conformance',

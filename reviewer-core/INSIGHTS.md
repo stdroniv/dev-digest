@@ -34,4 +34,16 @@ entry under one section; keep it actionable cold; never edit or delete existing 
 
 ## Session Notes
 
+### 2026-07-02
+
+- `selectContextDocs` (`src/why-risk-brief/select-docs.ts`, SPEC-03 T6) resolves an ambiguity
+  in the plan wording ("greedily fill until adding the next doc would exceed budgetTokens")
+  as **skip-and-continue**, not **stop-at-first-overflow**: iterating the total order
+  (root `specs>docs>insights` → `tokens` asc → `path` asc), a doc that doesn't fit is
+  SKIPPED (and counts toward `truncated`), but later, lower-priority-root docs with a smaller
+  token cost are still evaluated and may be selected — maximizing budget utilization rather
+  than leaving the remainder of the budget empty once one big doc overflows. Any downstream
+  caller (T7's service layer) should NOT assume selection stops at the first doc that
+  doesn't fit; a later smaller doc from a lower-priority root can still make it in.
+
 ## Open Questions

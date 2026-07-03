@@ -27,4 +27,6 @@ export * from './contracts/observability.js';
 export * from './contracts/productionize.js';
 export * from './contracts/documents.js';
 export * from './contracts/onboarding-tour.js';
+export * from './contracts/why-risk-brief.js';
+export * from './contracts/file-summary.js';
 export * from './adapters.js';

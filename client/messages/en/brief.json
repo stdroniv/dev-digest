@@ -39,6 +39,13 @@
     "splitSuggestion": "This PR is large — consider splitting it.",
     "smartOrder": "Smart order",
     "originalOrder": "Original order",
+    "summary": "summary",
+    "whatThisDoes": "What this does:",
+    "summarizing": "Summarizing…",
+    "noModel": "No model configured",
+    "stale": "may be out of date",
+    "regenerate": "Regenerate",
+    "noDiffToSummarize": "No diff to summarize",
     "annotation": { "blocker": "blocker", "warning": "warning", "suggestion": "suggestion", "line": "line {line}", "lineRange": "lines {start}–{end}", "findingsOnLine": "{count} findings on line {line}" }
   }
 }

@@ -46,6 +46,7 @@
     "tabs": {
       "config": "Config",
       "skills": "Skills",
+      "context": "Context",
       "evals": "Evals",
       "stats": "Stats",
       "ci": "CI"
@@ -92,6 +93,24 @@
     "enabledCount": "{linked} of {total} enabled",
     "filterPlaceholder": "Filter skills…",
     "orderHint": "Order matters — earlier skills appear earlier in the assembled prompt. Toggle to attach."
+  },
+  "context": {
+    "title": "Context",
+    "hint": "Attach Markdown docs discovered in a repo clone (specs, docs, insights). Only the path is stored — content is read fresh from the repo at run time. Order matters: earlier documents appear earlier in the assembled prompt.",
+    "tokenVolume": "{count} tokens attached",
+    "unknownRoot": "attached",
+    "previewToggle": "Preview",
+    "previewLoading": "Loading preview…",
+    "filterPlaceholder": "Filter by path…",
+    "attachedCount": "{count} attached",
+    "filterShown": "{shown} of {total} shown",
+    "selectRepoTitle": "Select a repository",
+    "selectRepoBody": "Pick a repository from the nav switcher to browse and attach its project context documents.",
+    "notClonedTitle": "Repo not cloned",
+    "notClonedBody": "Clone this repo to discover its project context documents.",
+    "emptyTitle": "No project context docs",
+    "emptyBody": "No Markdown files were found under this repo's configured root folders.",
+    "untrustedNote": "Attached documents are injected into every run as an untrusted, path-labelled block — the model treats their content as reference material, never instructions."
   },
   "mount": {
     "body": "Mount point for {owner}. The Agent Editor shell + tab routing are wired by A2 — {owner} renders this tab."

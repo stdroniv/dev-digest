@@ -1,0 +1,82 @@
+{
+  "title": "Onboarding Tour",
+  "header": {
+    "title": "Onboarding for <mono>{repo}</mono>",
+    "provenance": "Generated from index of {count} files · last refreshed {time}",
+    "regenerate": "Regenerate",
+    "regenerating": "Regenerating…",
+    "shareLink": "Share link",
+    "shareLinkCopied": "Link copied"
+  },
+  "anchorNav": {
+    "heading": "ON THIS PAGE",
+    "architecture": "Architecture overview",
+    "criticalPaths": "Critical paths",
+    "howToRun": "How to run locally",
+    "readingPath": "Guided reading path",
+    "firstTasks": "First tasks",
+    "cost": "Generation cost"
+  },
+  "sections": {
+    "architecture": {
+      "title": "Architecture overview",
+      "openFile": "Open {path}"
+    },
+    "criticalPaths": {
+      "title": "Critical paths",
+      "open": "Open",
+      "copyPath": "Copy path"
+    },
+    "howToRun": {
+      "title": "How to run locally",
+      "copyCommand": "Copy command"
+    },
+    "readingPath": {
+      "title": "Guided reading path"
+    },
+    "firstTasks": {
+      "title": "First tasks",
+      "complexity": {
+        "low": "Low complexity",
+        "medium": "Medium complexity",
+        "high": "High complexity"
+      }
+    }
+  },
+  "sectionCard": {
+    "regenerateSection": "Regenerate section",
+    "generating": "Regenerating…",
+    "failedTitle": "This section failed to regenerate",
+    "retry": "Retry"
+  },
+  "cost": {
+    "title": "Generation cost",
+    "tokensInOut": "{tokensIn} in · {tokensOut} out",
+    "total": "Total",
+    "approx": "~{amount} (approx)",
+    "noPricing": "No pricing available for {model}"
+  },
+  "empty": {
+    "title": "Generate onboarding tour",
+    "body": "DevDigest indexes the repo and writes a guided tour: architecture, critical paths, how to run, a reading order, and first tasks. Takes 30–60s and ~5,000 tokens.",
+    "cta": "+ Generate onboarding tour",
+    "generatingTitle": "Generating your onboarding tour…",
+    "generatingBody": "This usually takes 30–60 seconds. Feel free to navigate away — it keeps running.",
+    "failedTitle": "Generation failed",
+    "retry": "Retry"
+  },
+  "unavailable": {
+    "title": "Cannot generate until the repo is available",
+    "body": "DevDigest needs to clone and index this repository before it can generate an onboarding tour."
+  },
+  "stale": {
+    "banner": "This tour may be out of date — the repo has been re-synced since it was generated.",
+    "regenerate": "Regenerate"
+  },
+  "wholeFailureBanner": "Regeneration failed: {reason}",
+  "advisory": "This tour is AI-generated guidance to help you get oriented — verify anything critical against the code itself.",
+  "loadError": {
+    "title": "Couldn't load the onboarding tour"
+  },
+  "unknownError": "Unknown error"
+}

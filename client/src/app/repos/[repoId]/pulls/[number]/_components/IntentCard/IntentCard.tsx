@@ -10,6 +10,8 @@ import { RiskAreas } from "./RiskAreas";
 
 interface IntentCardProps {
   prId: string | null | undefined;
+  repoFullName: string | null | undefined;
+  prNumber: number;
 }
 
 /**
@@ -18,7 +20,7 @@ interface IntentCardProps {
  * Displays: summary, IN SCOPE list, OUT OF SCOPE list, and a Recalculate
  * button. Shows an empty state when no intent has been computed yet.
  */
-export function IntentCard({ prId }: IntentCardProps) {
+export function IntentCard({ prId, repoFullName, prNumber }: IntentCardProps) {
   const t = useTranslations("brief");
   const { data: intent, isLoading } = useIntent(prId);
   const recalculate = useRecalculateIntent(prId);
@@ -29,7 +31,7 @@ export function IntentCard({ prId }: IntentCardProps) {
 
   if (isLoading) {
     return (
-      <section>
+      <section style={s.section}>
         <SectionLabel icon="Target">{t("block.intent")}</SectionLabel>
         <div style={s.card}>
           <div style={{ padding: 16 }}>
@@ -45,7 +47,7 @@ export function IntentCard({ prId }: IntentCardProps) {
     : t("intent.recalculate");
 
   return (
-    <section>
+    <section style={s.section}>
       <SectionLabel icon="Target">{t("block.intent")}</SectionLabel>
       <div style={s.card}>
         {!intent ? (
@@ -65,7 +67,7 @@ export function IntentCard({ prId }: IntentCardProps) {
             recalculateLabel={recalculateLabel}
           />
         )}
-        <RiskAreas prId={prId} />
+        <RiskAreas prId={prId} repoFullName={repoFullName} prNumber={prNumber} />
       </div>
     </section>
   );

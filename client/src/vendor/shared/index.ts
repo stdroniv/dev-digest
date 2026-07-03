@@ -8,6 +8,7 @@
  *                         Skill/CommunitySkill, ConventionCandidate, Agent
  *  - contracts/trace      RunTrace, RunEvent, RunLogLine (single-document trace)
  *  - contracts/platform   Settings, ConnTestResult, Repo, PrMeta/PrDetail, SpecFile, …
+ *  - contracts/documents  ProjectDocument, AgentDocumentLink, SkillDocumentLink
  *  - adapters             adapter interfaces + ModelInfo
  *
  * Feature agents (A1–A6) and F2 import everything from here. The barrel is
@@ -24,4 +25,8 @@ export * from './contracts/why.js';
 export * from './contracts/eval-ci.js';
 export * from './contracts/observability.js';
 export * from './contracts/productionize.js';
+export * from './contracts/documents.js';
+export * from './contracts/onboarding-tour.js';
+export * from './contracts/why-risk-brief.js';
+export * from './contracts/file-summary.js';
 export * from './adapters.js';

@@ -12,7 +12,7 @@ description: >
   NEVER edits code, never proposes full rewrites, and never makes network calls.
   High-signal by design (real, exploitable findings, not a checklist dump).
 tools: Read, Grep, Glob, Bash
-model: opus
+model: sonnet
 ---
 
 # Security Reviewer

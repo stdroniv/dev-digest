@@ -28,6 +28,19 @@
     "liveNote": "Prices are pulled live from OpenRouter — USD per 1M input/output tokens.",
     "noKeyNote": "Add an OpenRouter API key under API Keys to load the model list and prices."
   },
+  "rootFolders": {
+    "title": "Project Doc Roots",
+    "body": "Top-level folders scanned for Markdown project-context docs, applied to every repo in this workspace. Defaults to specs/docs/insights when unset.",
+    "foldersLabel": "Root folders",
+    "addPlaceholder": "e.g. adr",
+    "add": "Add",
+    "save": "Save",
+    "reset": "Reset to default",
+    "remove": "Remove {folder}",
+    "duplicate": "That folder is already in the list.",
+    "empty": "At least one root folder is required.",
+    "note": "Applies to every repo in this workspace. Docs are re-scanned on demand — nothing is cached."
+  },
   "workspace": {
     "title": "Workspace",
     "body": "Appearance and sync preferences for this workspace.",

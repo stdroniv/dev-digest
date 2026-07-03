@@ -131,6 +131,21 @@ What the reviewer actually sends to the model is assembled in
 - **Grounding is mandatory.** Every finding must cite a line that exists in the
   diff or it is dropped (`groundFindings`), and the score is recomputed from the
   surviving findings — the model's self-reported score is ignored.
+- **The `## Project context` slot is fed by attached documents.** `reviewer-core`'s
+  `specs` prompt slot existed since L02–L04 but was always empty; `modules/documents/`
+  (discovery + fresh reads of `.md` files under a repo's configured root folders,
+  default `specs`/`docs`/`insights`) plus per-agent and per-skill ordered attachments
+  now populate it. At run time `modules/reviews/effective-documents.ts` computes the
+  **effective set** = the agent's own attached documents **union** every *enabled*
+  linked skill's attached documents, **deduped by path**, ordered agent-first (in the
+  agent's persisted order) then per enabled skill (in skill order, then that skill's
+  doc order) — a path attached at both levels keeps its **agent-level position**.
+  `run-executor.ts` re-reads each document's content fresh from the reviewed PR's own
+  clone (never from attach time), skips any path that no longer resolves (recorded in
+  the trace as `documents_unavailable` instead of failing the run), and passes the
+  rest as `{path, content}[]` so each renders as its own labelled `wrapUntrusted`
+  block. An empty effective set omits the block entirely — byte-identical to the
+  pre-attachment prompt.
 
 ## Testing
 

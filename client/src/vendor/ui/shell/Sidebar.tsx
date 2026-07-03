@@ -56,7 +56,7 @@ export function Sidebar({ ctx }: { ctx: ShellContext }) {
             >
               {grp.section}
             </div>
-            {grp.items.map((it) => (
+            {grp.items.filter((it) => !it.repoScoped || ctx.repoId != null).map((it) => (
               <NavItem
                 key={it.key}
                 item={it.key === "pulls" && ctx.prCount != null ? { ...it, badge: String(ctx.prCount) } : it}

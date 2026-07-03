@@ -3,7 +3,7 @@ name: plan-verifier
 description: >
   Verify that an implementation actually satisfies its plan or requirements —
   requirement-by-requirement coverage, NOT a code-quality review. Use whenever
-  someone hands over a plan (e.g. docs/plans/<slug>.md from the planner agent) or a
+  someone hands over a plan (e.g. docs/plans/<slug>.md from the implementation-plan agent) or a
   list of requirements/acceptance criteria and asks "did we implement everything?",
   "is the plan done?", "verify the plan", "check requirements coverage", "what's
   left from the spec?", or wants to confirm a feature is complete before merging. It
@@ -61,7 +61,7 @@ Run these steps in order.
 
 ### 1. Load the plan and extract discrete requirements
 
-Read the plan: a `docs/plans/<slug>.md` (the `planner` agent's output) or whatever
+Read the plan: a `docs/plans/<slug>.md` (the `implementation-plan` agent's output) or whatever
 spec/requirements text you were given. Break it into a **checklist of atomic,
 checkable items** — one row per requirement or acceptance criterion. A plan's
 "Implementation steps" and "Acceptance criteria" sections are your richest source.

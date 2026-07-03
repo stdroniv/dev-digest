@@ -4,9 +4,11 @@ import { z } from 'zod';
 import { SkillSource, SkillType } from '@devdigest/shared';
 import { getContext } from '../_shared/context.js';
 import { IdParams } from '../_shared/schemas.js';
+import { getRepoRef } from '../_shared/repo-ref.js';
 import { NotFoundError, ValidationError } from '../../platform/errors.js';
 import { SkillsService } from './service.js';
 import { ImportError } from './import-parse.js';
+import { RepoRelativePath } from '../documents/path-safety.js';
 
 /**
  * A1 — skills module (owner A1).
@@ -19,6 +21,8 @@ import { ImportError } from './import-parse.js';
  *   GET    /skills/:id/versions/:version → one body snapshot
  *   GET    /skills/:id/stats             → usage stats (agents, pull%, accept%, findings)
  *   POST   /skills/import                → parse a file/archive into a PREVIEW
+ *   GET    /skills/:id/documents         → linked project-context documents (ordered)
+ *   POST   /skills/:id/documents         → set/reorder linked documents (wholesale replace)
  *
  * The agent SIDE of the link table (`agent_skills`) is owned by the agents module
  * (`POST /agents/:id/skills`); this module never touches it.
@@ -50,6 +54,22 @@ const ImportBody = z.object({
   filename: z.string().min(1),
   content_base64: z.string().min(1),
   name: z.string().optional(),
+});
+
+/** `GET /skills/:id/documents` — the repository whose per-repo list to read (AC-29). */
+const DocumentsQuery = z.object({ repo_id: z.string().uuid() });
+
+/**
+ * Wholesale replace + reorder the skill's linked project-context documents
+ * WITHIN one repository. Each path is validated as repo-relative (no
+ * `..`/absolute escapes — `security`) BEFORE it's ever persisted, since it
+ * gets re-read from the clone on every future run. `repo_id` is now always
+ * required — each repository has its own independent ordered list (AC-29),
+ * so even clearing (`paths: []`) must target a specific repo.
+ */
+const SetDocumentsBody = z.object({
+  paths: z.array(RepoRelativePath),
+  repo_id: z.string().uuid(),
 });
 
 export default async function skillsRoutes(appBase: FastifyInstance) {
@@ -137,4 +157,39 @@ export default async function skillsRoutes(appBase: FastifyInstance) {
       throw err;
     }
   });
+
+  app.get(
+    '/skills/:id/documents',
+    { schema: { params: IdParams, querystring: DocumentsQuery } },
+    async (req) => {
+      const { workspaceId } = await getContext(app.container, req);
+      // A `repo_id` must resolve to a repo in the caller's workspace before
+      // it's used to scope the read (`security`, defense-in-depth ahead of
+      // real multi-tenant auth).
+      await getRepoRef(app.container.db, workspaceId, req.query.repo_id);
+      const links = await service.documentLinks(workspaceId, req.params.id, req.query.repo_id);
+      if (!links) throw new NotFoundError('Skill not found');
+      return links;
+    },
+  );
+
+  app.post(
+    '/skills/:id/documents',
+    { schema: { params: IdParams, body: SetDocumentsBody } },
+    async (req) => {
+      const { workspaceId } = await getContext(app.container, req);
+      // A `repo_id` must resolve to a repo in the caller's workspace before
+      // it's threaded through to storage — 404s on a cross-workspace id
+      // (`security`, defense-in-depth ahead of real multi-tenant auth).
+      await getRepoRef(app.container.db, workspaceId, req.body.repo_id);
+      const links = await service.setDocuments(
+        workspaceId,
+        req.params.id,
+        req.body.paths,
+        req.body.repo_id,
+      );
+      if (!links) throw new NotFoundError('Skill not found');
+      return links;
+    },
+  );
 }

@@ -29,6 +29,7 @@ import type { RepoIntel } from '../modules/repo-intel/types.js';
 import { RepoIntelService } from '../modules/repo-intel/service.js';
 import { type DepGraph, DepCruiseGraph } from '../adapters/depgraph/index.js';
 import { type Tokenizer, TiktokenTokenizer } from '../adapters/tokenizer/index.js';
+import { OnboardingService } from '../modules/onboarding/service.js';
 
 /**
  * DI container. One per app instance. Holds config, db, the JobRunner,
@@ -76,6 +77,7 @@ export class Container {
   private _depgraph?: DepGraph;
   private _tokenizer?: Tokenizer;
   private _priceBook?: PriceBook;
+  private _onboarding?: OnboardingService;
 
   constructor(config: AppConfig, db: Db, private overrides: ContainerOverrides = {}) {
     this.config = config;
@@ -115,6 +117,17 @@ export class Container {
     if (this.overrides.repoIntel) return this.overrides.repoIntel;
     this._repoIntel ??= new RepoIntelService(this);
     return this._repoIntel;
+  }
+
+  /**
+   * Onboarding Tour service (SPEC-02). Lazy singleton so its constructor
+   * (which registers the `onboarding.generate`/`onboarding.regenerate-section`
+   * job kinds on `container.jobs`) runs exactly once — the first time
+   * `onboarding/routes.ts` touches this getter, at module-plugin registration
+   * (app bootstrap), well before any request is served. Mirrors `repoIntel`.
+   */
+  get onboarding(): OnboardingService {
+    return (this._onboarding ??= new OnboardingService(this));
   }
 
   /** Import-graph builder (dependency-cruiser). T3 indexer pipeline only. */

@@ -60,11 +60,63 @@ export const s = {
 
   fileHeader: {
     display: "flex",
+    flexWrap: "wrap" as const,
     alignItems: "center",
     gap: 10,
     padding: "10px 12px",
     cursor: "pointer",
     userSelect: "none" as const,
+  } satisfies CSSProperties,
+
+  summaryToggle: {
+    display: "inline-flex",
+    alignItems: "center",
+    gap: 4,
+    padding: "2px 8px",
+    borderRadius: 5,
+    fontSize: 11,
+    fontWeight: 600,
+    cursor: "pointer",
+    background: "transparent",
+    color: "var(--accent-text)",
+    borderStyle: "solid",
+    borderWidth: 1,
+    borderColor: "var(--accent)",
+    flexShrink: 0,
+  } satisfies CSSProperties,
+
+  summaryLineWrap: {
+    flexBasis: "100%",
+    marginTop: 8,
+  } satisfies CSSProperties,
+
+  summaryLine: {
+    display: "flex",
+    alignItems: "center",
+    gap: 6,
+    padding: "6px 10px",
+    borderRadius: 6,
+    fontSize: 12,
+    color: "var(--accent-text)",
+    background: "var(--accent-bg)",
+  } satisfies CSSProperties,
+
+  summaryStale: {
+    fontSize: 11,
+    color: "var(--text-muted)",
+    fontStyle: "italic" as const,
+  } satisfies CSSProperties,
+
+  summaryRegenerate: {
+    marginLeft: "auto",
+    fontSize: 11,
+    fontWeight: 600,
+    color: "var(--accent-text)",
+    background: "transparent",
+    borderStyle: "none" as const,
+    cursor: "pointer",
+    padding: 0,
+    textDecoration: "underline" as const,
   } satisfies CSSProperties,
 
   filePath: {

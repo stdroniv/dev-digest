@@ -18,6 +18,7 @@ Reusable AI skills that provide specialized knowledge and workflows. Canonical l
 | [mermaid-diagram](mermaid-diagram/SKILL.md) | Shared | Mermaid diagrams in markdown (flowcharts, sequence, ERD, …) |
 | [engineering-insights](engineering-insights/SKILL.md) | Shared | Append hard-won, actionable lessons to the right module's INSIGHTS.md |
 | [ship-feature](ship-feature/SKILL.md) | Workflow | `/ship-feature` — orchestrate the full agent pipeline (plan → build → test → parallel review → loop-back) end-to-end |
+| [workflow-retro](workflow-retro/SKILL.md) | Workflow | `/workflow-retro` — read-only post-mortem of a finished multi-agent run: cost/cache/parallelism metrics + 4Ls reflection → 1–3 owned recommendations + a `docs/retros/ledger.md` trend row |
 
 ## What Are Skills?
 

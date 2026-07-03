@@ -71,6 +71,8 @@ Server DB: `pnpm db:migrate` · `pnpm db:seed` · `pnpm db:generate`.
 - **writing browser e2e flows** → read `e2e/CLAUDE.md`.
 - **building or changing the MCP server / its tools** → read `mcp/CLAUDE.md`.
 - **editing a reviewer agent's system prompt** → read `docs/agent-prompts/README.md`.
+- **writing a feature spec (what/why) or an implementation plan (how)** → specs live in
+  `specs/` (authored by the `spec-creator` agent); plans live in `docs/plans/`.
 - **before debugging a known gotcha** → read `INSIGHTS.md` and the module's `INSIGHTS.md`.
 
 ## Before you finish

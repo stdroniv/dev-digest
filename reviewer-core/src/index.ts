@@ -33,6 +33,37 @@ export {
   type GenerateRiskBriefResult,
 } from './brief/risks.js';
 
+// Why+Risk Brief (SPEC-03) — single-pass generator, grounding filter, and
+// deterministic Context-doc budget selector. Pure, provider-injected.
+export {
+  generateWhyRiskBrief,
+  type GenerateWhyRiskBriefInput,
+  type GenerateWhyRiskBriefResult,
+} from './why-risk-brief/generate.js';
+export { groundBriefRefs, type WhyRiskOracle } from './why-risk-brief/grounding.js';
+export {
+  selectContextDocs,
+  WHY_RISK_BRIEF_DOC_BUDGET_TOKENS,
+  type SelectContextDocsResult,
+} from './why-risk-brief/select-docs.js';
+
+// Per-file "What this does" summary (Smart-Diff view, core-group files only,
+// on-demand) — pure, provider-injected.
+export {
+  summarizeFileDiff,
+  MAX_FILE_SUMMARY_PATCH_CHARS,
+  type SummarizeFileDiffInput,
+  type SummarizeFileDiffResult,
+} from './file-summary/generate.js';
+
+// Onboarding Tour section synthesiser (SPEC-02) — pure, provider-injected.
+export {
+  generateOnboardingSection,
+  type OnboardingGrounding,
+  type GenerateOnboardingSectionInput,
+  type GenerateOnboardingSectionResult,
+} from './onboarding/generate.js';
+
 // Citation grounding — the mandatory mechanical gate for diff findings.
 export { groundFindings, groundingSummary, type GroundingResult } from './grounding.js';
 

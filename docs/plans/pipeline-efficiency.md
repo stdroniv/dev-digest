@@ -1,9 +1,15 @@
 # Plan — ship-feature pipeline efficiency improvements
 
-> Status: **awaiting approval**. Scope: `.claude/` tooling only (skill + agent
-> definitions). No application code, no migrations, no tests affected.
-> Approach (decided): **skill + agent edits**, keeping the current `/ship-feature`
-> invocation and the human approval gate exactly as-is.
+> **Status: superseded / landed.** The cost-discipline guidance below shipped in
+> ship-feature **v1.1.0** (see `CHANGELOG.md`) and the incremental-write instruction
+> now lives in the planning agent. **Naming note:** the `planner` agent named
+> throughout was later renamed to **`implementation-plan`**
+> (`.claude/agents/implementation-plan.md`). Historical telemetry below is preserved
+> **as-recorded** — at the time of the Intent Layer run the agent was named `planner`,
+> so those references are intentionally *not* rewritten.
+>
+> _Original scope: `.claude/` tooling only (skill + agent definitions). No application
+> code, migrations, or tests affected._
 
 ## Why (grounded in the Intent Layer run's actual telemetry)
 

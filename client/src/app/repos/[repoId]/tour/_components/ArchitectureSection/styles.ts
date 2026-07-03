@@ -1,0 +1,45 @@
+import type { CSSProperties } from "react";
+
+export const s = {
+  prose: {
+    display: "flex",
+    flexDirection: "column",
+    gap: 12,
+    fontSize: 13.5,
+    lineHeight: 1.65,
+    color: "var(--text-secondary)",
+  } satisfies CSSProperties,
+  paragraph: { margin: 0 } satisfies CSSProperties,
+  inlineCode: {
+    fontSize: 12.5,
+    padding: "1px 5px",
+    borderRadius: 4,
+    background: "var(--bg-surface)",
+    border: "1px solid var(--border)",
+    color: "var(--text-primary)",
+    whiteSpace: "nowrap",
+  } satisfies CSSProperties,
+  bold: { color: "var(--text-primary)", fontWeight: 650 } satisfies CSSProperties,
+  refsWrap: { display: "flex", flexWrap: "wrap", gap: 6, marginTop: 4 } satisfies CSSProperties,
+  refChip: {
+    display: "inline-flex",
+    alignItems: "center",
+    gap: 5,
+    fontSize: 12,
+    padding: "3px 8px",
+    borderRadius: 5,
+    background: "var(--bg-surface)",
+    border: "1px solid var(--border)",
+    color: "var(--text-primary)",
+    cursor: "pointer",
+  } satisfies CSSProperties,
+  refIcon: { flexShrink: 0, color: "var(--text-muted)" } satisfies CSSProperties,
+  diagramWrap: {
+    marginTop: 4,
+    padding: 12,
+    borderRadius: 8,
+    background: "var(--bg-surface)",
+    border: "1px solid var(--border)",
+    overflowX: "auto",
+  } satisfies CSSProperties,
+};

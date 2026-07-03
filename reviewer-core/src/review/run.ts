@@ -58,8 +58,14 @@ export interface ReviewInput {
   skills?: string[];
   /** Curated memory items. */
   memory?: string[];
-  /** Project-context spec chunks (untrusted; delimiter-wrapped downstream). */
-  specs?: string[];
+  /**
+   * Project-context documents (untrusted; delimiter-wrapped downstream, one
+   * `wrapUntrusted(path, content)` block per doc). Already-read `{path,
+   * content}` pairs — reviewer-core does no I/O, so the caller resolves these
+   * from the reviewed PR's own clone. Empty/undefined → no `## Project
+   * context` section (identical to pre-feature behavior).
+   */
+  specs?: { path: string; content: string }[];
   /**
    * Optional callers-of-changed-symbols digest (T1.3). Untrusted; rendered
    * before the diff section. Empty/undefined → section omitted.

@@ -3,6 +3,15 @@ import type { RiskSeverity } from "@devdigest/shared";
 
 /** Co-located styles for IntentCard. */
 export const s = {
+  // Fills its (stretched) grid cell so the card below can flex-grow to match the
+  // right column's height — see OverviewTab `briefGrid`.
+  section: {
+    display: "flex",
+    flexDirection: "column" as const,
+    flex: 1,
+    minHeight: 0,
+  } satisfies CSSProperties,
+
   card: {
     borderRadius: 8,
     borderStyle: "solid",
@@ -10,6 +19,9 @@ export const s = {
     borderColor: "var(--border)",
     background: "var(--bg-elevated)",
     overflow: "hidden",
+    // Grow to fill the section height so the left column bottom-aligns with the
+    // right column when the latter is taller (e.g. Prior PRs expanded).
+    flex: 1,
   } satisfies CSSProperties,
 
   header: {
@@ -94,55 +106,36 @@ export const s = {
   // Risk Areas section — below the scope section
   riskAreasSection: { padding: "0 16px 14px" } satisfies CSSProperties,
 
-  riskChipRow: { display: "flex", flexWrap: "wrap" as const, gap: 8 } satisfies CSSProperties,
-
-  riskChipWrap: {
+  riskList: {
+    listStyle: "none",
+    margin: 0,
+    padding: 0,
     display: "flex",
     flexDirection: "column" as const,
-    gap: 6,
-    minWidth: 0,
+    gap: 8,
   } satisfies CSSProperties,
 
-  // Base chip — borderColor is set via per-render spread; borderStyle/borderWidth
-  // are longhands so no border shorthand + longhand collision occurs.
-  riskChip: {
+  riskItem: {
+    display: "flex",
+    flexDirection: "column" as const,
+    gap: 4,
+  } satisfies CSSProperties,
+
+  // The title itself carries the hover tooltip (native title/aria-label) that
+  // reveals the risk's longer explanation — no click-to-expand affordance.
+  riskTitle: {
     display: "inline-flex",
     alignItems: "center",
     gap: 6,
-    padding: "4px 10px",
-    borderRadius: 6,
     fontSize: 12.5,
     fontWeight: 600,
-    borderStyle: "solid" as const,
-    borderWidth: 1,
-    cursor: "pointer",
-    maxWidth: "100%",
-    background: "transparent",
+    cursor: "default",
   } satisfies CSSProperties,
 
   riskChipTitle: {
     overflow: "hidden",
     textOverflow: "ellipsis",
     whiteSpace: "nowrap" as const,
-  } satisfies CSSProperties,
-
-  riskDetail: {
-    padding: "8px 10px",
-    borderRadius: 6,
-    background: "var(--bg-surface)",
-    borderStyle: "solid" as const,
-    borderWidth: 1,
-    borderColor: "var(--border)",
-    display: "flex",
-    flexDirection: "column" as const,
-    gap: 6,
-  } satisfies CSSProperties,
-
-  riskExplanation: {
-    fontSize: 13,
-    color: "var(--text-secondary)",
-    margin: 0,
-    lineHeight: 1.5,
   } satisfies CSSProperties,
 
   riskFileRefs: { display: "flex", flexWrap: "wrap" as const, gap: 8 } satisfies CSSProperties,

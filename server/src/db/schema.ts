@@ -25,11 +25,12 @@ export * from './schema/ci';
 export * from './schema/runs';
 export * from './schema/ops';
 export * from './schema/repo-intel';
+export * from './schema/documents';
 
 import { users, workspaces, workspaceMembers, settings } from './schema/core';
 import { repos } from './schema/repos';
 import { pullRequests, prFiles, prCommits } from './schema/pulls';
-import { reviews, findings, prIntent, prBrief } from './schema/reviews';
+import { reviews, findings, prIntent, prBrief, whyRiskBrief, prFileSummary } from './schema/reviews';
 import { skills, skillVersions } from './schema/skills';
 import { agents, agentVersions, agentSkills } from './schema/agents';
 import { memory, conventions } from './schema/knowledge';
@@ -45,6 +46,7 @@ import {
   fileRank,
   repoMapCache,
 } from './schema/repo-intel';
+import { agentDocuments, skillDocuments } from './schema/documents';
 
 /** Convenience: the full schema object for drizzle() client typing. */
 export const schema = {
@@ -60,6 +62,8 @@ export const schema = {
   findings,
   prIntent,
   prBrief,
+  whyRiskBrief,
+  prFileSummary,
   skills,
   skillVersions,
   agents,
@@ -89,4 +93,6 @@ export const schema = {
   fileFacts,
   fileRank,
   repoMapCache,
+  agentDocuments,
+  skillDocuments,
 };

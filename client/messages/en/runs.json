@@ -34,7 +34,17 @@
       "memoryPulled": "Memory pulled",
       "specsRead": "Specs read",
       "items": "{count, plural, one {# item} other {# items}}",
-      "none": "none"
+      "none": "none",
+      "documentsRead": "Documents read",
+      "documentsUnavailable": "Attached but unavailable",
+      "documentsRepoExcluded": "Excluded — different repository",
+      "docTokens": "{count, plural, one {# token} other {# tokens}}",
+      "excludedCount": "{count, plural, one {# document} other {# documents}}",
+      "excludedNote": "This attached set is anchored to a different repository than this PR — it was excluded entirely, not resolved path-by-path.",
+      "origin": {
+        "agent": "Agent",
+        "skill": "Skill"
+      }
     },
     "stat": {
       "duration": "DURATION",
@@ -48,7 +58,8 @@
       "skillsTokens": "+{count} tokens",
       "memory": "Memory (dynamic)",
       "repoMap": "Repo skeleton — repo-intel (dynamic)",
-      "specs": "Project context (dynamic)",
+      "specs": "Project context — untrusted (dynamic)",
+      "specsTokens": "+{count} tokens",
       "callers": "Callers of changed symbols — repo-intel (dynamic)",
       "user": "User / diff (dynamic)",
       "copy": "Copy",

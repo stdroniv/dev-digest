@@ -13,7 +13,9 @@ package's README; this doc is the cross-package flow.
    body, linked issue) via the GitHub adapter.
 3. **Run a review** — `POST /pulls/:id/review` → `modules/reviews/run-executor.ts`
    loads the diff, gathers context (repo map + caller signatures when indexed and
-   enabled), and calls `reviewPullRequest()` in `reviewer-core`.
+   enabled, plus any project-context `.md` documents a user attached to the agent
+   or its skills — `modules/documents/`), and calls `reviewPullRequest()` in
+   `reviewer-core`.
 4. **Engine** (`reviewer-core`): `assemblePrompt()` (+ `INJECTION_GUARD`,
    `wrapUntrusted()`) → injected `LLMProvider` → structured output
    (Zod→JSON Schema, parse-with-repair) → **`groundFindings()`** drops any finding

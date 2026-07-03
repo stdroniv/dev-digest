@@ -11,6 +11,8 @@ export interface NavItemDef {
   /** Optional g-nav shortcut suffix (e.g. "p" → g then p). */
   gKey?: string;
   badge?: string;
+  /** When set, the item renders only while a repository is active. */
+  repoScoped?: boolean;
 }
 
 export interface NavGroup {
@@ -23,6 +25,8 @@ export const NAV: NavGroup[] = [
     section: "WORKSPACE",
     items: [
       { key: "pulls", label: "Pull Requests", icon: "GitPullRequest", href: "/repos/:repoId/pulls", gKey: "p" },
+      { key: "context", label: "Project Context", icon: "FileText", href: "/repos/:repoId/context", gKey: "d", repoScoped: true },
+      { key: "onboarding-tour", label: "Onboarding Tour", icon: "Hexagon", href: "/repos/:repoId/tour", gKey: "t", repoScoped: true },
     ],
   },
   {
@@ -46,6 +50,7 @@ export const SETTINGS_ITEM: NavItemDef = {
 export const SETTINGS_SECTIONS = [
   { key: "api-keys", label: "API Keys" },
   { key: "models", label: "Feature Models" },
+  { key: "root-folders", label: "Project Doc Roots" },
 ] as const;
 
 /** Keyboard shortcut registry. Wiring is finalized by A6. */
@@ -59,6 +64,8 @@ export const SHORTCUTS: ShortcutDef[] = [
   { keys: "⌘K", label: "Open command palette", group: "Global" },
   { keys: "?", label: "Show keyboard shortcuts", group: "Global" },
   { keys: "g p", label: "Go to Pull Requests", group: "Navigation" },
+  { keys: "g d", label: "Go to Project Context", group: "Navigation" },
+  { keys: "g t", label: "Go to Onboarding Tour", group: "Navigation" },
   { keys: "g s", label: "Go to Skills", group: "Navigation" },
   { keys: "g a", label: "Go to Agents", group: "Navigation" },
   { keys: "g c", label: "Go to Conventions", group: "Navigation" },

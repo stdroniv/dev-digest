@@ -92,6 +92,48 @@
       "when": 1782086341001,
       "tag": "0012_perfect_imperial_guard",
       "breakpoints": true
+    },
+    {
+      "idx": 13,
+      "version": "7",
+      "when": 1782935636585,
+      "tag": "0013_careless_william_stryker",
+      "breakpoints": true
+    },
+    {
+      "idx": 14,
+      "version": "7",
+      "when": 1782973454666,
+      "tag": "0014_legal_azazel",
+      "breakpoints": true
+    },
+    {
+      "idx": 15,
+      "version": "7",
+      "when": 1782996074483,
+      "tag": "0015_perpetual_ulik",
+      "breakpoints": true
+    },
+    {
+      "idx": 16,
+      "version": "7",
+      "when": 1782998266579,
+      "tag": "0016_elite_shiva",
+      "breakpoints": true
+    },
+    {
+      "idx": 17,
+      "version": "7",
+      "when": 1783021401845,
+      "tag": "0017_sleepy_ben_parker",
+      "breakpoints": true
+    },
+    {
+      "idx": 18,
+      "version": "7",
+      "when": 1783024404435,
+      "tag": "0018_tired_purple_man",
+      "breakpoints": true
     }
   ]
 }

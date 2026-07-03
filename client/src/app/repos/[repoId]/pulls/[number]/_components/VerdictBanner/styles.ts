@@ -35,6 +35,36 @@ export const s = {
     color: "var(--text-secondary)",
     marginTop: 8,
   } satisfies CSSProperties,
+  whySummary: {
+    fontSize: 13,
+    lineHeight: 1.55,
+    color: "var(--text-muted)",
+    marginTop: 4,
+  } satisfies CSSProperties,
+  // Longhands only (no `border`/`background` shorthand) — this badge is
+  // rendered conditionally alongside sibling Badges in the same flex row,
+  // so a shorthand+longhand mix here would trip React's style-conflict
+  // warning the moment any sibling re-render touches these properties.
+  staleBadge: {
+    display: "inline-flex",
+    alignItems: "center",
+    gap: 4,
+    padding: "3px 8px",
+    borderRadius: 6,
+    fontSize: 11,
+    fontWeight: 600,
+    color: "var(--warn)",
+    backgroundColor: "var(--warn-bg)",
+    borderStyle: "solid",
+    borderWidth: 1,
+    borderColor: "var(--warn)",
+  } satisfies CSSProperties,
+  truncatedNote: {
+    fontSize: 12,
+    color: "var(--text-muted)",
+    fontStyle: "italic",
+    marginTop: 6,
+  } satisfies CSSProperties,
   scoreCol: {
     display: "flex",
     flexDirection: "column",
@@ -47,4 +77,18 @@ export const s = {
     color: "var(--text-muted)",
     letterSpacing: "0.04em",
   } satisfies CSSProperties,
+  scoreStat: {
+    display: "flex",
+    alignItems: "center",
+    gap: 8,
+    marginTop: 2,
+    fontSize: 12,
+    color: "var(--text-muted)",
+  } satisfies CSSProperties,
+  scoreCost: {
+    display: "inline-flex",
+    alignItems: "center",
+    gap: 2,
+  } satisfies CSSProperties,
+  scoreTokens: { color: "var(--text-muted)" } satisfies CSSProperties,
 } as const;

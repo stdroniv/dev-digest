@@ -74,18 +74,19 @@ export function BlastRadius({ prId, repoFullName }: BlastRadiusProps) {
       {/* Step 8: section icon GitMerge → Workflow (confirmed against design source) */}
       <SectionLabel icon="Workflow">Blast Radius</SectionLabel>
 
-      {isDegraded && (
-        <div style={s.degradedBadge} role="status" aria-label={t("degraded.badge")}>
-          {t("degraded.badge")}
-        </div>
-      )}
-      {!isDegraded && isPartial && (
-        <div style={s.degradedBadge} role="status" aria-label={t("partial.badge")}>
-          {t("partial.badge")}
-        </div>
-      )}
-
       <div style={s.card}>
+        {/* Degraded / partial notice — part of the card, above the stat header. */}
+        {isDegraded && (
+          <div style={s.degradedBadge} role="status" aria-label={t("degraded.badge")}>
+            {t("degraded.badge")}
+          </div>
+        )}
+        {!isDegraded && isPartial && (
+          <div style={s.degradedBadge} role="status" aria-label={t("partial.badge")}>
+            {t("partial.badge")}
+          </div>
+        )}
+
         {/* Header: stat summary + Tree | Graph toggle */}
         <div style={s.header}>
           {/* Step 6: per-stat icon groups; each rendered as icon + template-literal text node

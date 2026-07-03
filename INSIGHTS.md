@@ -21,6 +21,26 @@ cold; never edit or delete existing entries.
   PRs via `ReviewRepository.getPullByNumber`. Raw `db.insert(t.x).values(...).returning()` is fine (no
   operator → server-typed throughout); only the operator imports clash. (reviewer-core dodges this entirely
   by being pure — it has no drizzle.)
+- The `ship-feature` skill and the `.claude/agents/*.md` roster **drift out of sync on an agent
+  rename**, and nothing catches it automatically. Renaming `planner`→`implementation-plan` (and adding
+  `spec-creator`/`spec-conformance`) left `.claude/skills/ship-feature/SKILL.md` still saying
+  "Spawn `planner`" — i.e. spawning a **deleted** agent — plus stale mentions in
+  `references/cost-discipline.md`, the skill `CHANGELOG`, and `docs/plans/*`. The agent files and
+  `agents/README.md` had been updated; the **orchestrator that drives them** had not. The skill body is
+  plain prose the harness never validates against the live agent roster, so a dead spawn target fails
+  **silently until `/ship-feature` runs**. **Fix/habit:** after renaming/adding/removing any agent,
+  `grep -rn '<old-name>' .claude/ docs/` for the OLD name and fix every spawn instruction, pipeline
+  diagram, and cross-reference. (Distinct from the skill⇄agent *conversion* catalog check under Tool &
+  Library Notes — this is same-role, name-changed drift in the orchestration prose.)
+- The "no `skills:` frontmatter, use an on-demand routing table" convention (see Tool & Library Notes)
+  is **not self-enforcing and does get violated in practice**: the `implementation-plan` agent (opus,
+  multi-turn) shipped with a **13-entry `skills:` block** preloading every SKILL.md plus a body line
+  "all skills are pre-loaded via the frontmatter" — re-billing all 13 files as cache-read on *every*
+  turn of an opus agent, the single worst preload in the roster. When auditing agents for cost,
+  `grep -n '^skills:' .claude/agents/*.md` to find preloads; convert each to the routing-table pattern,
+  copying the `implementer.md` / `test-writer.md` body shape (module→skill table + read 1–2 on demand).
+  Skill-free agents (`spec-creator`, `spec-conformance`) correctly attach **no** skills — they work at
+  the WHAT/plan level, where skills (which teach the HOW) would only leak implementation detail and burn tokens.
 
 ## Codebase Patterns
 
@@ -249,6 +269,7 @@ cold; never edit or delete existing entries.
 - To measure sub-agent **token cost**, do NOT trust the `subagent_tokens` figure in a `Task` result — it reports only **output** tokens (~1% of real consumption). Cost is dominated by **cache-read** (each agent's context re-billed every turn ≈ 93% of total in a real ship-feature run). Ground truth lives in the per-agent transcript JSONL at `<session-tmp>/tasks/<agentId>.output` (path is in the Task tool result): each `type:"assistant"` line has `message.usage` with `input_tokens`, `cache_creation_input_tokens`, `cache_read_input_tokens`, `output_tokens` — sum those across lines per file. The actual model is in `message.model`. Doing this revealed the ship-feature agents' `model:` tiering is **already in effect** (explorers→`claude-haiku-4-5`, `implementer`/`test-writer`/`plan-verifier`→`claude-sonnet-4-6`, `planner`/`architecture-reviewer`/`security-reviewer`→`claude-opus-4-8`), so the real cost lever is **conversation length**, not model tier — don't "optimise" by downgrading models that are already tiered.
 - In this environment, BOTH `pnpm <script>` (e.g. `pnpm test`, `pnpm typecheck`) and even `pnpm exec <tool>` run a pre-flight deps-status check (`runDepsStatusCheck`) that does an implicit `pnpm install`, which HARD-FAILS with `ERR_PNPM_IGNORED_BUILDS` (esbuild build scripts unapproved) → exit 1, so the underlying tool never runs. Setting `npm_config_verify_deps_before_run=false` does NOT bypass it. Workaround that reliably runs typecheck/tests: invoke the package-local binary directly, skipping pnpm — `node_modules/.bin/tsc --noEmit` and `node_modules/.bin/vitest run [pattern]` (each of the 4 packages has its own `node_modules/.bin`). For server DB-backed it-tests, prefix `TESTCONTAINERS_RYUK_DISABLED=true` (Podman/rootless, per server/INSIGHTS.md). (`pnpm approve-builds` would also fix it but is interactive.)
 - Delegating a multi-phase task to a **background `implementer` agent that commits per-phase** has a hidden failure mode: the agent runs a plain `git commit`, which commits **everything already staged in the index** — so any changes sitting STAGED at delegation time get swept into the agent's FIRST phase commit and mislabeled under that commit's message. This session, 9 unrelated pre-staged files (`CLAUDE.md`, `mcp/CLAUDE.md`, `mcp/INSIGHTS.md`, `reviewer-core/INSIGHTS.md` + 5 `reviewer-core` src/test files) landed inside the client-only "Phase 1 — PR Brief two-column grid" commit (`e6509b1`), muddling history (verify with `git show --stat <phase1-sha>`). **Mitigation:** before delegating, run `git status --short` and either commit/stash the pre-staged index or tell the agent to `git add` only its own paths (never bare `git commit -a`/`git commit` of the whole index). Detect after the fact with `git show --stat` on the first commit; fixing means a history rewrite, so prevention is cheaper.
+- Two implementer agents executing **different, path-disjoint plans concurrently in the same uncommitted working tree** (verified no owned-path overlap up front) can still leave the WHOLE-REPO gate (`tsc --noEmit`, `next build`) red at any moment purely from the OTHER agent's in-progress, not-yet-internally-consistent edit (e.g. one agent changes a hook's mutation signature in `lib/hooks/documents.ts` before updating every caller like `ContextTab.tsx`, which it hasn't reached yet). This is NOT your task's fault and not fixable within your scope (editing the other agent's owned files would violate the "leave it alone" boundary). Diagnose by grepping the failing file paths against your OWN task's owned-paths list — if every error is in files you never touched (confirm via `git status --short <that-path>` showing no modification, i.e. the breakage is transitively caused by a modified DEPENDENCY, not the file itself), it's cross-agent noise: verify your own changed files in isolation (targeted `grep`/`tsc`-error-filter on your paths, literal-path/targeted `vitest run` for your tests) rather than trusting a whole-repo command's exit code, and report the whole-repo gate as red-but-attributed rather than silently declaring victory or trying to patch around it.
 
 ## Session Notes
 

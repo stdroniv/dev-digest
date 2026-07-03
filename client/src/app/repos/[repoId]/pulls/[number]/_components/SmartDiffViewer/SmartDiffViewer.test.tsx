@@ -798,3 +798,139 @@ describe("SmartDiffViewer — file card accordion toggle", () => {
     expect(screen.getAllByText(/^warning$/i).length).toBeGreaterThanOrEqual(1);
   });
 });
+
+// ---- FileSummary ("What this does" per-file AI summary) --------------------
+
+/**
+ * Builds a fetch mock that branches on URL AND method — needed here because
+ * GET /pulls/:id/file-summary and POST /pulls/:id/file-summary hit the SAME
+ * path with different response bodies (GET = cached state, POST = generate).
+ */
+function fileSummaryFetch(opts: {
+  getSummary?: unknown;
+  postSummary?: unknown;
+}) {
+  return (url: unknown, init?: RequestInit) => {
+    const path = typeof url === "string" ? url : String(url);
+    if (path.includes("/smart-diff")) return Promise.resolve(jsonResp(SMART_DIFF));
+    if (path.includes("/file-summary")) {
+      const method = init?.method ?? "GET";
+      if (method === "POST") {
+        return Promise.resolve(jsonResp(opts.postSummary ?? { status: "ready", summary: "Adds one to x.", stale: false }));
+      }
+      return Promise.resolve(jsonResp(opts.getSummary ?? { status: "not_generated" }));
+    }
+    return Promise.resolve(jsonResp(null));
+  };
+}
+
+function renderViewerWithFetch(fetchImpl: (url: unknown, init?: RequestInit) => Promise<Response>) {
+  global.fetch = vi.fn(fetchImpl) as unknown as typeof fetch;
+  const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  return render(
+    <QueryClientProvider client={qc}>
+      <NextIntlClientProvider locale="en" messages={{ brief: briefMessages }}>
+        <SmartDiffViewer prId={PR_ID} files={PR_FILES} />
+      </NextIntlClientProvider>
+    </QueryClientProvider>,
+  );
+}
+
+describe("SmartDiffViewer — FileSummary button visibility (core-group gating)", () => {
+  it("shows the 'summary' button on a core file but not on a boilerplate file", async () => {
+    renderViewerWithFetch(fileSummaryFetch({}));
+    await waitFor(() => expect(screen.getByText(/Core logic/i)).toBeInTheDocument());
+
+    // One summary button (for the single core file "src/service.ts")
+    expect(screen.getAllByText("summary")).toHaveLength(1);
+
+    // Boilerplate group is collapsed by default and its file ("pnpm-lock.yaml")
+    // never renders a summary button regardless of open/closed state.
+    expect(screen.getByText(/Boilerplate/i)).toBeInTheDocument();
+  });
+});
+
+describe("SmartDiffViewer — FileSummary does not auto-fetch on mount", () => {
+  it("issues no /file-summary request until the summary button is clicked", async () => {
+    const fetchMock = vi.fn(fileSummaryFetch({}));
+    global.fetch = fetchMock as unknown as typeof fetch;
+    const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    render(
+      <QueryClientProvider client={qc}>
+        <NextIntlClientProvider locale="en" messages={{ brief: briefMessages }}>
+          <SmartDiffViewer prId={PR_ID} files={PR_FILES} />
+        </NextIntlClientProvider>
+      </QueryClientProvider>,
+    );
+
+    await waitFor(() => expect(screen.getByText(/Core logic/i)).toBeInTheDocument());
+    expect(screen.getByText("summary")).toBeInTheDocument();
+
+    const fileSummaryCalls = fetchMock.mock.calls.filter((c) => String(c[0]).includes("/file-summary"));
+    expect(fileSummaryCalls).toHaveLength(0);
+  });
+});
+
+describe("SmartDiffViewer — clicking summary on a not_generated core file generates and renders it", () => {
+  it("fires the POST and renders 'What this does: <summary>' from the ready response", async () => {
+    renderViewerWithFetch(
+      fileSummaryFetch({
+        getSummary: { status: "not_generated" },
+        postSummary: { status: "ready", summary: "Adds one to x.", stale: false },
+      }),
+    );
+
+    await waitFor(() => expect(screen.getByText(/Core logic/i)).toBeInTheDocument());
+
+    fireEvent.click(screen.getByText("summary"));
+
+    await waitFor(() => expect(screen.getByText(/Adds one to x\./)).toBeInTheDocument());
+    expect(screen.getByText("What this does:")).toBeInTheDocument();
+  });
+});
+
+describe("SmartDiffViewer — FileSummary collapses without refetching", () => {
+  it("clicking summary again collapses the line without issuing another request", async () => {
+    const fetchMock = vi.fn(
+      fileSummaryFetch({
+        getSummary: { status: "ready", summary: "Adds one to x.", stale: false },
+      }),
+    );
+    global.fetch = fetchMock as unknown as typeof fetch;
+    const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    render(
+      <QueryClientProvider client={qc}>
+        <NextIntlClientProvider locale="en" messages={{ brief: briefMessages }}>
+          <SmartDiffViewer prId={PR_ID} files={PR_FILES} />
+        </NextIntlClientProvider>
+      </QueryClientProvider>,
+    );
+
+    await waitFor(() => expect(screen.getByText(/Core logic/i)).toBeInTheDocument());
+
+    fireEvent.click(screen.getByText("summary"));
+    await waitFor(() => expect(screen.getByText(/Adds one to x\./)).toBeInTheDocument());
+
+    const callsAfterOpen = fetchMock.mock.calls.filter((c) => String(c[0]).includes("/file-summary")).length;
+
+    fireEvent.click(screen.getByText("summary"));
+    expect(screen.queryByText(/Adds one to x\./)).not.toBeInTheDocument();
+
+    const callsAfterCollapse = fetchMock.mock.calls.filter((c) => String(c[0]).includes("/file-summary")).length;
+    expect(callsAfterCollapse).toBe(callsAfterOpen);
+  });
+});
+
+describe("SmartDiffViewer — FileSummary 'no model configured' hint", () => {
+  it("renders the no-model hint when the summary state is skipped/no_model", async () => {
+    renderViewerWithFetch(
+      fileSummaryFetch({ getSummary: { status: "skipped", reason: "no_model" } }),
+    );
+
+    await waitFor(() => expect(screen.getByText(/Core logic/i)).toBeInTheDocument());
+
+    fireEvent.click(screen.getByText("summary"));
+
+    await waitFor(() => expect(screen.getByText("No model configured")).toBeInTheDocument());
+  });
+});

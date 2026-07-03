@@ -152,4 +152,26 @@ describe("Skill ConfigTab", () => {
       expect.objectContaining({ name: "new-skill 2", body: "# New skill", type: "custom" }),
     );
   });
+
+  it("no longer renders any project-context document row/attach UI — moved to the sibling Context tab (T8)", () => {
+    renderWithIntl(<ConfigTab skill={SKILL} />);
+    // No document rows, no checkboxes (attach UI), no "Project context to
+    // use" section heading — the whole thing now lives in ContextTab.
+    expect(screen.queryByRole("checkbox")).not.toBeInTheDocument();
+    expect(screen.queryByText("Project context to use")).not.toBeInTheDocument();
+    expect(screen.queryByText(/tokens attached/)).not.toBeInTheDocument();
+  });
+
+  it("saving the Config form still issues only the body-only PATCH (no documents mutation)", () => {
+    renderWithIntl(<ConfigTab skill={SKILL} />);
+    fireEvent.change(screen.getByDisplayValue("pr-quality-rubric"), {
+      target: { value: "renamed-rubric" },
+    });
+    fireEvent.click(screen.getByText("Save").closest("button")!);
+
+    expect(mutate).toHaveBeenCalledTimes(1);
+    expect(mutate.mock.calls[0]![0]).toEqual(
+      expect.objectContaining({ id: "sk1", patch: { name: "renamed-rubric" } }),
+    );
+  });
 });

@@ -13,7 +13,7 @@ import React from "react";
 import { useTranslations } from "next-intl";
 import { SectionLabel, Icon, Skeleton } from "@devdigest/ui";
 import type { PrFile, SmartDiffFile, SmartDiffRole, FindingAnnotation } from "@devdigest/shared";
-import { useSmartDiff } from "@/lib/hooks/brief";
+import { useSmartDiff, useFileSummary, useGenerateFileSummary } from "@/lib/hooks/brief";
 import { parsePatch, type Line } from "@/components/diff-viewer";
 import { s } from "./styles";
 
@@ -115,6 +115,7 @@ export function SmartDiffViewer({ prId, files, hideHeader = false, onNavigateToF
         {groups.map((group) => (
           <SmartDiffGroup
             key={group.role}
+            prId={prId}
             role={group.role}
             smartFiles={group.files}
             fileMap={fileMap}
@@ -130,12 +131,14 @@ export function SmartDiffViewer({ prId, files, hideHeader = false, onNavigateToF
 // ---- Group -----------------------------------------------------------------
 
 function SmartDiffGroup({
+  prId,
   role,
   smartFiles,
   fileMap,
   onNavigateToFinding,
   t,
 }: {
+  prId: string | null;
   role: SmartDiffRole;
   smartFiles: SmartDiffFile[];
   fileMap: Map<string, PrFile>;
@@ -158,6 +161,8 @@ function SmartDiffGroup({
       {smartFiles.map((sf) => (
         <SmartFileCard
           key={sf.path}
+          prId={prId}
+          role={role}
           smartFile={sf}
           prFile={fileMap.get(sf.path) ?? null}
           defaultOpen={role !== "boilerplate"}
@@ -172,18 +177,23 @@ function SmartDiffGroup({
 // ---- File card -------------------------------------------------------------
 
 function SmartFileCard({
+  prId,
+  role,
   smartFile,
   prFile,
   defaultOpen,
   onNavigateToFinding,
   t,
 }: {
+  prId: string | null;
+  role: SmartDiffRole;
   smartFile: SmartDiffFile;
   prFile: PrFile | null;
   defaultOpen: boolean;
   onNavigateToFinding?: (findingId: string) => void;
   t: ReturnType<typeof useTranslations<"brief">>;
 }) {
+  const isCore = role === "core";
   const [open, setOpen] = React.useState(defaultOpen);
   const lines = React.useMemo(() => parsePatch(prFile?.patch), [prFile?.patch]);
 
@@ -266,6 +276,7 @@ function SmartFileCard({
           <span style={s.addText}>+{smartFile.additions}</span>{" "}
           <span style={s.delText}>−{smartFile.deletions}</span>
         </span>
+        {isCore && <FileSummary prId={prId} path={smartFile.path} t={t} />}
         {hasFinding && (
           <button
             type="button"
@@ -315,6 +326,100 @@ function SmartFileCard({
         </div>
       )}
     </div>
+  );
+}
+
+// ---- FileSummary ("What this does" per-file AI summary) --------------------
+
+/**
+ * Mounted per core-group file (isolates each file's hook/query state).
+ * Renders the "✨ summary" toggle button (an item in the file header's flex
+ * row) and, when open, an accent-tinted "What this does: …" line that wraps
+ * onto its own row below the header (via `flexBasis: 100%` on `fileHeader`,
+ * which is `flexWrap: wrap`) — both pieces share the same component instance
+ * so their state (open/loading/summary) stays in sync without lifting state
+ * into SmartFileCard or using a portal.
+ */
+function FileSummary({
+  prId,
+  path,
+  t,
+}: {
+  prId: string | null;
+  path: string;
+  t: ReturnType<typeof useTranslations<"brief">>;
+}) {
+  const [open, setOpen] = React.useState(false);
+  const { data, isLoading } = useFileSummary(prId, path, open);
+  const generate = useGenerateFileSummary(prId);
+  const mutate = generate.mutate;
+  const generateTriggered = React.useRef(false);
+
+  // When first opened on a not-yet-generated file, fire one generate round-trip.
+  React.useEffect(() => {
+    if (!open) {
+      generateTriggered.current = false;
+      return;
+    }
+    if (data && data.status === "not_generated" && !generateTriggered.current) {
+      generateTriggered.current = true;
+      mutate({ path });
+    }
+  }, [open, data, mutate, path]);
+
+  const handleToggle = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    setOpen((o) => !o);
+  };
+
+  const handleRegenerate = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    generateTriggered.current = true;
+    mutate({ path, regenerate: true });
+  };
+
+  const summarizing = open && (isLoading || generate.isPending);
+
+  let content: React.ReactNode = null;
+  if (summarizing) {
+    content = (
+      <span style={s.summaryLine}>
+        <Icon.Sparkles size={12} style={{ color: "var(--accent)" }} />
+        {t("smartDiff.summarizing")}
+      </span>
+    );
+  } else if (data && data.status === "ready") {
+    content = (
+      <span style={s.summaryLine}>
+        <Icon.Sparkles size={12} style={{ color: "var(--accent)" }} />
+        <span>
+          <strong>{t("smartDiff.whatThisDoes")}</strong> {data.summary}
+        </span>
+        {data.stale && <span style={s.summaryStale}>({t("smartDiff.stale")})</span>}
+        <button type="button" onClick={handleRegenerate} style={s.summaryRegenerate}>
+          {t("smartDiff.regenerate")}
+        </button>
+      </span>
+    );
+  } else if (data && data.status === "skipped") {
+    content = <span style={s.summaryLine}>{t("smartDiff.noModel")}</span>;
+  } else if (data && data.status === "no_diff") {
+    content = <span style={s.summaryLine}>{t("smartDiff.noDiffToSummarize")}</span>;
+  }
+
+  return (
+    <>
+      <button
+        type="button"
+        onClick={handleToggle}
+        aria-expanded={open}
+        style={s.summaryToggle}
+      >
+        <Icon.Sparkles size={12} />
+        {t("smartDiff.summary")}
+      </button>
+      {open && content && <div style={s.summaryLineWrap}>{content}</div>}
+    </>
   );
 }
 

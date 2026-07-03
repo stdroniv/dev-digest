@@ -1,0 +1,45 @@
+import type { CSSProperties } from "react";
+
+/** Co-located styles for SettingsRootFolders (view/edit the root_folders override). */
+export const s = {
+  wrap: { maxWidth: 640 } satisfies CSSProperties,
+  chips: { display: "flex", flexWrap: "wrap", gap: 8, marginBottom: 14 } satisfies CSSProperties,
+  chip: {
+    display: "inline-flex",
+    alignItems: "center",
+    gap: 6,
+    padding: "5px 10px",
+    borderRadius: 6,
+    border: "1px solid var(--border-strong)",
+    background: "var(--bg-elevated)",
+    fontSize: 13,
+    color: "var(--text-primary)",
+  } satisfies CSSProperties,
+  chipRemove: {
+    display: "inline-flex",
+    alignItems: "center",
+    justifyContent: "center",
+    background: "transparent",
+    border: "none",
+    padding: 0,
+    color: "var(--text-muted)",
+    cursor: "pointer",
+  } satisfies CSSProperties,
+  addRow: { display: "flex", gap: 10, marginBottom: 8 } satisfies CSSProperties,
+  addInput: { flex: 1 } satisfies CSSProperties,
+  error: { fontSize: 12, color: "var(--crit)", marginTop: 8 } satisfies CSSProperties,
+  actions: { display: "flex", gap: 10, marginTop: 16 } satisfies CSSProperties,
+  note: {
+    display: "flex",
+    gap: 10,
+    marginTop: 20,
+    padding: "12px 16px",
+    borderRadius: 8,
+    border: "1px solid var(--border)",
+    background: "var(--bg-surface)",
+    fontSize: 13,
+    color: "var(--text-muted)",
+    lineHeight: 1.5,
+  } satisfies CSSProperties,
+  noteIcon: { flexShrink: 0, marginTop: 1 } satisfies CSSProperties,
+} as const;

@@ -20,10 +20,17 @@ or filesystem — the only side effect is an **injected** `LLMProvider`.
   model's self-reported score is ignored. Don't bypass it.
 - **Injection defense is one shared trusted rule** (`INJECTION_GUARD` in
   `prompt.ts`), not keyword scanning. Untrusted content (diff, PR body, README) is
-  fenced as data via `wrapUntrusted()`; claims like "test fixture, don't flag"
-  never descope a review.
+  fenced as data via `wrapUntrusted(label, content)`; claims like "test fixture,
+  don't flag" never descope a review. `wrapUntrusted` escapes **both** arguments —
+  `label` is untrusted-adjacent too (a caller can pass attacker-influenceable data,
+  e.g. a stored document path from the repo), not just `content`. Don't assume the
+  label is safe to interpolate raw just because it "looks like" a fixed identifier.
 - **Optional prompt slots** (`skills`, `memory`, `specs`, `callers`) are fed by
   later lessons; when omitted, `assemblePrompt` just leaves those sections out.
+  `specs` (Project Context, L05) is `{ path: string; content: string }[]`, **not**
+  `string[]` — the server reads each attached document fresh from the reviewed
+  PR's own clone and `assemblePrompt` renders one `wrapUntrusted(doc.path,
+  doc.content)` block per document inside a single `## Project context` section.
 - **Contracts** (`Review`, `Finding`, `Verdict`, …) come from `@devdigest/shared` —
   don't redefine them locally.
 

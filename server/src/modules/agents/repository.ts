@@ -1,7 +1,7 @@
 import { and, asc, desc, eq, sql } from 'drizzle-orm';
 import type { Db } from '../../db/client.js';
 import * as t from '../../db/schema.js';
-import type { CiFailOn, Provider, ReviewStrategy } from '@devdigest/shared';
+import type { AgentDocumentLink, CiFailOn, Provider, ReviewStrategy } from '@devdigest/shared';
 import { DEFAULT_AGENT_DESCRIPTION, INITIAL_AGENT_VERSION } from './constants.js';
 import { isConfigChange } from './helpers.js';
 
@@ -247,5 +247,63 @@ export class AgentsRepository {
         .insert(t.agentSkills)
         .values(uniqueIds.map((skillId, i) => ({ agentId, skillId, order: i })));
     });
+  }
+
+  // ---- agent_documents link table (T7 — project-context attachments) ------
+
+  /**
+   * Documents linked to an agent under a specific repository, in `order`
+   * ascending (path-only — AC-13). Scoped by `(agentId, repoId)` — the
+   * composite PK `(agent_id, repo_id, path)` means each repo keeps its own
+   * independent ordered list (AC-29).
+   */
+  async linkedDocuments(agentId: string, repoId: string): Promise<AgentDocumentLink[]> {
+    const rows = await this.db
+      .select({
+        path: t.agentDocuments.path,
+        order: t.agentDocuments.order,
+        repoId: t.agentDocuments.repoId,
+      })
+      .from(t.agentDocuments)
+      .where(and(eq(t.agentDocuments.agentId, agentId), eq(t.agentDocuments.repoId, repoId)))
+      .orderBy(asc(t.agentDocuments.order));
+    return rows.map((r) => ({ path: r.path, order: r.order, repo_id: r.repoId }));
+  }
+
+  /**
+   * Replace the linked-documents list for an agent WITHIN one repository with
+   * `paths`, assigning order = index. Mirrors `setSkills` exactly
+   * (transaction-scoped advisory lock — see `setSkills` above for why plain
+   * delete+insert deadlocks/duplicate-keys under concurrent double-fires).
+   *
+   * Per-repo scoping (AC-29/AC-30/AC-32): the delete + insert are both scoped
+   * to `(agentId, repoId)`, so replacing/clearing repo A's list never touches
+   * repo B's rows — each repo's list is fully independent. The advisory lock
+   * is still keyed on `agentId` alone (not `agentId+repoId`) — serializing all
+   * of an agent's document writes, across repos, is simpler and still correct
+   * (just slightly coarser-grained than strictly necessary).
+   */
+  async setDocuments(
+    agentId: string,
+    paths: string[],
+    repoId: string,
+  ): Promise<AgentDocumentLink[]> {
+    // Dedupe while preserving order: a repeated path in the request would
+    // otherwise produce two rows with the same (agent_id, repo_id, path) PK in
+    // one insert.
+    const uniquePaths = [...new Set(paths)];
+    await this.db.transaction(async (tx) => {
+      await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtext(${agentId}))`);
+
+      await tx
+        .delete(t.agentDocuments)
+        .where(and(eq(t.agentDocuments.agentId, agentId), eq(t.agentDocuments.repoId, repoId)));
+      if (uniquePaths.length > 0) {
+        await tx
+          .insert(t.agentDocuments)
+          .values(uniquePaths.map((path, i) => ({ agentId, path, order: i, repoId })));
+      }
+    });
+    return this.linkedDocuments(agentId, repoId);
   }
 }

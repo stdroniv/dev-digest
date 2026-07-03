@@ -1,6 +1,7 @@
 import type { Container } from '../../platform/container.js';
 import type {
   Skill,
+  SkillDocumentLink,
   SkillImportPreview,
   SkillSource,
   SkillStats,
@@ -144,6 +145,41 @@ export class SkillsService {
     if (!skill) return undefined;
     const row = await this.repo.getVersion(id, version);
     return row ? toSkillVersionDto(row) : undefined;
+  }
+
+  // ---- skill_documents link table (project-context attachments) -----------
+
+  /**
+   * Linked documents for a skill under a specific repository (ordered,
+   * path-only). Undefined when the skill isn't in the workspace (route → 404).
+   */
+  async documentLinks(
+    workspaceId: string,
+    id: string,
+    repoId: string,
+  ): Promise<SkillDocumentLink[] | undefined> {
+    const skill = await this.repo.getById(workspaceId, id);
+    if (!skill) return undefined;
+    return this.repo.linkedDocuments(id, repoId);
+  }
+
+  /**
+   * Set / reorder the skill's linked documents WITHIN one repository
+   * (wholesale replace + reorder, scoped by `(skillId, repoId)` —
+   * AC-29/AC-30). Returns the resulting ordered links. This does NOT bump
+   * `skills.version` — attaching/detaching a document is a metadata change,
+   * not a body edit (versioning keys strictly on body content, see
+   * `repo.update`/`isBodyChange`).
+   */
+  async setDocuments(
+    workspaceId: string,
+    id: string,
+    paths: string[],
+    repoId: string,
+  ): Promise<SkillDocumentLink[] | undefined> {
+    const skill = await this.repo.getById(workspaceId, id);
+    if (!skill) return undefined;
+    return this.repo.setDocuments(id, paths, repoId);
   }
 
   /**

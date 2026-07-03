@@ -1,5 +1,6 @@
 import type { FastifyInstance } from 'fastify';
 import type { ZodTypeProvider } from 'fastify-type-provider-zod';
+import { z } from 'zod';
 import { RunRequest } from '@devdigest/shared';
 import type { RunEvent } from '@devdigest/shared';
 import { getContext } from '../_shared/context.js';
@@ -9,6 +10,8 @@ import { ReviewService } from './service.js';
 import { IntentService } from './intent.service.js';
 import { SmartDiffService } from './smart-diff.service.js';
 import { RisksService } from './risks.service.js';
+import { WhyRiskBriefService } from '../why-risk-brief/service.js';
+import { FileSummaryService } from '../file-summary/service.js';
 
 /**
  * reviews module.
@@ -17,12 +20,28 @@ import { RisksService } from './risks.service.js';
  *   GET    /pulls/:id/intent                               → read stored PR intent
  *   GET    /pulls/:id/risks                               → read stored PR risk areas
  *   GET    /pulls/:id/smart-diff                           → risk-ordered diff grouping (no LLM)
+ *   POST   /pulls/:id/why-risk-brief                       → (re)compute + persist the Why+Risk Brief (LLM)
+ *   GET    /pulls/:id/why-risk-brief                       → read cached Why+Risk Brief (never computes)
+ *   POST   /pulls/:id/file-summary                         → (re)compute + persist a per-file "What this does" summary (LLM)
+ *   GET    /pulls/:id/file-summary                          → read cached per-file summary (never computes)
  *   GET    /runs/:id/events                                → SSE stream of RunEvent (replay-first)
  *   GET    /runs/:id/trace                                 → the single-document RunTrace
  *   GET    /pulls/:id/reviews                              → persisted reviews + findings for a PR
  *   POST   /findings/:id/(accept|dismiss)                  → finding actions
  */
 const FINDING_ACTIONS = ['accept', 'dismiss'] as const;
+
+/** Body for POST /pulls/:id/file-summary. */
+const FileSummaryBody = z.object({
+  path: z.string(),
+  regenerate: z.boolean().optional(),
+});
+
+/** Querystring for GET /pulls/:id/file-summary. */
+const FileSummaryQuery = z.object({
+  path: z.string(),
+});
+
 export default async function reviewsRoutes(appBase: FastifyInstance) {
   const app = appBase.withTypeProvider<ZodTypeProvider>();
   const { container } = app;
@@ -30,6 +49,8 @@ export default async function reviewsRoutes(appBase: FastifyInstance) {
   const intentService = new IntentService(container);
   const smartDiffService = new SmartDiffService(container);
   const risksService = new RisksService(container);
+  const whyRiskBriefService = new WhyRiskBriefService(container);
+  const fileSummaryService = new FileSummaryService(container);
 
   // ---- Run a review (manual trigger) -------------------------------
   // Tight per-route limit: each call can fan out to expensive LLM runs.
@@ -82,6 +103,52 @@ export default async function reviewsRoutes(appBase: FastifyInstance) {
     const { workspaceId } = await getContext(container, req);
     return smartDiffService.get(workspaceId, req.params.id);
   });
+
+  // ---- Why+Risk Brief: (re)compute or read the cached standalone brief ----
+  // POST recomputes and replaces the cached brief (same rate limit as the
+  // review/intent triggers — each call is an LLM round-trip, AC-28). GET is a
+  // lightweight cached read; it NEVER computes (AC-14).
+  app.post(
+    '/pulls/:id/why-risk-brief',
+    { schema: { params: IdParams }, config: { rateLimit: { max: 10, timeWindow: '1 minute' } } },
+    async (req) => {
+      const { workspaceId } = await getContext(container, req);
+      return whyRiskBriefService.compute(workspaceId, req.params.id, { logger: req.log });
+    },
+  );
+
+  app.get('/pulls/:id/why-risk-brief', { schema: { params: IdParams } }, async (req) => {
+    const { workspaceId } = await getContext(container, req);
+    return whyRiskBriefService.get(workspaceId, req.params.id);
+  });
+
+  // ---- File Summary: (re)compute or read a cached per-file "What this does" summary ----
+  // POST recomputes and replaces the cached summary for one file (same rate
+  // limit as the review/intent/why-risk-brief triggers — each call is an LLM
+  // round-trip). GET is a lightweight cached read; it NEVER computes.
+  app.post(
+    '/pulls/:id/file-summary',
+    {
+      schema: { params: IdParams, body: FileSummaryBody },
+      config: { rateLimit: { max: 10, timeWindow: '1 minute' } },
+    },
+    async (req) => {
+      const { workspaceId } = await getContext(container, req);
+      return fileSummaryService.compute(workspaceId, req.params.id, req.body.path, {
+        ...(req.body.regenerate !== undefined ? { regenerate: req.body.regenerate } : {}),
+        logger: req.log,
+      });
+    },
+  );
+
+  app.get(
+    '/pulls/:id/file-summary',
+    { schema: { params: IdParams, querystring: FileSummaryQuery } },
+    async (req) => {
+      const { workspaceId } = await getContext(container, req);
+      return fileSummaryService.get(workspaceId, req.params.id, req.query.path);
+    },
+  );
 
   // ---- SSE: live run events (replay buffer first, then live; ends on done) -
   // No rate limit: SSE is one long-lived connection, not burst traffic.

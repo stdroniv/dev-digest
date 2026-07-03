@@ -2,6 +2,11 @@ import type { CSSProperties } from "react";
 
 /** Co-located styles for the BlastRadius panel. */
 export const s = {
+  // BlastRadius stays its NATURAL height. It must NOT flex-grow: the right column
+  // holds multiple cards, so growing the top one into the slack (when Intent is
+  // much taller than a sparse Blast) produces a giant empty bordered card. Only
+  // the single-card Intent column stretches; the right column's leftover space is
+  // plain background whitespace. See OverviewTab `briefGrid`.
   card: {
     borderRadius: 8,
     borderStyle: "solid",
@@ -73,19 +78,24 @@ export const s = {
   } satisfies CSSProperties,
 
   degradedBadge: {
-    display: "inline-flex",
+    // Block-level flex so it fills the card width (inside the card it no longer
+    // gets stretched by the section flex-column, so `inline-flex` would shrink to
+    // the text). Left-aligned content keeps the icon+text at the start.
+    display: "flex",
     alignItems: "center",
     gap: 5,
     fontSize: 11,
     fontWeight: 600,
-    padding: "2px 8px",
+    padding: "4px 10px",
     borderRadius: 4,
     background: "rgba(245, 158, 11, 0.12)",
     color: "var(--warn)",
     borderStyle: "solid",
     borderWidth: 1,
     borderColor: "rgba(245, 158, 11, 0.3)",
-    margin: "0 16px 10px",
+    // Sits INSIDE the card as its first child — inset from the card's top + side
+    // edges; the stat header below supplies the gap to the stat row.
+    margin: "12px 16px 0",
   } satisfies CSSProperties,
 
   emptyState: {

@@ -1,0 +1,59 @@
+{
+  "skill_name": "next-best-practices",
+  "notes": [
+    "files/pr-review-page/*.tsx, files/finding-detail/*.tsx(.ts), and files/finding-actions/*.ts(.tsx) are synthetic fixtures written to look like plausible DevDigest client/src/app/... routes, but they intentionally seed Next.js App Router violations for grading. They are not real product code, are not wired into client/package.json or client/tsconfig.json, and must not be 'fixed' in place — they exist to be reviewed.",
+    "files/finding-detail/* is the harder fixture: page.tsx + generateMetadata mixes 5 subtle violations (unawaited params in generateMetadata despite the page itself awaiting correctly, a sequential data-fetch waterfall, a Date object passed as a client-component prop, a plain non-server-action callback passed to a client component, and an async 'use client' component) with 2 intentionally correct pieces (a React cache()-wrapped fetcher in lib.ts, and a properly-configured next/image usage) that must NOT be flagged.",
+    "files/finding-actions/* is the uncommon-scenario fixture: two Server Actions where dismissFinding correctly calls revalidatePath after its mutation but acknowledgeFinding silently omits it, so the UI shows stale data after acknowledging a finding. This tests whether the skill's data-patterns guidance on Server Action revalidation is actually applied, and is a precision trap in its own right (only one of the two actions is wrong)."
+  ],
+  "evals": [
+    {
+      "id": 0,
+      "prompt": "We're about to add client/src/app/repos/[repoId]/insights/ (page.tsx, RepoTokenBadge.tsx) to the studio UI. Review it for Next.js App Router issues before it lands — point out anything that violates our Next.js conventions and say specifically what the fix is.",
+      "expected_output": "A review that identifies each violation below, explains why it's wrong under Next.js 15's App Router rules, and gives the concrete fix (not just 'this is bad').",
+      "files": [
+        "evals/files/pr-review-page/page.tsx",
+        "evals/files/pr-review-page/RepoTokenBadge.tsx"
+      ],
+      "expectations": [
+        "F1: Flags `params` in page.tsx typed and destructured as a plain synchronous object (`{ repoId: string }` / `params.repoId`) instead of `Promise<{ repoId: string }>` awaited before use",
+        "F2: Flags `useSearchParams()` (a client-only navigation hook) being called in page.tsx, which has no `'use client'` directive — an invalid Server/Client boundary",
+        "F3: Flags RepoTokenBadge.tsx reading `process.env.GITHUB_TOKEN` (a non-`NEXT_PUBLIC_`-prefixed secret) inside a `'use client'` module, i.e. a secret that must stay server-side being referenced from client-bundled code",
+        "F4: The suggested fix for F1 uses `await params` (or `React.use(params)`), and the suggested fix for F2 either adds `'use client'` to a dedicated component or moves the filter value to be passed down from a server parent"
+      ]
+    },
+    {
+      "id": 1,
+      "prompt": "We're about to merge client/src/app/repos/[repoId]/findings/[findingId]/ (page.tsx, lib.ts, FindingTimeline.tsx, FindingActions.tsx). Review it for Next.js App Router issues before it lands — point out anything that violates our conventions, say what the fix is, and call out anything that's already correct so we don't churn it needlessly.",
+      "expected_output": "A review that identifies each violation below, explains the fix, and does NOT flag the two intentionally-correct pieces (the cache()-wrapped getFinding in lib.ts, and the next/image usage in page.tsx).",
+      "files": [
+        "evals/files/finding-detail/page.tsx",
+        "evals/files/finding-detail/lib.ts",
+        "evals/files/finding-detail/FindingTimeline.tsx",
+        "evals/files/finding-detail/FindingActions.tsx"
+      ],
+      "expectations": [
+        "F1: Flags generateMetadata destructuring `params` via `params as unknown as {...}` instead of awaiting it, even though the page component below correctly awaits the same `params` prop",
+        "F2: Flags the page component awaiting `getFinding`, `getFindingComments`, and `getFindingAuthor` sequentially instead of fetching them in parallel (e.g. `Promise.all`) or streaming with Suspense",
+        "F3: Flags `finding.createdAt` (a `Date` object) being passed as a prop from the server page to the client component FindingTimeline, which is non-serializable across the Server/Client boundary",
+        "F4: Flags `handleAcknowledge` — a plain non-`'use server'` function defined in the server page — being passed as the `onAcknowledge` prop to the client component FindingActions",
+        "F5: Flags FindingActions.tsx being an `async function` component while also having `'use client'` at the top — async client components are invalid",
+        "F6 (precision check): Does not raise a violation about lib.ts's `getFinding` being wrapped in React `cache()` — that is the correct pattern for sharing one fetch between generateMetadata and the page",
+        "F7 (precision check): Does not raise a violation about the `<Image>` usage in page.tsx (explicit width/height and `sizes`, no `priority` on this non-LCP avatar image) — that is correctly configured per the image optimization guidance"
+      ]
+    },
+    {
+      "id": 2,
+      "prompt": "We're about to add client/src/app/repos/[repoId]/findings/actions.ts and FindingAcknowledgeForm.tsx, which let a reviewer acknowledge or dismiss a finding from the UI. Review the Server Actions for correctness against our Next.js conventions before this lands.",
+      "expected_output": "A review that flags the missing-revalidation bug in acknowledgeFinding, explains the user-visible consequence (stale UI after the mutation), gives the concrete fix, and does not claim dismissFinding has the same problem.",
+      "files": [
+        "evals/files/finding-actions/actions.ts",
+        "evals/files/finding-actions/FindingAcknowledgeForm.tsx"
+      ],
+      "expectations": [
+        "F1: Flags `acknowledgeFinding` performing a mutation (`db.findings.update`) with no `revalidatePath`/`revalidateTag` call afterward, so previously-rendered pages keep showing the pre-acknowledgment state",
+        "F2: Recommends the concrete fix of calling `revalidatePath` (or `revalidateTag`) for the relevant findings route/path inside `acknowledgeFinding`, mirroring what `dismissFinding` already does",
+        "F3 (precision check): Does not claim `dismissFinding` is missing revalidation or misuses `revalidatePath` — it already calls `revalidatePath` correctly after its mutation"
+      ]
+    }
+  ]
+}

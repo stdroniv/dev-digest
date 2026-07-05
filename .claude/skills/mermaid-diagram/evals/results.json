@@ -1,0 +1,73 @@
+{
+  "skill_name": "mermaid-diagram",
+  "trials_per_eval": 5,
+  "run_date": "2026-07-05",
+  "evals": [
+    {
+      "id": 0,
+      "name": "pr-review-flow-straightforward",
+      "expectations": [
+        {"id": "F1", "text": "```mermaid fence + valid diagram-type keyword", "passed": 5, "failed": 0, "pass_rate": 1.0,
+         "diagnosis": "PASS", "diagnosis_reason": "All 5 trials produced flowchart TD/LR with a proper fence.", "failure_example": ""},
+        {"id": "F2", "text": "All 5 named steps as distinct nodes", "passed": 5, "failed": 0, "pass_rate": 1.0,
+         "diagnosis": "PASS", "diagnosis_reason": "Every trial declared ImportRepo/SelectPR/AgentReview/Findings/Display as separate nodes.", "failure_example": ""},
+        {"id": "F3", "text": "Edges connect steps in stated order", "passed": 5, "failed": 0, "pass_rate": 1.0,
+         "diagnosis": "PASS", "diagnosis_reason": "All trials chained the 5 steps in the requested left-to-right order.", "failure_example": ""},
+        {"id": "F4", "text": "Valid syntax: balanced brackets/quotes, edges reference declared nodes", "passed": 5, "failed": 0, "pass_rate": 1.0,
+         "diagnosis": "PASS", "diagnosis_reason": "No malformed brackets or dangling references in any trial.", "failure_example": ""},
+        {"id": "F5", "text": "Diagram type defensible per Decision Guide", "passed": 5, "failed": 0, "pass_rate": 1.0,
+         "diagnosis": "PASS", "diagnosis_reason": "All trials used flowchart, a reasonable choice for a linear process.", "failure_example": ""}
+      ]
+    },
+    {
+      "id": 1,
+      "name": "pr-review-lifecycle-state-machine",
+      "note": "(fixed) Replaced the old 'llm-retry-backoff-ambiguous-type' fixture, which was a FIXTURE_ISSUE: it didn't discriminate (all 5 trials converged confidently on sequenceDiagram, a pattern SKILL.md already documents directly). New scenario is a review-lifecycle state machine (pending -> running -> succeeded|failed|cancelled) with no actor-to-actor call sequence, which should pull the model toward stateDiagram-v2 per the Decision Guide. Only a 2-trial spot-check was run (not a full 5-trial eval) since this is a fresh fixture, not a rerun.",
+      "expectations": [
+        {"id": "G1", "text": "Declares stateDiagram-v2 rather than defaulting to flowchart/sequenceDiagram", "passed": 2, "failed": 0, "pass_rate": 1.0,
+         "diagnosis": "PASS (spot-check, n=2)", "diagnosis_reason": "Both spot-check trials correctly identified this as a finite-state scenario and opened with `stateDiagram-v2`, with no flowchart/sequenceDiagram fallback.", "failure_example": ""},
+        {"id": "G2", "text": "Explicit initial transition [*] --> pending", "passed": 2, "failed": 0, "pass_rate": 1.0,
+         "diagnosis": "PASS (spot-check, n=2)", "diagnosis_reason": "Both trials opened with `[*] --> pending : review created`.", "failure_example": ""},
+        {"id": "G3", "text": "All 5 states distinct; running has exactly 3 outgoing transitions", "passed": 2, "failed": 0, "pass_rate": 1.0,
+         "diagnosis": "PASS (spot-check, n=2)", "diagnosis_reason": "Both trials declared pending/running/succeeded/failed/cancelled as distinct states with running fanning out to all three terminal states.", "failure_example": ""},
+        {"id": "G4", "text": "Transitions out of running labeled with triggering event", "passed": 2, "failed": 0, "pass_rate": 1.0,
+         "diagnosis": "PASS (spot-check, n=2)", "diagnosis_reason": "Both trials labeled each transition (e.g. `running --> failed : LLM call errors OR grounding validation rejects output`) rather than leaving bare arrows.", "failure_example": ""},
+        {"id": "G5", "text": "Valid stateDiagram-v2 syntax", "passed": 2, "failed": 0, "pass_rate": 1.0,
+         "diagnosis": "PASS (spot-check, n=2)", "diagnosis_reason": "Both trials used `-->` with `: text` labels correctly, no sequenceDiagram arrow tokens mixed in, no unclosed blocks.", "failure_example": ""}
+      ]
+    },
+    {
+      "id": 2,
+      "name": "indexing-pipeline-syntax-edge-cases",
+      "expectations": [
+        {"id": "F1", "text": "```mermaid fence declares flowchart TD/LR", "passed": 5, "failed": 0, "pass_rate": 1.0,
+         "diagnosis": "PASS", "diagnosis_reason": "All trials used flowchart TD.", "failure_example": ""},
+        {"id": "F2", "text": "All 12 named stages as distinct nodes", "passed": 5, "failed": 0, "pass_rate": 1.0,
+         "diagnosis": "PASS", "diagnosis_reason": "Every trial declared 12 distinct nodes A-L covering all requested stages.", "failure_example": ""},
+        {"id": "F3", "text": "Pipe-containing label ('Filter | dedupe files') safely quoted, not dropped", "passed": 1, "failed": 4, "pass_rate": 0.2,
+         "diagnosis": "SKILL_GAP (fixed)", "diagnosis_reason": "SKILL.md had no section on escaping/quoting reserved characters (|, (), \") inside node or edge labels. 4/5 trials sidestepped the problem by rewording the label ('Filter / dedupe files', 'Filter and dedupe files') instead of quoting the literal pipe — evidence the model has no skill-provided pattern to reach for and defaults to avoidance. Only trial4 preserved the pipe, correctly wrapped in `[\"Filter | dedupe files\"]`. FIX: added an 'Escaping & Quoting Special Characters in Labels' section to SKILL.md's Flowcharts section with a worked pipe example. Spot-check (2 fresh trials, n=2): both trials produced `D[\"Filter | dedupe files\"]` verbatim, no rewording.", "failure_example": ""},
+        {"id": "F4", "text": "Parenthesized labels ('Detect language (TS/JS only)', 'Parse file (ast-grep)') safely quoted", "passed": 3, "failed": 2, "pass_rate": 0.6,
+         "diagnosis": "SKILL_GAP (fixed)", "diagnosis_reason": "Same root cause as F3 (no escaping/quoting guidance in SKILL.md), but parentheses are more familiar to models as needing quotes inside `[...]`, so the failure rate was lower. 2/5 trials still dropped or rewrote one of the two parenthesized labels rather than quoting it verbatim. FIX: same SKILL.md section as F3, with a parens example. Spot-check (n=2): both trials quoted both parenthesized labels verbatim (`B[\"Detect language (TS/JS only)\"]`, `E[\"Parse file (ast-grep)\"]`).", "failure_example": ""},
+        {"id": "F5", "text": "Explicit self-loop edge on 'Validate index' representing up-to-3 retries", "passed": 5, "failed": 0, "pass_rate": 1.0,
+         "diagnosis": "PASS", "diagnosis_reason": "Every trial added a K-->K (or equivalent) self-loop edge labeled with the retry count.", "failure_example": ""},
+        {"id": "F6", "text": "Explicit cycle edge from failure branch back to 'Walk file tree'", "passed": 5, "failed": 0, "pass_rate": 1.0,
+         "diagnosis": "PASS", "diagnosis_reason": "All 5 trials added an edge from the Validate-index failure branch back to the Walk-file-tree node, forming a real cycle.", "failure_example": ""},
+        {"id": "F7", "text": "Quote-containing error label (Error: \"invalid schema\") safely escaped, not broken or dropped", "passed": 1, "failed": 4, "pass_rate": 0.2,
+         "diagnosis": "SKILL_GAP (fixed)", "diagnosis_reason": "SKILL.md gave no guidance on how to include a literal double quote inside a Mermaid label (e.g. via the `#quot;` HTML entity, Mermaid's documented workaround). 2/5 trials used non-standard backslash-escaping (`\\\"`) inside a double-quoted label, which Mermaid's grammar does not recognize as an escape and would likely break parsing; 2/5 dropped the quotes from the label entirely. Only trial3 sidestepped the conflict validly by switching the outer delimiter to a single quote. This was the most severe gap found. FIX: added explicit guidance (verified against Mermaid's official docs via web search) that the correct escape is the `#quot;` HTML entity, not backslash. Spot-check (n=2): both trials produced `K -- \"Error: #quot;invalid schema#quot;\" --> C`, valid per Mermaid grammar.", "failure_example": ""},
+        {"id": "F8", "text": "No unbalanced brackets/quotes anywhere in the source", "passed": 5, "failed": 0, "pass_rate": 1.0,
+         "diagnosis": "PASS", "diagnosis_reason": "Lexically every trial had matched bracket/quote counts, even where F7's escaping approach was semantically questionable.", "failure_example": ""}
+      ]
+    }
+  ],
+  "summary": {
+    "total_expectations": 18,
+    "overall_pass_rate": 0.89,
+    "skill_gaps": [
+      "(fixed) SKILL.md had no guidance on escaping/quoting reserved characters (|, (), \") inside node or edge labels — the single biggest gap, causing models to either paraphrase-away special characters or use non-standard/invalid escaping (e.g. backslash-escaped quotes) that would likely break rendering. Added an 'Escaping & Quoting Special Characters in Labels' section to SKILL.md's Flowcharts section (quote-the-label rule + `#quot;` entity rule for embedded quotes, verified against Mermaid's official docs). 2-trial spot-check on the original eval-2 special-character prompt: both trials now produce valid syntax for the pipe, both parens labels, and the embedded-quote error label.",
+      "(fixed) Related: SKILL.md's node-shape table documented that '(' and '[' etc. are shape delimiters but never stated what to do when literal parens/pipes/quotes must appear inside label text — no worked example of a quoted label with a reserved character. The new section includes worked examples for all three cases (pipe, parens, embedded quote)."
+    ],
+    "fixture_issues": [
+      "(fixed) Eval 1 (the old 'llm-retry-backoff-ambiguous-type' hard-ambiguous-type case) did not actually surface disagreement or errors across any of the 5 trials — every trial reliably chose sequenceDiagram with explicit reasoning and correct loop/alt/break syntax. The scenario was a well-covered pattern (SKILL.md documents loop/alt directly), so it under-delivered as a discriminating 'hard case'. Replaced with a new eval 1 ('pr-review-lifecycle-state-machine'): a review lifecycle (pending -> running -> succeeded|failed|cancelled) with event-triggered transitions and no actor-to-actor call sequence, which should pull the model toward stateDiagram-v2 rather than a flowchart/sequenceDiagram default. 2-trial spot-check: both trials correctly chose stateDiagram-v2 with valid syntax and all 5 states/3 transitions represented."
+    ]
+  }
+}

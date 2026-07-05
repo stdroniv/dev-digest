@@ -1,0 +1,49 @@
+{
+  "skill_name": "drizzle-orm-patterns",
+  "trials_per_eval": 5,
+  "run_date": "2026-07-05",
+  "evals": [
+    {
+      "id": 0,
+      "name": "digest-runs-n1-and-untransacted-write",
+      "expectations": [
+        {"id": "F1", "text": "Flags listRunsWithFindings' per-run loop as an N+1 query pattern", "passed": 5, "failed": 0, "pass_rate": 1.0, "diagnosis": "PASS", "diagnosis_reason": "All 5 trials independently identified the loop as a textbook N+1 pattern with the same 1+N round-trip framing.", "failure_example": ""},
+        {"id": "F2", "text": "Recommends replacing the loop with a relational `with` query (and notes relations() must be defined)", "passed": 5, "failed": 0, "pass_rate": 1.0, "diagnosis": "PASS", "diagnosis_reason": "All 5 trials proposed db.query.digestRuns.findMany({ with: { findings: true } }) and explicitly noted relations() must first be defined between digestRuns and digestFindings, tying the fix to the missing relations() in schema.ts.", "failure_example": ""},
+        {"id": "F3", "text": "Flags completeRun's update-then-insert as two dependent writes not wrapped in a transaction", "passed": 5, "failed": 0, "pass_rate": 1.0, "diagnosis": "PASS", "diagnosis_reason": "All 5 trials called out the exact bug, several explicitly noting the code's own comment already documents it, and gave the correct db.transaction(async (tx) => ...) fix.", "failure_example": ""}
+      ]
+    },
+    {
+      "id": 1,
+      "name": "invites-mysql-precision-trap",
+      "expectations": [
+        {"id": "F1", "text": "Flags createInvitesBatch's unchunked 5,000-row insert", "passed": 5, "failed": 0, "pass_rate": 1.0, "diagnosis": "PASS", "diagnosis_reason": "All 5 trials cited the 'chunk large batch inserts' guidance and recommended batching.", "failure_example": ""},
+        {"id": "F2", "text": "Flags .returning() on a MySQL insert as unsupported", "passed": 5, "failed": 0, "pass_rate": 1.0, "diagnosis": "PASS", "diagnosis_reason": "All 5 trials flagged this as a hard/critical bug, several quoting the skill's own dialect-compatibility warning verbatim.", "failure_example": ""},
+        {"id": "F3", "text": "Flags listActiveMembers missing isNull(users.deletedAt) filter", "passed": 5, "failed": 0, "pass_rate": 1.0, "diagnosis": "PASS", "diagnosis_reason": "All 5 trials caught that a function named 'active members' leaks soft-deleted rows.", "failure_example": ""},
+        {"id": "F4", "text": "Flags invites.invitedBy's references(users.id) instead of () => users.id", "passed": 5, "failed": 0, "pass_rate": 1.0, "diagnosis": "PASS", "diagnosis_reason": "All 5 trials flagged the missing arrow-function form, citing the skill's own FK constraint warning; several contrasted it with inviteAuditLog.inviteId's correct usage two lines below.", "failure_example": ""},
+        {"id": "F5", "text": "Precision check: does not raise a correctness complaint about getInvitesPage's limit/offset pagination", "passed": 5, "failed": 0, "pass_rate": 1.0, "diagnosis": "PASS", "diagnosis_reason": "All 5 trials treated the limit/offset mechanism itself as correct; at most they suggested cursor pagination as an optional enhancement per the skill's own preference, never as a bug.", "failure_example": ""},
+        {"id": "F6", "text": "Precision check: does not raise a correctness complaint about revokeInvite's db.transaction usage", "passed": 5, "failed": 0, "pass_rate": 1.0, "diagnosis": "PASS", "diagnosis_reason": "All 5 trials explicitly called out revokeInvite's transaction as correct/exemplary and said 'no changes needed'.", "failure_example": ""}
+      ]
+    },
+    {
+      "id": 2,
+      "name": "comment-threads-adjacency-list-and-unsafe-migration",
+      "expectations": [
+        {"id": "F1", "text": "Flags comments.parentId's self-reference for missing the (): AnyPgColumn => return type", "passed": 5, "failed": 0, "pass_rate": 1.0, "diagnosis": "PASS", "diagnosis_reason": "All 5 trials cited the skill's own self-referential relation example in references/relations.md and flagged the missing annotation.", "failure_example": ""},
+        {"id": "F2", "text": "Flags migration 0007's NOT NULL column with no DEFAULT as unsafe on a ~42M-row table", "passed": 5, "failed": 0, "pass_rate": 1.0, "diagnosis": "PASS", "diagnosis_reason": "All 5 trials flagged this as a blocking issue, most noting it will fail outright against existing rows and describing the safe expand/backfill/validate sequence.", "failure_example": ""},
+        {"id": "F3", "text": "Flags users_email_idx (unique index on email) for not excluding soft-deleted rows, so a new signup reusing a soft-deleted email would violate the unique constraint", "passed": 0, "failed": 5, "pass_rate": 0.0, "diagnosis": "SKILL_GAP (fixed)", "diagnosis_reason": "All 5 trials found the adjacent race condition in reactivateOrCreateUser (select-then-insert TOCTOU) and correctly suggested onConflictDoUpdate on email, but none identified the underlying schema-level design flaw: a non-partial unique index on email means a genuinely NEW/different person can never register with an email a departed user still soft-holds. The skill's references/common-patterns.md documents soft-delete queries and references/schema-definition.md documents unique indexes, but neither file - nor SKILL.md - ever discusses combining the two (e.g. a partial/conditional unique index scoped to WHERE deleted_at IS NULL). Without that pattern in the skill, reviewers have no hook to reach for it.", "failure_example": "Trial adb04a633638a4cf2's review recommends onConflictDoUpdate({ target: t.users.email, set: { deletedAt: null } }) for reactivateOrCreateUser but never questions whether the unique index itself should be partial/conditional to allow re-registration by an unrelated new user.", "fix_note": "Added a 'Soft Delete + Unique Constraints' subsection to references/common-patterns.md (partial/conditional uniqueIndex().on(...).where(sql`deleted_at IS NULL`) pattern, with rationale) plus a cross-reference callout in references/schema-definition.md's Indexes section. Spot-check: 2/2 independent trials re-run against the updated skill now explicitly flag the users.email partial-index gap, citing the new guidance."},
+        {"id": "F4", "text": "Precision check: does not raise a complaint about listActiveUsers' use of isNull(deletedAt)", "passed": 5, "failed": 0, "pass_rate": 1.0, "diagnosis": "PASS", "diagnosis_reason": "No trial criticized the isNull(deletedAt) filter itself; any comments about listActiveUsers were about unrelated concerns (pagination, future moderation_status filtering).", "failure_example": ""}
+      ]
+    }
+  ],
+  "summary": {
+    "total_expectations": 13,
+    "overall_pass_rate": 0.923,
+    "skill_gaps": [
+      "SKILL_GAP (eval 2, F3) - FIXED: SKILL.md / references/common-patterns.md and references/schema-definition.md never cover combining soft delete with a unique constraint (partial/conditional unique index scoped to non-deleted rows). 0/5 original trials caught the users.email unique-index-vs-soft-delete interaction; all 5 instead fixed the adjacent (also real) race condition without questioning the index design. Fix: added 'Soft Delete + Unique Constraints' guidance to references/common-patterns.md plus a cross-reference in references/schema-definition.md. Spot-check (2 fresh trials, eval 2 prompt, updated skill): 2/2 now flag the partial-index gap explicitly."
+    ],
+    "fixture_issues": [
+      "Eval 1 fixture defect (not scored, but noted) - FIXED: schema.ts's emailIdx: { columns: [table.email], unique: true } was invalid Drizzle syntax (should be a uniqueIndex()/index() builder). This was unintentional - all 5 original trials correctly caught it as a 'CRITICAL' bug, which is good signal on the skill's part, but it wasn't one of the seeded violations and somewhat crowded out attention from the intended precision-trap items. Fixed to `uniqueIndex('users_email_idx').on(table.email)`. Spot-check (2 fresh trials, eval 1 prompt, corrected fixture): 2/2 raised no complaint about index syntax, and both explicitly called it 'correct, no change needed'.",
+      "Eval 1 fixture defect (not scored) - FIXED: getInvitesPage's docstring claimed 'non-expired, non-revoked' invites but the query only filters revokedAt, not expiresAt - 3/5 original trials caught this docstring/behavior mismatch as an extra finding. Fixed by correcting the docstring to 'outstanding (non-revoked)' to match actual behavior (preserves eval 1's original intent per evals.json, which only grades the pagination mechanism itself as F5, not expiry filtering). Spot-check (2 fresh trials): 2/2 found no docstring/behavior mismatch, and all 4 intended violations (F1-F4) plus both precision checks (F5-F6) still passed."
+    ]
+  }
+}

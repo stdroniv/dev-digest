@@ -1,0 +1,57 @@
+{
+  "skill_name": "postgresql-table-design",
+  "notes": [
+    "files/**/schema.sql are synthetic fixtures written to look like plausible DevDigest migrations (digest schedules, PR reviews, notifications), but they intentionally seed PostgreSQL schema-design violations for grading. They are not real migrations and are not wired into server/db — do not 'fix' them in place; they exist to be reviewed.",
+    "files/digest-schedule-runs-migration/schema.sql is the obviously-broken fixture: a single table with five stacked, clear-cut violations (serial, varchar, timestamp without tz, missing FK indexes, missing ON DELETE policy).",
+    "files/review-workspace-schema/schema.sql is the harder fixture: workspaces is intentionally clean (precision trap — must not be flagged), pr_reviews and review_comments mix five subtle violations (JSONB overuse for queryable relational data, a nullable CHECK column that silently allows NULL, a UNIQUE column relying on NULLS NOT DISTINCT semantics it doesn't have, a missing composite index for the dashboard's actual (workspace_id, status) filter, and an untagged TEXT[] column used for containment queries with no GIN index) alongside correctly-indexed, correctly-typed columns (review_comments.review_id FK index, workspaces table as a whole) that must not be flagged.",
+    "files/notifications-polymorphic/schema.sql is the genuinely-uncommon-scenario fixture: a polymorphic association (subject_type + subject_id) standing in for a real FK, plus companion timestamp/serial violations, to check the skill catches the structural anti-pattern and not just data-type nits."
+  ],
+  "evals": [
+    {
+      "id": 0,
+      "prompt": "We're about to run this migration adding digest_schedule_runs — review the schema for PostgreSQL design issues before it lands. The dashboard's main query filters by workspace_id and status, ordered by started_at (see the comment in the file). Point out anything wrong and say what to use instead.",
+      "expected_output": "A review that identifies each schema issue below, explains why it's wrong per PostgreSQL conventions, and states the concrete fix (specific type or indexing change), not just 'this looks off'.",
+      "files": [
+        "evals/files/digest-schedule-runs-migration/schema.sql"
+      ],
+      "expectations": [
+        "F1: Flags `id SERIAL PRIMARY KEY` and recommends `BIGINT GENERATED ALWAYS AS IDENTITY` instead",
+        "F2: Flags the `VARCHAR(20)`/`VARCHAR(500)`/`VARCHAR(255)` columns (status, error_message, triggered_by) and recommends `TEXT` (with a CHECK constraint if a length cap is truly needed)",
+        "F3: Flags `started_at`/`finished_at` as `TIMESTAMP` (no timezone) and recommends `TIMESTAMPTZ`",
+        "F4: Flags the missing manual indexes on the FK columns `schedule_id` and `workspace_id`",
+        "F5: Flags the `schedule_id`/`workspace_id` foreign keys for lacking an explicit `ON DELETE` action, risking orphaned rows or unexpected blocking on parent delete",
+        "F6: Flags the missing composite index on (workspace_id, status) (or notes the existing single-column indexes don't serve the documented workspace_id + status filter) needed for the dashboard's actual query pattern"
+      ]
+    },
+    {
+      "id": 1,
+      "prompt": "We're about to run this migration for the PR-review module (workspaces, pr_reviews, review_comments) — review the schema for PostgreSQL design issues before it lands. Call out anything genuinely wrong, but also call out anything that's already well-designed so we don't churn it needlessly.",
+      "expected_output": "A review that identifies each schema issue below with a concrete fix, and does NOT raise complaints about workspaces or about review_comments' review_id index, which are correctly designed.",
+      "files": [
+        "evals/files/review-workspace-schema/schema.sql"
+      ],
+      "expectations": [
+        "F1: Flags `pr_reviews.author JSONB` as overuse of JSONB for structured, queryable relational data (an author id/login/email) that should be normalized columns or a proper FK to an authors/users table rather than buried in JSONB",
+        "F2: Flags `pr_reviews.score NUMERIC CHECK (score BETWEEN 0 AND 100)` for lacking `NOT NULL` — CHECK constraints pass on NULL (three-valued logic), so an unscored review silently satisfies the constraint instead of being explicitly disallowed",
+        "F3: Flags `pr_reviews.external_id TEXT UNIQUE` as relying on NULLS NOT DISTINCT semantics it doesn't have — plain UNIQUE allows multiple NULLs, so it won't actually dedupe reviews without an external_id; recommends `UNIQUE NULLS NOT DISTINCT` (or an alternate dedupe strategy)",
+        "F4: Flags the missing composite index on (workspace_id, status) on pr_reviews for the documented dashboard filter pattern, given only a single-column index on workspace_id exists",
+        "F5: Flags `review_comments.tags TEXT[]` as missing a GIN index given the documented containment query (`tags @> ARRAY[...]`)",
+        "F6 (precision check): Does not raise a complaint about the `workspaces` table — it is correctly typed (BIGINT identity PK, TEXT, TIMESTAMPTZ) and correctly indexed (expression unique index on LOWER(slug))",
+        "F7 (precision check): Does not flag `review_comments.review_id` / its FK to pr_reviews — it already has an explicit ON DELETE CASCADE and a manual index"
+      ]
+    },
+    {
+      "id": 2,
+      "prompt": "We're about to run this migration adding a notifications table that can point at a review, a review comment, or a schedule run via subject_type/subject_id (see the comment explaining why). Review the schema for PostgreSQL design issues before it lands.",
+      "expected_output": "A review that identifies the structural anti-pattern below in addition to any data-type issues, with a concrete alternative design.",
+      "files": [
+        "evals/files/notifications-polymorphic/schema.sql"
+      ],
+      "expectations": [
+        "F1: Flags the subject_type + subject_id polymorphic association as unable to be enforced by a real foreign key, and recommends an alternative such as separate nullable FK columns per source table (review_id/review_comment_id/schedule_run_id) or a proper join/mapping table instead",
+        "F2: Flags `notification_id SERIAL PRIMARY KEY` and recommends `BIGINT GENERATED ALWAYS AS IDENTITY`",
+        "F3: Flags `read_at`/`created_at` as `TIMESTAMP` (no timezone) and recommends `TIMESTAMPTZ`"
+      ]
+    }
+  ]
+}

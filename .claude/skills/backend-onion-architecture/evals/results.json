@@ -1,0 +1,55 @@
+{
+  "skill_name": "backend-onion-architecture",
+  "trials_per_eval": 5,
+  "run_date": "2026-07-06",
+  "evals": [
+    {
+      "id": 0,
+      "name": "webhooks-clear-violations",
+      "expectations": [
+        {"id": "F1", "text": "Flags routes.ts importing drizzle-orm/db schema and querying the DB directly inside the route handler (presentation touching infrastructure)", "passed": 5, "failed": 0, "pass_rate": 1.0,
+         "diagnosis": "PASS", "diagnosis_reason": "All 5 trials identified the direct select/insert against app.container.db in the POST handler as the clearest presentation->infrastructure skip and prescribed moving it behind WebhooksRepository/WebhooksService.", "failure_example": ""},
+        {"id": "F2", "text": "Flags the endpoint-URL uniqueness check as business logic misplaced in the route handler", "passed": 5, "failed": 0, "pass_rate": 1.0,
+         "diagnosis": "PASS", "diagnosis_reason": "All 5 trials called out the duplicate-URL/uniqueness check as a business rule that belongs in the service (two trials phrased it explicitly as 'the 409 conflict decision is itself a business rule'), and prescribed a service-level registerEndpoint/createEndpoint use case.", "failure_example": ""},
+        {"id": "F3", "text": "Flags claimDueRetries' backoff/MAX_ATTEMPTS logic as a domain rule embedded in the repository/infrastructure layer", "passed": 5, "failed": 0, "pass_rate": 1.0,
+         "diagnosis": "PASS", "diagnosis_reason": "All 5 trials identified MAX_ATTEMPTS/backoff/'is due' logic as business policy sitting in the repository and recommended extracting a pure domain predicate (e.g. isRetryDue) called from the service.", "failure_example": ""},
+        {"id": "F4", "text": "Flags repository methods returning raw Drizzle rows outward with no row->entity/DTO mapping", "passed": 5, "failed": 0, "pass_rate": 1.0,
+         "diagnosis": "PASS", "diagnosis_reason": "All 5 trials flagged listEndpoints/recordDelivery/claimDueRetries (including the leaked join-shaped webhook_deliveries key) as returning raw rows and prescribed toDomain() mappers plus independent domain types.", "failure_example": ""},
+        {"id": "F5", "text": "Flags service.ts constructing a concrete OpenAI client directly instead of going through the LLMProvider port/container", "passed": 5, "failed": 0, "pass_rate": 1.0,
+         "diagnosis": "PASS", "diagnosis_reason": "All 5 trials flagged the module-level `new OpenAI(...)` plus direct process.env read and recommended binding an LLMProvider adapter in container.ts, injected into the service.", "failure_example": ""}
+      ]
+    },
+    {
+      "id": 1,
+      "name": "digest-schedules-hard",
+      "expectations": [
+        {"id": "F1", "text": "Flags routes.ts's /preview handler importing drizzle-orm/db schema and querying the DB directly, bypassing the service/repository", "passed": 5, "failed": 0, "pass_rate": 1.0,
+         "diagnosis": "PASS", "diagnosis_reason": "All 5 trials called this the clearest violation in the module and prescribed a service.previewForWorkspace/previewSchedules method backed by the repository.", "failure_example": ""},
+        {"id": "F2", "text": "Flags routes.ts's assertValidCronOverride (cron parsing + 'no more often than every 5 minutes' rule) as business/domain logic embedded in the route handler", "passed": 5, "failed": 0, "pass_rate": 1.0,
+         "diagnosis": "PASS", "diagnosis_reason": "All 5 trials identified the cron-interval invariant as domain logic misplaced in routes.ts, several also noting the validated cronOverride is silently never passed to createSchedule.", "failure_example": ""},
+        {"id": "F3", "text": "Flags helpers.ts (meant to be the domain layer) importing Drizzle's InferSelectModel/schema types directly, coupling domain code to the infrastructure row shape", "passed": 5, "failed": 0, "pass_rate": 1.0,
+         "diagnosis": "PASS", "diagnosis_reason": "All 5 trials flagged DigestScheduleRow = InferSelectModel<typeof digestSchedules> as a type-level violation of the inward-only rule despite being erased at runtime, and recommended an independent domain type plus a toDomain() mapper in the repository.", "failure_example": ""},
+        {"id": "F4", "text": "Flags helpers.ts's shouldSkipDueToRateLimit constructing and calling the GithubClient infrastructure adapter directly from the domain layer", "passed": 5, "failed": 0, "pass_rate": 1.0,
+         "diagnosis": "PASS", "diagnosis_reason": "All 5 trials caught the domain helper directly `new`-ing GithubClient and recommended moving the orchestration to the service layer (or injecting the client as a port) instead.", "failure_example": ""},
+        {"id": "F5", "text": "Flags service.ts importing and instantiating WorkspaceRepository directly instead of going through a WorkspaceService/port -- an application-layer service reaching across module boundaries into another module's infrastructure", "passed": 5, "failed": 0, "pass_rate": 1.0,
+         "diagnosis": "PASS", "diagnosis_reason": "All 5 trials flagged the manual `new WorkspaceRepository(container.db)` alongside the equivalent DigestSchedulesRepository construction as bypassing the composition root; one trial called it out explicitly as a 'cross-module repository reach-in'.", "failure_example": ""},
+        {"id": "F6", "text": "Flags service.ts's runDueSchedules building a raw fetch() call to the GitHub API with process.env.GITHUB_TOKEN inline instead of using the existing GithubClient adapter", "passed": 5, "failed": 0, "pass_rate": 1.0,
+         "diagnosis": "PASS", "diagnosis_reason": "All 5 trials identified the duplicate raw fetch/env-var read as bypassing the GithubClient adapter that already exists and is used correctly elsewhere in the module (shouldSkipDueToRateLimit), several also noting the divergent token source as a latent correctness bug.", "failure_example": ""},
+        {"id": "F7", "text": "Flags the module-level mutable rateLimitCache in service.ts as ad-hoc shared state that bypasses the DI container and will leak/collide across requests or tests", "passed": 5, "failed": 0, "pass_rate": 1.0,
+         "diagnosis": "PASS", "diagnosis_reason": "All 5 trials flagged the top-level `let rateLimitCache` as untestable global state that should be an injected/container-owned cache or port.", "failure_example": ""},
+        {"id": "F8", "text": "Flags repository.ts's computeNextRunAt/claimDueSchedules embedding timezone-aware scheduling and failure-threshold business rules in the infrastructure layer, and its query methods returning raw Drizzle rows outward with no row->entity/DTO mapping", "passed": 5, "failed": 0, "pass_rate": 1.0,
+         "diagnosis": "PASS", "diagnosis_reason": "All 5 trials flagged computeNextRunAt/GRACE_WINDOW_MS/MAX_CONSECUTIVE_FAILURES as domain policy embedded in the repository and recommended extracting it as a pure domain function; 3 of 5 trials additionally called out the raw-row return explicitly and recommended a toDomain() mapper, the other 2 covered it implicitly via the F3 domain-type finding.", "failure_example": ""},
+        {"id": "F9", "text": "(precision check) Does not raise a layering complaint about github-client.ts itself -- it is a correctly scoped, single-responsibility infrastructure adapter", "passed": 5, "failed": 0, "pass_rate": 1.0,
+         "diagnosis": "PASS", "diagnosis_reason": "All 5 trials explicitly called out github-client.ts as correctly layered and said to leave it untouched, several holding it up as the pattern the rest of the module should follow.", "failure_example": ""}
+      ]
+    }
+  ],
+  "summary": {
+    "total_expectations": 14,
+    "overall_pass_rate": 1.0,
+    "skill_gaps": [],
+    "fixture_issues": [
+      "Minor, non-blocking: for F2 (webhooks eval) and F8 (digest-schedules eval), a few trials folded the expected finding into the writeup of an adjacent violation (e.g. the uniqueness check discussed as part of the DB-access fix, or the raw-row-mapping issue covered via the domain-type finding) rather than calling it out as its own separately numbered item. The underlying issue was still identified and the correct fix prescribed in every trial -- this is a presentation/organization variance in the reviewer's output structure, not a missed violation or a fixture defect."
+    ]
+  }
+}

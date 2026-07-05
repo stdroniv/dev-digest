@@ -1,0 +1,65 @@
+{
+  "skill_name": "client-server-communication",
+  "trials_per_eval": 5,
+  "run_date": "2026-07-05",
+  "evals": [
+    {
+      "id": 0,
+      "name": "review-comments-clear-violations",
+      "expectations": [
+        {"id": "F1", "text": "Flags POST /getReviewComments as a verb-in-URL / RPC-style endpoint instead of a noun resource", "passed": 5, "failed": 0, "pass_rate": 1.0,
+         "diagnosis": "PASS", "diagnosis_reason": "All 5 trials identified the verb URL and prescribed GET /workspaces/:workspaceId/review-comments.", "failure_example": ""},
+        {"id": "F2", "text": "Flags the blank-body validation failure returning 200 {ok:false, reason} instead of a 4xx (400/422)", "passed": 5, "failed": 0, "pass_rate": 1.0,
+         "diagnosis": "PASS", "diagnosis_reason": "All 5 trials cited this as the skill's canonical 'success masking failure' anti-pattern and prescribed 422 with the error envelope.", "failure_example": ""},
+        {"id": "F3", "text": "Flags the catch block returning (err as Error).stack in the 500 response body as leaking internals", "passed": 5, "failed": 0, "pass_rate": 1.0,
+         "diagnosis": "PASS", "diagnosis_reason": "All 5 trials flagged the stack-trace leak explicitly and cited the skill's 'never leak internals in a 5xx' rule.", "failure_example": ""},
+        {"id": "F4", "text": "Flags the PUT .../increment-vote endpoint as violating PUT's idempotency contract", "passed": 5, "failed": 0, "pass_rate": 1.0,
+         "diagnosis": "PASS", "diagnosis_reason": "All 5 trials identified the counter-increment-under-PUT violation and proposed POST + idempotency key or a per-voter idempotent PUT.", "failure_example": ""},
+        {"id": "F5", "text": "Flags the client hook parsing the response with a raw 'as ReviewCommentRecord[]' cast instead of validating it", "passed": 5, "failed": 0, "pass_rate": 1.0,
+         "diagnosis": "PASS", "diagnosis_reason": "All 5 trials cited the skill's parse-don't-cast rule and recommended a shared Zod schema with .parse().", "failure_example": ""}
+      ]
+    },
+    {
+      "id": 1,
+      "name": "digest-exports-precision-trap",
+      "expectations": [
+        {"id": "F1", "text": "Flags GET /exports for offset pagination with no next-cursor/pagination envelope", "passed": 5, "failed": 0, "pass_rate": 1.0,
+         "diagnosis": "PASS", "diagnosis_reason": "All 5 trials flagged the bare-array response and offset paging, citing the cursor/keyset preference and envelope requirement.", "failure_example": ""},
+        {"id": "F2", "text": "Flags GET /exports/:exportId for not setting Cache-Control/ETag despite the comment claiming it's cacheable", "passed": 5, "failed": 0, "pass_rate": 1.0,
+         "diagnosis": "PASS", "diagnosis_reason": "All 5 trials noticed the comment/implementation mismatch and proposed conditional Cache-Control based on terminal job status.", "failure_example": ""},
+        {"id": "F3", "text": "Flags the 404 branch returning a bare string as inconsistent with the module's own envelope error shape", "passed": 5, "failed": 0, "pass_rate": 1.0,
+         "diagnosis": "PASS", "diagnosis_reason": "All 5 trials treated this as a blocking issue and several traced the concrete client-side symptom (falls back to 'unknown_error').", "failure_example": ""},
+        {"id": "F4", "text": "Flags POST /exports (retryable creation) for accepting no Idempotency-Key header", "passed": 5, "failed": 0, "pass_rate": 1.0,
+         "diagnosis": "PASS", "diagnosis_reason": "All 5 trials flagged the missing idempotency key on the job-creation POST and referenced the Stripe-style cache-and-replay pattern.", "failure_example": ""},
+        {"id": "F5", "text": "Flags useExportStatus.ts's setTimeout(tick, 750) as busy-polling instead of server push (SSE)", "passed": 5, "failed": 0, "pass_rate": 1.0,
+         "diagnosis": "PASS", "diagnosis_reason": "All 5 trials flagged the polling loop and referenced DevDigest's own SSE precedent (useRunEvents).", "failure_example": ""},
+        {"id": "F6", "text": "(precision check) Does not flag api-client.ts as a violation", "passed": 5, "failed": 0, "pass_rate": 1.0,
+         "diagnosis": "PASS", "diagnosis_reason": "All 5 trials explicitly called out api-client.ts as already correct (schema.parse, ApiError normalization, 204 handling) and said not to churn it.", "failure_example": ""},
+        {"id": "F7", "text": "(precision check) Does not flag the DELETE handler or digestExportsErrorHandler as violations", "passed": 5, "failed": 0, "pass_rate": 1.0,
+         "diagnosis": "PASS", "diagnosis_reason": "All 5 trials placed both in an explicit 'already correctly designed' section; the redundant if/else branches in DELETE were noted only as a style nit, never as a contract violation.", "failure_example": ""}
+      ]
+    },
+    {
+      "id": 2,
+      "name": "pr-run-events-sse-uncommon",
+      "expectations": [
+        {"id": "F1", "text": "Flags the lack of a distinguishable terminal SSE event (done/error) to signal stream completion vs failure", "passed": 5, "failed": 0, "pass_rate": 1.0,
+         "diagnosis": "PASS", "diagnosis_reason": "All 5 trials identified this as the central bug, explaining that success and failure both just close the socket and that EventSource will auto-reconnect either way.", "failure_example": ""},
+        {"id": "F2", "text": "Flags the missing per-event 'id:' field needed for Last-Event-ID-based resume on reconnect", "passed": 5, "failed": 0, "pass_rate": 1.0,
+         "diagnosis": "PASS", "diagnosis_reason": "All 5 trials flagged the absence of SSE ids and Last-Event-ID handling and connected it to DevDigest's stated replay-buffer-first pattern.", "failure_example": ""},
+        {"id": "F3", "text": "Flags useRunEvents.ts for having no onerror handler / no observable connection-health signal", "passed": 5, "failed": 0, "pass_rate": 1.0,
+         "diagnosis": "PASS", "diagnosis_reason": "All 5 trials pointed out onmessage-only wiring and recommended surfacing connection/error state to the UI.", "failure_example": ""},
+        {"id": "F4", "text": "(precision check) Does not flag the choice of SSE itself or the push-not-poll design as a violation", "passed": 5, "failed": 0, "pass_rate": 1.0,
+         "diagnosis": "PASS", "diagnosis_reason": "All 5 trials explicitly praised the SSE/push choice in a 'what's already correct' section and did not recommend reverting to polling.", "failure_example": ""}
+      ]
+    }
+  ],
+  "summary": {
+    "total_expectations": 16,
+    "overall_pass_rate": 1.0,
+    "skill_gaps": [],
+    "fixture_issues": [
+      "Minor, non-blocking: in eval 1 trial 1, the model labeled the Cache-Control/ETag finding (F2) as '(Out of scope for this skill)' while still correctly citing this skill's own rule 9 and fixing it per the skill's guidance -- a labeling quirk in that single trial's self-organization, not a missed expectation or a skill/fixture defect."
+    ]
+  }
+}

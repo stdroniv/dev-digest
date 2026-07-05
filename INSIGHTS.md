@@ -262,6 +262,19 @@ cold; never edit or delete existing entries.
   Python decoded all 44 resources to `scratchpad/` in seconds — don't try to read the
   raw file.
 
+- When authoring skill eval fixtures (`.claude/skills/<name>/evals/files/**`) that intentionally seed a
+  violation (hardcoded secret, injection, etc.), do **not** add an inline comment near the violation
+  explaining it's synthetic/fake (e.g. "Synthetic connection string for eval fixtures only — not a real
+  credential"). LLM graders read that comment as license to skip reporting the pattern — observed in
+  `.claude/skills/security/evals`: a hardcoded Mongo URI fixture's disclaimer comment caused 1 of 5
+  grading trials to explicitly decline to flag it ("the file comment marks this as a synthetic fixture
+  value ... so it is not reported as a live exposure"). Keep the "this is fake" disclosure only in
+  `evals.json`'s `notes` array, never in the fixture source. Separately: when a "hard/precision-trap"
+  fixture intentionally combines two real violations in one file (e.g. a spoofable MIME check alongside
+  a real path-traversal filename bug), graders may reasonably escalate the "should stay low-severity"
+  finding because it now compounds with the other bug — if a clean severity-precision signal is the
+  actual goal, put the two patterns in separate files rather than one.
+
 ## Recurring Errors & Fixes
 
 - A Claude Code **`stop` hook fires at the end of EVERY response turn**, not when the conversation session closes. A hook body that evaluates "has the session ended?" will fire on each turn, get the right answer ("no"), but also re-trigger on the assistant's acknowledgment reply — creating an infinite feedback loop at any human approval gate (e.g. the `ship-feature` plan-approval checkpoint). Design stop hooks for end-of-turn cleanup (e.g. "if the last tool call was a commit, run lint"); for true end-of-session actions that should only run once, the hook logic must itself detect and skip repeated firings (e.g. check a sentinel file or whether any code was actually changed this session).

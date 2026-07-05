@@ -188,6 +188,38 @@ app.get('/stream', async (request, reply) => {
 });
 ```
 
+**The inverse pitfall is just as real: a branch that never replies at all.** Every code
+path in an async handler must either `return` a value (which Fastify serializes and
+sends) or call `reply.send()`/`reply.hijack()` itself. It's easy to fix one branch of an
+`if`/`else` (e.g. add the missing `return` after a `reply.code(404).send(...)`) and
+overlook a *different* branch that does neither — no `return <value>`, no
+`reply.send()`, just falls off the end of the function. That branch doesn't crash and
+doesn't double-send; it silently leaves the response unresolved, and the client hangs
+until the request times out. This is quieter than a missing `return` (which usually
+surfaces as a crash or a 'reply already sent' error) and easy to miss in review because
+nothing throws:
+
+```typescript
+// Bug: the "nothing to do" branch never sends a response
+app.post('/jobs/:id/resolve', async (request, reply) => {
+  const job = await db.jobs.findById(request.params.id);
+
+  if (!job) {
+    return reply.code(404).send({ error: 'Job not found' });
+  }
+
+  if (job.status === 'already-resolved') {
+    // Falls through without a `return <value>` or `reply.send()` — the request hangs.
+  }
+
+  await db.jobs.resolve(job.id);
+  return reply.code(200).send({ resolved: true });
+});
+```
+
+When reviewing a handler, check every branch, not just the one with the obvious bug:
+does each path either `return` something or explicitly call `reply.send()`?
+
 ## Route Organization by Feature
 
 Organize routes by feature/domain in separate files:

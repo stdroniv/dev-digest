@@ -1,0 +1,64 @@
+{
+  "skill_name": "react-testing-library",
+  "notes": [
+    "files/pr-brief-verdict-banner/*.tsx, files/findings-list/*.tsx, and files/debounced-repo-search/*.tsx are synthetic fixtures written to look like plausible DevDigest client components (PR Brief verdict banner, findings list, repo-intel file search), but they are not real product code and are not wired into any package.json/tsconfig/vitest config. Do not run or 'fix' them in place — they exist to be reviewed or to be used as a basis for a from-scratch test file.",
+    "files/pr-brief-verdict-banner/VerdictBanner.test.tsx is the clear-cut/obviously-broken fixture: fireEvent instead of userEvent, getByTestId where getByRole/getByRole('alert') would work, destructuring from render(), and two async assertions that run before the async onRegenerate promise settles (no await/findBy).",
+    "files/findings-list/FindingsList.test.tsx is the harder precision-trap fixture: the first two tests ('renders findings from the hook', 'shows the loading state before findings resolve') are correctly written (proper vi.mock of the hook module, getByRole/within, no violations) and MUST NOT be flagged. The remaining three tests seed distinct violations: mocking global.fetch directly instead of the hook/MSW, container.querySelector instead of an RTL query, a module-level mutable array (sharedFindings) pushed into without a beforeEach reset, and getByTestId used for the empty-state message where getByText/getByRole would work.",
+    "files/debounced-repo-search/RepoFileSearch.tsx is the uncommon-scenario fixture: a debounced text input. There is no existing test file — the executor must write one from scratch that correctly combines userEvent typing with vi.useFakeTimers(), which is a known interaction gotcha (userEvent's internal typing delay also relies on timers, so naively mixing user.type() with fake timers can hang unless userEvent is configured with delay: null, or vi.advanceTimersByTimeAsync is used)."
+  ],
+  "evals": [
+    {
+      "id": 0,
+      "name": "verdict-banner-bad-test-review",
+      "prompt": "We have a VerdictBanner component (client/) and an existing test file for it. Before we merge, review the test file for RTL/Vitest anti-patterns and rewrite it correctly — call out every issue you find and paste the corrected test file.",
+      "expected_output": "A review that identifies each anti-pattern below, explains why it's wrong, and a corrected test file that uses userEvent, accessible queries (getByRole/getByRole('alert')), screen instead of destructuring from render(), and properly awaits the async regenerate flow (via findBy/waitFor) before asserting on post-regeneration state.",
+      "files": [
+        "evals/files/pr-brief-verdict-banner/VerdictBanner.tsx",
+        "evals/files/pr-brief-verdict-banner/VerdictBanner.test.tsx"
+      ],
+      "expectations": [
+        "F1: Flags fireEvent.click(button) and recommends userEvent.setup() + await user.click(button) instead",
+        "F2: Flags getByTestId('verdict-heading') and getByTestId('regenerate-button') as Tier-3 last-resort queries used where getByRole('heading', ...) / getByRole('button', { name: /regenerate/i }) would work",
+        "F3: Flags getByTestId('regenerate-error') and recommends getByRole('alert') (the component renders role=\"alert\" on the error paragraph) instead of a test-id query",
+        "F4: Flags destructuring `const { getByTestId } = render(...)` and recommends using `screen` instead",
+        "F5: Flags the assertion right after fireEvent.click in the 'regenerates the review' test as running before the async onRegenerate promise settles, and recommends awaiting/using findBy so the assertion checks the actual post-regeneration state",
+        "F6: Flags the assertion right after fireEvent.click in the 'shows an error message' test as reading the error state before the rejected promise's catch/finally has run, and recommends `await screen.findByRole('alert')` (or waitFor) instead of a synchronous getByTestId check"
+      ]
+    },
+    {
+      "id": 1,
+      "name": "findings-list-precision-trap",
+      "prompt": "Review the FindingsList test file for RTL/Vitest anti-patterns before we merge it. Point out every real violation with a concrete fix, and explicitly call out any test block that is already correct so we don't churn it needlessly.",
+      "expected_output": "A review that flags each violation below with a fix, and explicitly states that the first two tests ('renders findings from the hook' and 'shows the loading state before findings resolve') are correctly written and should not be changed.",
+      "files": [
+        "evals/files/findings-list/useFindings.ts",
+        "evals/files/findings-list/FindingsList.tsx",
+        "evals/files/findings-list/FindingsList.test.tsx"
+      ],
+      "expectations": [
+        "F1: Flags `global.fetch = vi.fn()...` in the 'shows an error message' test as mocking fetch directly instead of mocking at the hook/API boundary (the hook is already mocked via vi.mock — the fetch mock is redundant/wrong-layer) or using MSW",
+        "F2: Flags `container.querySelector('[role=\"alert\"]')` in the same test and recommends `screen.getByRole('alert')` instead",
+        "F3: Flags the module-level `sharedFindings` array being pushed into by the 'accumulates findings across renders' test without being reset in beforeEach, as shared mutable state that will leak between test runs/order",
+        "F4: Flags `getByTestId('findings-empty')` in the 'renders the empty state message' test as a Tier-3 query used where getByText(/no findings/i) (or a role-based query) would work",
+        "F5 (precision check): Does NOT flag 'renders findings from the hook' — it already uses vi.mock on the hook module, getByRole('list', ...) and within(), which is the correct pattern",
+        "F6 (precision check): Does NOT flag 'shows the loading state before findings resolve' — it already uses getByRole('status') correctly with no async/mocking violations"
+      ]
+    },
+    {
+      "id": 2,
+      "name": "debounced-search-fake-timers",
+      "prompt": "Write RTL/Vitest tests for RepoFileSearch (client/, see the attached component). It debounces onQueryChange by 300ms after the user stops typing. Write a test that verifies onQueryChange fires exactly once, with the final typed value, after the debounce window — and does NOT fire before the debounce window elapses. Use fake timers.",
+      "expected_output": "A test file that uses userEvent for typing, correctly combines userEvent with vi.useFakeTimers() (e.g. userEvent.setup({ delay: null }) or advancing timers with vi.advanceTimersByTimeAsync) so the test does not hang, asserts onQueryChange has NOT been called before the debounce window elapses, then advances time by (at least) the debounce window and asserts onQueryChange was called exactly once with the final value, and restores real timers afterward.",
+      "files": [
+        "evals/files/debounced-repo-search/RepoFileSearch.tsx"
+      ],
+      "expectations": [
+        "F1: Uses userEvent (not fireEvent) to type into the input",
+        "F2: Calls vi.useFakeTimers() before interacting and restores real timers afterward (vi.useRealTimers(), e.g. in afterEach)",
+        "F3: Explicitly reconciles userEvent's own internal timing with fake timers — e.g. userEvent.setup({ delay: null }) or awaiting vi.advanceTimersByTimeAsync — rather than calling plain user.type() + vi.advanceTimersByTime() and risking a hang/timeout",
+        "F4: Asserts onQueryChange has NOT been called immediately after typing, before the debounce window has elapsed",
+        "F5: After advancing time past the debounce window, asserts onQueryChange was called exactly once (not once per keystroke) with the final typed value"
+      ]
+    }
+  ]
+}

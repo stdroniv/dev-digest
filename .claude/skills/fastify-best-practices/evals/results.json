@@ -1,0 +1,50 @@
+{
+  "skill_name": "fastify-best-practices",
+  "trials_per_eval": 5,
+  "run_date": "2026-07-05",
+  "evals": [
+    {
+      "id": 0,
+      "name": "pr-comments-hang-and-unvalidated-body",
+      "expectations": [
+        {"id": "F1", "text": "Flags the JSON.parse((req.body as Buffer)...) with no route schema at all, bypassing Fastify's built-in validation/parsing", "passed": 5, "failed": 0, "pass_rate": 1.0, "diagnosis": "PASS", "diagnosis_reason": "All 5 trials identified the manual Buffer/JSON.parse as bypassing schema-first validation and explained why it is fragile/likely wrong at runtime.", "failure_example": ""},
+        {"id": "F2", "text": "Flags the resolve handler's 404 branch missing a return, falling through to comment.status on a possibly-null comment", "passed": 5, "failed": 0, "pass_rate": 1.0, "diagnosis": "PASS", "diagnosis_reason": "All 5 trials caught the missing return after the 404 send and traced the null-dereference.", "failure_example": ""},
+        {"id": "F3", "text": "Flags the missing-return issue as capable of a double-send / 'reply already sent' error or an unhandled crash from the null comment", "passed": 5, "failed": 0, "pass_rate": 1.0, "diagnosis": "PASS", "diagnosis_reason": "All 5 trials explicitly named the TypeError/'reply already sent' consequence of the fallthrough.", "failure_example": ""},
+        {"id": "F4", "text": "Flags the 'already-resolved' branch that returns without calling reply.send(), i.e. a handler path that can hang the request", "passed": 2, "failed": 3, "pass_rate": 0.4, "diagnosis": "SKILL_GAP (fixed)", "diagnosis_reason": "routes.md and hooks.md document the pitfall of NOT returning after reply.send() (causes fallthrough/double-send), but nowhere document the inverse pitfall: an async handler that returns undefined without ever calling reply.send() leaves the response unresolved. 3 of 5 trials found the more dramatic setImmediate-crash and null-dereference bugs but never mentioned this quieter hang, consistent with the skill giving no explicit guidance on it. FIX APPLIED: added an explicit callout + code example to routes.md's 'Reply Methods' section naming this exact failure mode ('the inverse pitfall is just as real: a branch that never replies at all... the client hangs until the request times out'). SPOT-CHECK: 2 fresh executor trials re-ran the same prompt/fixture with the updated routes.md; both explicitly flagged the already-resolved branch as a hang risk and ended with 'ALREADY-RESOLVED BRANCH FLAGGED: YES'. 2/2 spot-check trials now pass.", "failure_example": "Trial (agent a51ff5ee...) listed 6 numbered findings (missing return/404, setImmediate crash, manual JSON.parse, missing schemas, no observability, misleading naming) but never mentioned the already-resolved branch's missing reply.send() at all."},
+        {"id": "F5", "text": "Flags the setImmediate + synchronous throw as escaping Fastify's request/error lifecycle, surfacing as an unhandled exception", "passed": 5, "failed": 0, "pass_rate": 1.0, "diagnosis": "PASS", "diagnosis_reason": "All 5 trials called this out as a top blocking/critical finding with correct reasoning about Fastify's error lifecycle not covering setImmediate callbacks.", "failure_example": ""}
+      ]
+    },
+    {
+      "id": 1,
+      "name": "digest-exports-precision-trap",
+      "expectations": [
+        {"id": "F1", "text": "Flags the requireWorkspaceAccess preHandler sending a 403 without a return, so the handler keeps running", "passed": 5, "failed": 0, "pass_rate": 1.0, "diagnosis": "PASS", "diagnosis_reason": "All 5 trials flagged the missing return; one trial (a65d0ce6...) elevated it to a blocking 'authorization bypass' finding, the others flagged it as a latent/fragile issue — both satisfy the expectation.", "failure_example": ""},
+        {"id": "F2", "text": "Flags the POST route for having no schema.body at all, casting req.body with no runtime validation", "passed": 5, "failed": 0, "pass_rate": 1.0, "diagnosis": "PASS", "diagnosis_reason": "All 5 trials named this as a top-severity finding.", "failure_example": ""},
+        {"id": "F3", "text": "Flags the POST route's catch block returning raw error.message and error.stack unconditionally", "passed": 5, "failed": 0, "pass_rate": 1.0, "diagnosis": "PASS", "diagnosis_reason": "All 5 trials identified the stack-trace leak as an error-handling/security violation.", "failure_example": ""},
+        {"id": "F4", "text": "Flags the GET (list) route for having no response schema", "passed": 5, "failed": 0, "pass_rate": 1.0, "diagnosis": "PASS", "diagnosis_reason": "All 5 trials noted the list route's missing response schema, several contrasting it with the sibling GET-by-id route.", "failure_example": ""},
+        {"id": "F5", "text": "Precision check: does not raise a correctness complaint about the GET /:exportId route", "passed": 5, "failed": 0, "pass_rate": 1.0, "diagnosis": "PASS", "diagnosis_reason": "All 5 trials explicitly called this route out as correct/leave-alone with no false-positive complaints.", "failure_example": ""}
+      ]
+    },
+    {
+      "id": 2,
+      "name": "live-notifications-encapsulation-and-cleanup",
+      "expectations": [
+        {"id": "F1", "text": "Flags the comment's factually wrong explanation of what fp() does, not the fp() wrap itself as inherently broken (reworded per FIXTURE_ISSUE below)", "passed": 2, "failed": 3, "pass_rate": 0.4, "diagnosis": "FIXTURE_ISSUE (fixed)", "diagnosis_reason": "Because routes.ts registers liveNotificationsRoutes via its own nested fastify.register() call, that inner registration re-establishes a real encapsulation boundary regardless of the outer fp() wrap — so the onRequest hook inside it stays correctly scoped either way. 3 of 5 trials correctly reasoned through this and concluded the fp() wrap, once its comment is fixed, is actually a legitimate and harmless way to share the notifyWorkspace decorator — i.e. they judged the underlying mechanism sound and only flagged the misleading comment. Only 2 trials treated the whole-plugin wrap itself as something to restructure. The expectation's framing ('encapsulation-breaking misuse') overstated what this fixture actually encodes. FIX APPLIED: reworded evals.json's eval-2 F1 to require only 'flags the comment's factually wrong explanation of what fp() does', not that the fp() wrap itself is broken. SPOT-CHECK: 2 fresh executor trials re-ran the same prompt/fixture; both flagged the comment as misleading and both explicitly concluded the fp() wrap itself is not broken/misuse ('COMMENT FLAGGED AS MISLEADING: YES', 'FP WRAP ITSELF FLAGGED AS BROKEN: NO'). 2/2 spot-check trials now pass against the reworded expectation.", "failure_example": "Trial (agent a0c5fe66...): 'because liveNotificationsRoutes in routes.ts is not itself wrapped in fp, its onRequest hook correctly stays scoped to this feature's own routes and does not leak onto sibling root-level routes — that part is done right.'"},
+        {"id": "F2", "text": "Flags the onRequest hook's try/catch as silently swallowing every error with no rethrow and no error-level log", "passed": 5, "failed": 0, "pass_rate": 1.0, "diagnosis": "PASS", "diagnosis_reason": "All 5 trials flagged the swallow pattern, most noting it is currently inert but would silently absorb a future auth/error check added to the same hook — this satisfies the spirit of the expectation even though several softened severity given the current code path can't actually throw.", "failure_example": ""},
+        {"id": "F3", "text": "Flags the setInterval heartbeat as never cleared (no socket.on('close', ...) calling clearInterval), leaking a timer per connection", "passed": 5, "failed": 0, "pass_rate": 1.0, "diagnosis": "PASS", "diagnosis_reason": "All 5 trials identified this as a critical/top finding.", "failure_example": ""},
+        {"id": "F4", "text": "Flags the complete absence of close/error listeners on the websocket connection as missing cleanup", "passed": 5, "failed": 0, "pass_rate": 1.0, "diagnosis": "PASS", "diagnosis_reason": "All 5 trials separately called out the missing socket.on('error', ...) handler as a crash risk in addition to the missing close handler.", "failure_example": ""},
+        {"id": "F5", "text": "Flags JSON.parse(raw.toString()) in the message handler as unguarded, able to throw synchronously outside Fastify's error lifecycle", "passed": 5, "failed": 0, "pass_rate": 1.0, "diagnosis": "PASS", "diagnosis_reason": "All 5 trials flagged the unguarded JSON.parse with correct reasoning about it being outside Fastify's request/error lifecycle.", "failure_example": ""}
+      ]
+    }
+  ],
+  "summary": {
+    "total_expectations": 15,
+    "overall_pass_rate": 0.92,
+    "skill_gaps": [
+      "SKILL_GAP (fixed): routes.md/hooks.md/error-handling.md document 'you must return after reply.send() or execution falls through' but never document the inverse and equally real pitfall — an async handler that returns undefined without ever calling reply.send() leaves the response hanging. FIX: added an explicit callout + example to routes.md's Reply Methods section. SPOT-CHECK: 2/2 fresh trials now catch the hang."
+    ],
+    "fixture_issues": [
+      "FIXTURE_ISSUE (fixed): the live-notifications/plugin.ts fp()-wrap scenario doesn't actually produce a real encapsulation bug, because the nested fastify.register(liveNotificationsRoutes, {...}) call inside the fp()-wrapped plugin creates its own child encapsulation context regardless of the outer wrap. Reviewers who reason correctly about Fastify's registration model defend the pattern rather than flag it as broken. FIX: reworded eval 2's F1 expectation in evals.json to require only 'flags the comment's factually wrong explanation of what fp() does', not 'flags the wrap as encapsulation-breaking misuse'. SPOT-CHECK: 2/2 fresh trials now correctly flag only the misleading comment and explicitly judge the fp() wrap itself as not broken."
+    ]
+  }
+}

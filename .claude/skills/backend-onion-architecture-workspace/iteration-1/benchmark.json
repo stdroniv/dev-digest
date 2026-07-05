@@ -1,0 +1,158 @@
+{
+  "metadata": {
+    "skill_name": "backend-onion-architecture",
+    "skill_path": "/Users/dronmac/Projects/personal/dev-digest/.claude/skills/backend-onion-architecture",
+    "executor_model": "claude-sonnet-5",
+    "analyzer_model": "claude-sonnet-5",
+    "timestamp": "2026-07-05T14:23:32Z",
+    "evals_run": [
+      0
+    ],
+    "runs_per_configuration": 1
+  },
+  "runs": [
+    {
+      "eval_id": 0,
+      "eval_name": "webhooks-module-architecture-review",
+      "configuration": "with_skill",
+      "run_number": 1,
+      "result": {
+        "pass_rate": 1.0,
+        "passed": 5,
+        "failed": 0,
+        "total": 5,
+        "time_seconds": 112.9,
+        "tokens": 59907,
+        "tool_calls": 15,
+        "errors": 0
+      },
+      "expectations": [
+        {
+          "text": "F1: Flags routes.ts importing drizzle-orm/db schema and querying the DB directly inside the route handler (presentation touching infrastructure)",
+          "passed": true,
+          "evidence": "Finding #1: 'Route handler queries Drizzle directly ... This is presentation-layer code importing infrastructure directly \u2014 the exact anti-pattern in examples.md #1', cites dependency-cruiser rule 'handlers-never-touch-the-db'"
+        },
+        {
+          "text": "F2: Flags the endpoint-URL uniqueness check as business logic misplaced in the route handler",
+          "passed": true,
+          "evidence": "Finding #1: 'the duplicate-URL check here (existing.some(...)) is a business rule (uniqueness invariant), and it's sitting in the transport layer instead of the domain/application layer'"
+        },
+        {
+          "text": "F3: Flags claimDueRetries' backoff/MAX_ATTEMPTS logic as a domain rule embedded in the repository/infrastructure layer",
+          "passed": true,
+          "evidence": "Finding #6: 'Business rule (retry eligibility / backoff / dead-lettering) implemented inside the repository ... Retry-eligibility and backoff computation is exactly this kind of workflow decision \u2014 it's a domain invariant... not a data-access concern'"
+        },
+        {
+          "text": "F4: Flags repository methods returning raw Drizzle rows outward with no row->entity/DTO mapping",
+          "passed": true,
+          "evidence": "Finding #7: 'Repository returns raw Drizzle rows outward instead of mapping to domain entities/DTOs' \u2014 also independently catches that the leaked row round-trips the `secret` column back to the client"
+        },
+        {
+          "text": "F5: Flags service.ts constructing a concrete OpenAI client directly instead of going through the LLMProvider port/container",
+          "passed": true,
+          "evidence": "Finding #4: 'Application service owns a concrete OpenAI client instead of depending on an LLMProvider port ... This is the clearest violation in the module', cites SKILL.md tool->layer mapping verbatim"
+        }
+      ],
+      "notes": []
+    },
+    {
+      "eval_id": 0,
+      "eval_name": "webhooks-module-architecture-review",
+      "configuration": "without_skill",
+      "run_number": 1,
+      "result": {
+        "pass_rate": 0.8,
+        "passed": 4,
+        "failed": 1,
+        "total": 5,
+        "time_seconds": 89.3,
+        "tokens": 46735,
+        "tool_calls": 9,
+        "errors": 0
+      },
+      "expectations": [
+        {
+          "text": "F1: Flags routes.ts importing drizzle-orm/db schema and querying the DB directly inside the route handler (presentation touching infrastructure)",
+          "passed": true,
+          "evidence": "Finding #1 and #2: 'Routes hand-roll a DB query and bypass the repository/service entirely' + 'Route reads t (db schema) and eq from drizzle-orm \u2014 infrastructure leaking into presentation', compared against sibling agents/routes.ts"
+        },
+        {
+          "text": "F2: Flags the endpoint-URL uniqueness check as business logic misplaced in the route handler",
+          "passed": true,
+          "evidence": "Finding #1: 'Business logic (\"an endpoint URL must be unique per workspace\" \u2014 the 409 check) is implemented in the routes file, not the service, so it can't be reused or unit tested independently of Fastify'"
+        },
+        {
+          "text": "F3: Flags claimDueRetries' backoff/MAX_ATTEMPTS logic as a domain rule embedded in the repository/infrastructure layer",
+          "passed": true,
+          "evidence": "Finding #5: 'Retry-window/backoff policy (business rule) implemented in the repository ... This is domain/business logic ... sitting inside the repository, which per the onion/clean split should be pure data access'"
+        },
+        {
+          "text": "F4: Flags repository methods returning raw Drizzle rows outward with no row->entity/DTO mapping",
+          "passed": false,
+          "evidence": "No finding addresses row->DTO mapping or the repository leaking Drizzle's raw row shape outward; the summary table has no entry for it, and the secret-column round-trip to the client is never mentioned anywhere in the review"
+        },
+        {
+          "text": "F5: Flags service.ts constructing a concrete OpenAI client directly instead of going through the LLMProvider port/container",
+          "passed": true,
+          "evidence": "Finding #4: 'Direct OpenAI client construction and module-level singleton in the service \u2014 should go through the LLM adapter/container', contrasts with agents/service.ts's container.llm(provider) pattern"
+        }
+      ],
+      "notes": []
+    }
+  ],
+  "run_summary": {
+    "with_skill": {
+      "pass_rate": {
+        "mean": 1.0,
+        "stddev": 0.0,
+        "min": 1.0,
+        "max": 1.0
+      },
+      "time_seconds": {
+        "mean": 112.9,
+        "stddev": 0.0,
+        "min": 112.9,
+        "max": 112.9
+      },
+      "tokens": {
+        "mean": 59907.0,
+        "stddev": 0.0,
+        "min": 59907,
+        "max": 59907
+      }
+    },
+    "without_skill": {
+      "pass_rate": {
+        "mean": 0.8,
+        "stddev": 0.0,
+        "min": 0.8,
+        "max": 0.8
+      },
+      "time_seconds": {
+        "mean": 89.3,
+        "stddev": 0.0,
+        "min": 89.3,
+        "max": 89.3
+      },
+      "tokens": {
+        "mean": 46735.0,
+        "stddev": 0.0,
+        "min": 46735,
+        "max": 46735
+      }
+    },
+    "delta": {
+      "pass_rate": "+0.20",
+      "time_seconds": "+23.6",
+      "tokens": "+13172"
+    }
+  },
+  "notes": [
+    "Single run per configuration (n=1) — no variance data; treat the pass-rate delta as directional, not statistically robust.",
+    "The only assertion that discriminated between conditions was F4 (raw Drizzle rows leaking outward with no DTO mapping) — without-skill missed it entirely, including the secondary security implication that the `secret` column round-trips back to the client. F1/F2/F3/F5 were caught by both conditions, largely because the without-skill agent proactively compared against the sibling `agents/` module for house conventions (a crutch that won't exist for a brand-new module with no sibling to imitate).",
+    "With-skill found 3 legitimate issues beyond the seeded 5 (DI/composition-root violation, hand-rolled Zod casts instead of schema-first params, and the complete absence of a domain layer/repository interface) — all traceable to specific reference docs (references/dependency-injection.md, references/domain-layer.md) rather than inferred from house style, giving more precise 'where should this go' guidance.",
+    "Without-skill found 2 legitimate issues beyond the seeded 5 (fetch() has no error handling for thrown network errors; the retry route's unused/unvalidated :endpointId param) — both real but tactical/correctness nits rather than architecture-layer findings.",
+    "With-skill took +23.6s and +13k more tokens for the extra rigor — worth it here since this is a pre-merge architecture gate, not a latency-sensitive path.",
+    "Caveat: the without-skill agent was still fairly strong because it was explicitly told to skim server/CLAUDE.md and a sibling module. A true 'zero context' baseline (no CLAUDE.md, no sibling module) would likely show a larger gap — this benchmark specifically isolates the skill's incremental value on top of already-good repo hygiene, not skill-vs-nothing."
+  ]
+}

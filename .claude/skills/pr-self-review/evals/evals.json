@@ -1,0 +1,62 @@
+{
+  "skill_name": "pr-self-review",
+  "notes": [
+    "pr-self-review normally diffs the live branch vs `main` via scripts/collect-diff.sh, which can't be faked reliably inside a subagent sandbox (no real branch divergence exists there). Each eval instead ships the CHANGED files' full contents as fixtures under evals/files/<case-name>/ and phrases the prompt as 'here are the files changed on this branch vs main, review them as if this were /pr-self-review's target diff' — the executor is told to read SKILL.md, follow its routing/severity procedure (steps 2-5), and treat every line in the fixture as new/changed (i.e. it may cite any line, not just '+' lines, since there is no literal unified diff).",
+    "All three fixtures are synthetic and not wired into any real package.json/tsconfig — do not 'fix' them in place; they exist to be reviewed.",
+    "critical-and-warning-mix/ is the clear-cut case: routes.ts seeds an unambiguous SQL-injection CRITICAL (raw string interpolation into sql.raw with unsanitized path/query params — severity.md's own first CRITICAL example), service.ts seeds an N+1-query WARNING (severity.md's own WARNING example), and mapper.ts is intentionally clean to check the skill doesn't invent a finding just to have one per file.",
+    "authz-precision-trap/ is the hard precision-trap case: service.ts is clean, routes.ts is clean EXCEPT the DELETE /notifications/:notificationId handler drops the workspaceId scoping that every sibling route keeps (missing authorization check on a mutating route — severity.md's explicit CRITICAL example), and notifications.ts (a client hook) is clean and correctly goes through api.ts per client/CLAUDE.md. The bug is buried in otherwise-correct, otherwise-idiomatic code across both a backend route file and a frontend hook file.",
+    "test-only-diff/ is the uncommon-scenario case: the ENTIRE changed file set is test files (no source files touched). Each test has a real coverage gap (an assertion so weak it would pass even if the behavior under test were broken) — a genuine WARNING/test-gap issue per severity.md's 'test gaps on new logic' example — but nothing here is release-blocking, so the case checks that the skill does not manufacture a CRITICAL out of a test-only diff and still reports PASS overall."
+  ],
+  "evals": [
+    {
+      "id": 0,
+      "prompt": "Here are the files changed on this branch vs main: evals/files/critical-and-warning-mix/routes.ts, evals/files/critical-and-warning-mix/service.ts, evals/files/critical-and-warning-mix/mapper.ts (all under server/src/modules/comments/ in the real tree). Review them as if this were /pr-self-review's target diff: follow the skill's routing and severity procedure, route to the matching skills, emit severity-tagged findings, and give the final verdict.",
+      "expected_output": "A findings list that flags the SQL injection in routes.ts as CRITICAL, the N+1 query in service.ts as WARNING, raises no finding against mapper.ts, and concludes BLOCKED because at least one CRITICAL exists.",
+      "files": [
+        "evals/files/critical-and-warning-mix/routes.ts",
+        "evals/files/critical-and-warning-mix/service.ts",
+        "evals/files/critical-and-warning-mix/mapper.ts"
+      ],
+      "expectations": [
+        "F1: Flags the GET /comments/search handler in routes.ts building sql.raw() by string-interpolating prId and q directly into the query text as a CRITICAL, security-category SQL injection finding, citing the injection risk",
+        "F2: Flags service.ts's listWithAuthors calling repo.findAuthorById inside the for-of loop as a WARNING (not CRITICAL) — an N+1 query pattern, not release-blocking",
+        "F3 (precision check): Raises no finding at all against mapper.ts (a clean, correctly-scoped row->DTO mapper with no I/O or logic)",
+        "F4: Final verdict is explicitly BLOCKED (not PASS), with a critical count >= 1, matching the gate rule that any CRITICAL trips it",
+        "F5: The critical count reported in the rollup/verdict matches the number of CRITICAL findings actually listed (no mismatch between the tally line and the findings shown)"
+      ]
+    },
+    {
+      "id": 1,
+      "prompt": "Here are the files changed on this branch vs main: evals/files/authz-precision-trap/service.ts, evals/files/authz-precision-trap/routes.ts (both under server/src/modules/notifications/ in the real tree) and evals/files/authz-precision-trap/notifications.ts (under client/src/lib/hooks/ in the real tree). Review them as if this were /pr-self-review's target diff: follow the skill's routing and severity procedure — this diff crosses both server/** and client/** so route to both sets of skills — emit severity-tagged findings, and give the final verdict.",
+      "expected_output": "A findings list that flags exactly one real issue — the DELETE /notifications/:notificationId route in routes.ts missing workspace-scoping/ownership authorization — as CRITICAL, and does not fabricate findings against the otherwise-clean service.ts or the otherwise-clean client hook file, concluding BLOCKED.",
+      "files": [
+        "evals/files/authz-precision-trap/service.ts",
+        "evals/files/authz-precision-trap/routes.ts",
+        "evals/files/authz-precision-trap/notifications.ts"
+      ],
+      "expectations": [
+        "F1: Flags the DELETE /notifications/:notificationId handler in routes.ts as CRITICAL for missing an authorization/ownership check (it deletes by notificationId alone, unlike the sibling GET/POST routes which both take workspaceId) — names the concrete gap (any caller who knows/guesses a notificationId can delete another workspace's notification)",
+        "F2 (precision check): Does not raise a CRITICAL or WARNING finding against service.ts — it is a correctly layered, correctly delegating application service with no logic issues",
+        "F3 (precision check): Does not raise a CRITICAL or WARNING finding against notifications.ts requiring it to route through api.ts, add auth headers, or otherwise treat it as broken — the hook already goes through api.ts per client/CLAUDE.md and has no defect of its own. A defensible secondary SUGGESTION noting the hook's workspaceId param is now misleading given the backend's unscoped delete is acceptable (it doesn't change the BLOCKED verdict) as long as no CRITICAL/WARNING is raised against the hook itself",
+        "F4 (precision check): Does not describe the GET or POST/read routes in routes.ts as missing authorization — only the DELETE route lacks the workspace scoping",
+        "F5: Final verdict is BLOCKED because the one CRITICAL exists, and the reviewer explicitly invokes/mentions both a backend skill (e.g. backend-onion-architecture, fastify-best-practices, or security) and a frontend skill (ui-frontend-architecture or react-best-practices) given the diff spans both areas"
+      ]
+    },
+    {
+      "id": 2,
+      "prompt": "Here are the files changed on this branch vs main: evals/files/test-only-diff/service.test.ts (under server/src/modules/notifications/ in the real tree) and evals/files/test-only-diff/notifications.test.tsx (under client/src/lib/hooks/ in the real tree). No source files changed on this branch, only these two test files. Review them as if this were /pr-self-review's target diff: follow the skill's routing and severity procedure, emit severity-tagged findings, and give the final verdict.",
+      "expected_output": "A findings list that identifies the weak/incomplete assertions in both test files as WARNING-level test-gap findings (not CRITICAL), and an overall PASS verdict since no CRITICAL exists in a test-only diff.",
+      "files": [
+        "evals/files/test-only-diff/service.test.ts",
+        "evals/files/test-only-diff/notifications.test.tsx"
+      ],
+      "expectations": [
+        "F1: Flags service.test.ts's markRead test for asserting only `expect(result).toBeTruthy()` instead of checking the returned DTO's read flag or the arguments the repo stub was called with — a real test-gap issue",
+        "F2: Flags notifications.test.tsx's test for asserting immediately after renderHook with no `waitFor`/`act` around the query settling, so it passes regardless of whether the fetched data ever arrives",
+        "F3 (severity calibration check): Both test-gap findings are tagged WARNING or SUGGESTION, never CRITICAL — a test-only diff with no shipped-code defect should not produce a CRITICAL/blocking finding",
+        "F4: Final verdict is PASS (critical count 0), explicitly noting the change should not be blocked from pushing even though the WARNING/SUGGESTION findings exist",
+        "F5 (routing check): The reviewer does not claim to invoke ui-frontend-architecture/next-best-practices rules against notifications.test.tsx beyond test-quality concerns (react-testing-library scope). A backend-onion-architecture-flavored WARNING/SUGGESTION on the server test file is acceptable when it's on-topic (e.g. the test double's DI/composition-root seam) and non-blocking — it must not be tagged CRITICAL and must not flip the verdict away from PASS"
+      ]
+    }
+  ]
+}

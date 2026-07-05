@@ -1,0 +1,47 @@
+{
+  "skill_name": "next-best-practices",
+  "trials_per_eval": 5,
+  "run_date": "2026-07-05",
+  "evals": [
+    {
+      "id": 0,
+      "name": "insights-page-clear-violations",
+      "expectations": [
+        {"id": "F1", "text": "Flags params in page.tsx typed/destructured as a plain sync object instead of Promise<...> awaited", "passed": 5, "failed": 0, "pass_rate": 1.0, "diagnosis": "PASS", "diagnosis_reason": "All 5 trials caught this and cited async-patterns.md.", "failure_example": ""},
+        {"id": "F2", "text": "Flags useSearchParams() called in page.tsx with no 'use client' directive", "passed": 5, "failed": 0, "pass_rate": 1.0, "diagnosis": "PASS", "diagnosis_reason": "All 5 trials caught the invalid client-hook-in-server-component pattern.", "failure_example": ""},
+        {"id": "F3", "text": "Flags RepoTokenBadge.tsx reading process.env.GITHUB_TOKEN inside a 'use client' module", "passed": 5, "failed": 0, "pass_rate": 1.0, "diagnosis": "PASS", "diagnosis_reason": "All 5 trials flagged this as a blocking secrets issue, most citing the repo's own CLAUDE.md secrets policy.", "failure_example": ""},
+        {"id": "F4", "text": "Suggested fixes use await params (or React.use) for F1, and either a dedicated client child or moving the value server-side for F2", "passed": 5, "failed": 0, "pass_rate": 1.0, "diagnosis": "PASS", "diagnosis_reason": "All 5 trials gave concrete, correct code fixes for both issues.", "failure_example": ""}
+      ]
+    },
+    {
+      "id": 1,
+      "name": "finding-detail-precision-trap",
+      "expectations": [
+        {"id": "F1", "text": "Flags generateMetadata destructuring params via unsafe cast instead of awaiting, contrasted with the page correctly awaiting the same prop", "passed": 5, "failed": 0, "pass_rate": 1.0, "diagnosis": "PASS", "diagnosis_reason": "All 5 trials caught this and several explicitly noted the page component does it correctly while generateMetadata does not.", "failure_example": ""},
+        {"id": "F2", "text": "Flags the sequential getFinding/getFindingComments/getFindingAuthor awaits as a waterfall vs Promise.all", "passed": 5, "failed": 0, "pass_rate": 1.0, "diagnosis": "PASS", "diagnosis_reason": "All 5 trials flagged this and proposed Promise.all.", "failure_example": ""},
+        {"id": "F3", "text": "Flags finding.createdAt (a Date) passed as a prop to the client component FindingTimeline", "passed": 5, "failed": 0, "pass_rate": 1.0, "diagnosis": "PASS", "diagnosis_reason": "All 5 trials caught the non-serializable Date prop and proposed toISOString()/new Date() round-trip.", "failure_example": ""},
+        {"id": "F4", "text": "Flags handleAcknowledge (a plain non-'use server' function) being passed as onAcknowledge to a client component", "passed": 5, "failed": 0, "pass_rate": 1.0, "diagnosis": "PASS", "diagnosis_reason": "All 5 trials caught the non-serializable function prop across the RSC boundary.", "failure_example": ""},
+        {"id": "F5", "text": "Flags FindingActions.tsx being an async function component while also having 'use client'", "passed": 5, "failed": 0, "pass_rate": 1.0, "diagnosis": "PASS", "diagnosis_reason": "All 5 trials caught the invalid async client component.", "failure_example": ""},
+        {"id": "F6", "text": "Precision check: does not flag lib.ts's getFinding cache() wrapper as a violation", "passed": 5, "failed": 0, "pass_rate": 1.0, "diagnosis": "PASS", "diagnosis_reason": "All 5 trials explicitly called this out as the correct pattern and left it alone.", "failure_example": ""},
+        {"id": "F7", "text": "(fixed) Precision check: does not raise a violation about the <Image> usage in page.tsx (width/height/sizes, no priority) as incorrectly configured", "passed": 2, "failed": 0, "pass_rate": 1.0, "diagnosis": "PASS", "diagnosis_reason": "FIXTURE_ISSUE fixed 2026-07-05/06: dropped the `priority` prop from the 48x48 avatar image in evals/files/finding-detail/page.tsx (no genuine hero/LCP image existed in this fixture to relocate it to, so it was simply removed). evals.json's F7 expectation text updated to match. 2-trial spot-check (not a full 5-trial rerun) confirms both trials now correctly leave the <Image> usage unflagged, explicitly citing width/height/sizes as correct and the absence of `priority` as appropriate for a non-LCP avatar, while all 5 real violations (F1-F5) and the other precision check (F6) were still caught in both trials.", "failure_example": ""}
+      ]
+    },
+    {
+      "id": 2,
+      "name": "finding-actions-missing-revalidation",
+      "expectations": [
+        {"id": "F1", "text": "Flags acknowledgeFinding mutating with no revalidatePath/revalidateTag afterward", "passed": 5, "failed": 0, "pass_rate": 1.0, "diagnosis": "PASS", "diagnosis_reason": "All 5 trials caught the missing revalidation and its stale-UI consequence, several citing data-patterns.md's Server Action example directly.", "failure_example": ""},
+        {"id": "F2", "text": "Recommends the fix of adding revalidatePath to acknowledgeFinding, mirroring dismissFinding", "passed": 5, "failed": 0, "pass_rate": 1.0, "diagnosis": "PASS", "diagnosis_reason": "All 5 trials gave the exact fix, most passing repoId through and calling revalidatePath identically to dismissFinding.", "failure_example": ""},
+        {"id": "F3", "text": "Precision check: does not claim dismissFinding is missing or misusing revalidatePath", "passed": 5, "failed": 0, "pass_rate": 1.0, "diagnosis": "PASS", "diagnosis_reason": "All 5 trials treated dismissFinding as the correct reference implementation and did not flag it.", "failure_example": ""}
+      ]
+    }
+  ],
+  "summary": {
+    "total_expectations": 14,
+    "overall_pass_rate": 1.0,
+    "skill_gaps": [],
+    "fixture_issues": [
+      "(fixed) Eval 1 / F7: the 'correctly configured' next/image usage included `priority` on a small (48x48) avatar, which every trial reasonably questioned as an LCP-hint misuse — an ambiguous precision-trap design, not a skill deficiency. Fixed by dropping `priority` from the avatar image; 2-trial spot-check on 2026-07-06 confirms the fix (2/2 pass, all other expectations still caught)."
+    ]
+  }
+}

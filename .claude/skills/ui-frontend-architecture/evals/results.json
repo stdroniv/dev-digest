@@ -1,0 +1,42 @@
+{
+  "skill_name": "ui-frontend-architecture",
+  "trials_per_eval": 5,
+  "run_date": "2026-07-05",
+  "evals": [
+    {
+      "id": 0,
+      "name": "cross-route-deep-import",
+      "expectations": [
+        {"id": "F1", "text": "Flags RepoHealthCard.tsx's deep import of SkillBadge from another route's private _components as a feature-isolation violation and names a concrete fix (promote to src/components/, or compose at a higher level)", "passed": 5, "failed": 0, "pass_rate": 1.0, "diagnosis": "PASS", "diagnosis_reason": "All 5 trials identified the cross-route deep import, cited the 'features never import each other' rule, and proposed promoting SkillBadge to src/components/ (or composing at the page level).", "failure_example": ""},
+        {"id": "F2", "text": "Flags format-helpers.ts (shared lib/ code) importing a feature hook as an inversion of the dependency rule, and names a concrete fix (promote the hook to shared lib/hooks/, or leave it colocated and remove the import)", "passed": 5, "failed": 0, "pass_rate": 1.0, "diagnosis": "PASS", "diagnosis_reason": "All 5 trials flagged the shared-to-feature import inversion and proposed promoting useAgentStatusColor to a shared location (lib/hooks/) or removing the wrapper; several also independently caught the extra issue that a hook doesn't belong in a 'pure helpers' file.", "failure_example": ""}
+      ]
+    },
+    {
+      "id": 1,
+      "name": "notifications-panel",
+      "expectations": [
+        {"id": "F1", "text": "Flags NotificationsList.tsx's direct fetch() call bypassing lib/hooks -> lib/api.ts", "passed": 5, "failed": 0, "pass_rate": 1.0, "diagnosis": "PASS", "diagnosis_reason": "Every trial cited this-repo.md's 'never call fetch() directly in a component' rule and proposed adding a query hook.", "failure_example": ""},
+        {"id": "F2", "text": "Flags inline filter/sort business logic in the component body as belonging in a pure utility function", "passed": 5, "failed": 0, "pass_rate": 1.0, "diagnosis": "PASS", "diagnosis_reason": "Every trial extracted this as a stateless-transform placement issue per placement.md's triage table.", "failure_example": ""},
+        {"id": "F3", "text": "Flags useFormatTimestamp as misnamed (use-prefix with no hook calls)", "passed": 5, "failed": 0, "pass_rate": 1.0, "diagnosis": "PASS", "diagnosis_reason": "Every trial caught the naming violation and proposed renaming to a plain function.", "failure_example": ""},
+        {"id": "F4", "text": "Flags the locally duplicated Notification type instead of importing the shared one", "passed": 5, "failed": 0, "pass_rate": 1.0, "diagnosis": "PASS", "diagnosis_reason": "Every trial identified the duplication against client/src/lib/types.ts and recommended importing the shared type.", "failure_example": ""},
+        {"id": "F5", "text": "Precision check: does not flag page.tsx", "passed": 5, "failed": 0, "pass_rate": 1.0, "diagnosis": "PASS", "diagnosis_reason": "All 5 trials explicitly called out page.tsx as correctly organized and left it unflagged.", "failure_example": ""},
+        {"id": "F6", "text": "Precision check: does not flag NotificationBadge.tsx", "passed": 5, "failed": 0, "pass_rate": 1.0, "diagnosis": "PASS", "diagnosis_reason": "All 5 trials explicitly called out NotificationBadge.tsx as correctly organized and left it unflagged.", "failure_example": ""}
+      ]
+    },
+    {
+      "id": 2,
+      "name": "barrel-cycle",
+      "expectations": [
+        {"id": "F1", "text": "Flags the two new index.ts barrels as violating this repo's no-in-folder-barrels convention", "passed": 5, "failed": 0, "pass_rate": 1.0, "diagnosis": "PASS", "diagnosis_reason": "Every trial cited this-repo.md's mapping-table row ('one file per component, named exports, no in-folder barrels') and recommended deleting both index.ts files.", "failure_example": ""},
+        {"id": "F2", "text": "Flags the cross-route/feature imports (AgentSkillPreview -> skills barrel and/or SkillAgentUsage -> agents barrel) as violating feature isolation", "passed": 5, "failed": 0, "pass_rate": 1.0, "diagnosis": "PASS", "diagnosis_reason": "Every trial identified both cross-route imports as violating 'features never import each other' and proposed promotion to shared components or page-level composition.", "failure_example": ""},
+        {"id": "F3", "text": "Identifies the circular dependency formed by the two barrels together, noting it's invisible from either file in isolation", "passed": 5, "failed": 0, "pass_rate": 1.0, "diagnosis": "PASS", "diagnosis_reason": "Every trial explicitly traced the 4-hop import graph (agents barrel -> AgentSkillPreview -> skills barrel -> SkillAgentUsage -> agents barrel) and stated the cycle is only visible when following both barrels together, tying it back to the barrel-file policy's circular-dependency warning.", "failure_example": ""}
+      ]
+    }
+  ],
+  "summary": {
+    "total_expectations": 11,
+    "overall_pass_rate": 1.0,
+    "skill_gaps": [],
+    "fixture_issues": []
+  }
+}

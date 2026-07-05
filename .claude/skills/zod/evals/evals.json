@@ -1,0 +1,59 @@
+{
+  "skill_name": "zod",
+  "notes": [
+    "files/pr-findings-submit, files/repo-intel-schemas-hard, and files/llm-provider-config are synthetic fixtures written to look like plausible DevDigest server modules, but they intentionally seed Zod schema/validation violations for grading. They are not real product code and are not wired into any package.json/tsconfig — do not 'fix' them in place; they exist to be reviewed.",
+    "files/pr-findings-submit is the clear-cut fixture: a single schema+route pair with three unambiguous violations (parse() in a route handler, a manually duplicated type that has already drifted from its schema, and optional() used where nullable() is called for).",
+    "files/repo-intel-schemas-hard is the precision-trap fixture: 5 schemas across 2 files mixing 5 distinct violations (throwing in refine, z.any(), plain string for a fixed enum, optional-abuse on identifying fields, and a manually duplicated/drifted type) with one correctly modeled schema (digestPreferenceSchema) that must NOT be flagged.",
+    "files/llm-provider-config is the uncommon-scenario fixture: a discriminatedUnion missing a variant ('openrouter') that the same module's switch statement already has to handle via @ts-expect-error, plus a .transform() that silently widens the inferred output type from string to string|undefined, defeating the .min(1) check it sits behind."
+  ],
+  "evals": [
+    {
+      "id": 0,
+      "name": "pr-findings-submit-clear-cut",
+      "prompt": "We're about to merge a new findings-submission endpoint (schema.ts, routes.ts) for the PR review flow. Review the Zod usage before it lands — point out anything that violates our Zod best practices and say specifically what to change.",
+      "expected_output": "A review that identifies each violation below, explains the concrete failure mode, and states the specific fix (not just 'this is bad').",
+      "files": [
+        "evals/files/pr-findings-submit/schema.ts",
+        "evals/files/pr-findings-submit/routes.ts"
+      ],
+      "expectations": [
+        "F1: Flags routes.ts calling findingSchema.parse(req.body) directly inside the route handler with no try/catch or safeParse, noting this throws a ZodError that crashes/500s the request on invalid input, and recommends safeParse() with a structured 400 response instead",
+        "F2: Flags the manually maintained `ReviewFinding` interface in schema.ts as duplicating findingSchema instead of deriving it via z.infer<typeof findingSchema>, and notes it has already drifted (missing the `confidence` field present on the schema)",
+        "F3: Flags `mergedAt` as using `.optional()` when the described semantics (a DB column that's always present but null until the PR merges) call for `.nullable()` instead"
+      ]
+    },
+    {
+      "id": 1,
+      "name": "repo-intel-schemas-precision-trap",
+      "prompt": "We're about to merge server/src/modules/repo-intel/ schema definitions and their routes (schemas.ts, routes.ts). Review the Zod usage for best-practice violations before it lands, call out the specific fix for each, and call out any schema that's already correctly modeled so we don't churn it needlessly.",
+      "expected_output": "A review that identifies each violation below with its concrete fix, and does NOT flag digestPreferenceSchema, which is intentionally a correctly-modeled schema.",
+      "files": [
+        "evals/files/repo-intel-schemas-hard/schemas.ts",
+        "evals/files/repo-intel-schemas-hard/routes.ts"
+      ],
+      "expectations": [
+        "F1: Flags webhookEventSchema's .refine() throwing a raw Error instead of returning false (or using superRefine/ctx.addIssue), noting it aborts collection of other validation errors",
+        "F2: Flags webhookEventSchema's `metadata: z.any()` as unsafe and recommends z.unknown() instead",
+        "F3: Flags findingSeveritySchema's `severity: z.string()` as accepting typos/any value and recommends z.enum([...]) for the fixed set of severities",
+        "F4: Flags reviewRequestSchema marking identifying/required fields (repoId, prNumber) as `.optional()` as optional-abuse that lets a near-empty payload pass validation",
+        "F5: Flags the manually declared `ReviewResult` interface in schemas.ts (and its use in routes.ts) as duplicating reviewResultSchema instead of using z.infer, and notes it has already drifted by dropping the `confidence` field that the schema defines and the API silently discards",
+        "F6 (precision check): Does not raise a violation against digestPreferenceSchema — it already uses enum, nullable, and a z.infer-derived type correctly"
+      ]
+    },
+    {
+      "id": 2,
+      "name": "llm-provider-config-uncommon",
+      "prompt": "We're about to merge the LLM provider config schema and the client-builder that consumes it (config-schema.ts, provider-client.ts). Review the Zod usage for correctness issues before it lands and say specifically what to change.",
+      "expected_output": "A review that identifies the discriminated-union gap and the transform/type-narrowing issue below, with a concrete fix for each.",
+      "files": [
+        "evals/files/llm-provider-config/config-schema.ts",
+        "evals/files/llm-provider-config/provider-client.ts"
+      ],
+      "expectations": [
+        "F1: Flags llmProviderConfigSchema's discriminatedUnion as missing an 'openrouter' variant, pointing out that provider-client.ts's switch case and @ts-expect-error comment show the codebase already needs to handle that provider — i.e. the union is out of sync with real usage",
+        "F2: Flags the apiKey `.transform((key) => key.trim() || undefined)` as silently widening the schema's inferred output type from `string` to `string | undefined`, undermining the `.min(1)` check that was supposed to guarantee a non-empty key, and explains this is why requireKey() downstream has to re-check for a falsy value",
+        "F3: Recommends a concrete fix for the transform issue — e.g. reject blank/whitespace-only keys via `.refine()` (or trim before validating) instead of transforming into `undefined`, so the output type stays `string` — rather than only naming the symptom"
+      ]
+    }
+  ]
+}

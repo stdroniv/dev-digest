@@ -63,6 +63,11 @@ export const posts = pgTable('posts', {
 ]);
 ```
 
+> A plain unique index applies across every row, including soft-deleted ones —
+> on a table with a `deletedAt` column, that silently blocks reuse of a unique
+> value (e.g. `email`) that a deleted row still holds. See "Soft Delete + Unique
+> Constraints" in `common-patterns.md` for the partial-index fix.
+
 ## Composite Primary Key
 
 ```typescript

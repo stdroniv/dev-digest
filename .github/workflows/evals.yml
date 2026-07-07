@@ -172,7 +172,38 @@ jobs:
       - if: always()
         run: docker compose -f proxy/docker-compose.yml down
 
-  # ── 5. Workflow tier (tool tier — non-blocking) ─────────────────────────────────────────────────
+  # ── 5. Required gate (the ONLY check to mark required in branch protection) ─────────────────────
+  # Always runs, so it always posts a status — avoiding the "waiting for a required check that was
+  # skipped" merge deadlock that conditional + matrix jobs otherwise cause. Passes when every blocking
+  # job SUCCEEDED or was legitimately SKIPPED; fails if any of them failed or was cancelled. The
+  # advisory `workflow-evals` job is intentionally excluded.
+  evals-gate:
+    name: evals-gate
+    needs: [detect, quality, skill-evals, agent-evals]
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check required eval jobs
+        env:
+          DETECT: ${{ needs.detect.result }}
+          QUALITY: ${{ needs.quality.result }}
+          SKILLS: ${{ needs.skill-evals.result }}
+          AGENTS: ${{ needs.agent-evals.result }}
+        run: |
+          echo "detect=$DETECT quality=$QUALITY skill-evals=$SKILLS agent-evals=$AGENTS"
+          # detect MUST succeed — if it errored, the others were skipped and would mask the failure.
+          if [ "$DETECT" != "success" ]; then
+            echo "::error::detect job did not succeed ($DETECT)"; exit 1
+          fi
+          # The eval jobs may be 'skipped' (nothing of that kind changed) — that is a pass.
+          for r in "$QUALITY" "$SKILLS" "$AGENTS"; do
+            if [ "$r" = "failure" ] || [ "$r" = "cancelled" ]; then
+              echo "::error::a required eval job did not pass ($r)"; exit 1
+            fi
+          done
+          echo "All required eval jobs passed or were skipped."
+
+  # ── 6. Workflow tier (tool tier — non-blocking) ─────────────────────────────────────────────────
   # Measures the LIVE routing harness. Triggered by any CLAUDE.md / agent / engine change. Marked
   # continue-on-error because its `activation` cases are behaviour-shaped and documented-flaky on
   # non-Anthropic models (evals/README) — advisory, not merge-blocking.

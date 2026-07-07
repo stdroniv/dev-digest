@@ -40,6 +40,9 @@ docker compose up -d       # Postgres + pgvector only
 Per package (run inside the folder): `pnpm dev` · `pnpm test` · `pnpm typecheck`.
 Server DB: `pnpm db:migrate` · `pnpm db:seed` · `pnpm db:generate`.
 
+Evals (run inside `evals/`): `pnpm eval:skills` · `pnpm eval:agents` · `pnpm eval:workflow` ·
+`pnpm eval:quality`. See [Before you finish](#before-you-finish) for which one a given change needs.
+
 ## Non-default conventions (what you can't guess from the code)
 
 - **Migrations are NOT applied on boot** — run `cd server && pnpm db:migrate`.
@@ -74,6 +77,19 @@ Server DB: `pnpm db:migrate` · `pnpm db:seed` · `pnpm db:generate`.
 - **writing a feature spec (what/why) or an implementation plan (how)** → specs live in
   `specs/` (authored by the `spec-creator` agent); plans live in `docs/plans/`.
 - **before debugging a known gotcha** → read `INSIGHTS.md` and the module's `INSIGHTS.md`.
+- **changing `.claude/skills/*`, `.claude/agents/*`, or this file** → run the matching eval
+  in `evals/` before committing (see table below).
+
+| Change | Run (inside `evals/`) |
+|---|---|
+| a skill under `.claude/skills/<name>/` | `pnpm eval:skills` (or `vitest run skills/<name>` to scope it) |
+| an agent under `.claude/agents/<name>.md` | `pnpm eval:agents` (or `vitest run agents/<name>` to scope it) |
+| this `CLAUDE.md` (routing, "Read when…", commands) | `pnpm eval:workflow` |
+| a `SKILL.md`'s structure/frontmatter only | `pnpm eval:quality` (static gate, no model) |
+
+Only `backend-onion-architecture`, `dependency-checker`, `security` (skills) and
+`architecture-reviewer` (agent) have eval suites today — if the one you touched isn't covered,
+add cases under `evals/skills/` or `evals/agents/` rather than skipping the check.
 
 ## Before you finish
 

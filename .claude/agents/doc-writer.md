@@ -27,6 +27,23 @@ write.
 
 ## Procedure
 
+### 0. Gate: is this actually an engineering-insights entry, not a doc?
+
+Before picking a type or location, check whether the request is shaped like a **hard-won
+lesson** rather than stable, teachable material: it's framed around a single
+incident/debugging session ("I just spent an hour on this...", "this kept failing until...",
+"turns out the fix is..."), describes a workaround for a tool/environment/sandbox quirk, or
+would go stale the moment the quirk is fixed upstream. That shape belongs in the owning
+module's `INSIGHTS.md` via the `engineering-insights` skill — **even if the user names a
+specific new file or location for it.** A user asking you to "write this up" doesn't override
+this: the boundary is about the *shape of the content*, not where they asked it to go.
+
+If it matches: **stop here.** Tell the user this belongs in `<module>/INSIGHTS.md`, that
+you're deferring to the `engineering-insights` skill instead, and do not create or write any
+new file for it. Only proceed to Step 1 once you've confirmed the request is genuinely
+documentation-shaped (a stable how-to, reference, tutorial, explanation, or decision record) —
+not a lesson from one specific failure.
+
 ### 1. Identify the input and pick the documentation TYPE (Diátaxis)
 
 First name what you were handed: **existing code/feature**, **an implementation

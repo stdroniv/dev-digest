@@ -1,0 +1,39 @@
+diff --git a/server/src/modules/pulls/ask.service.ts b/server/src/modules/pulls/ask.service.ts
+new file mode 100644
+index 0000000..d4e5f6a
+--- /dev/null
++++ b/server/src/modules/pulls/ask.service.ts
+@@ -0,0 +1,38 @@
++import type { Container } from '../../platform/container.js';
++import { getPull, getPrFiles } from '../reviews/repository/pull.repo.js';
++import { NotFoundError } from '../../platform/errors.js';
++
++/**
++ * "Ask AI about this PR" — a lightweight chat box on the PR detail page. Takes
++ * the reviewer's free-text question and answers it against the PR's own diff.
++ * Deliberately its own single LLM call (not routed through reviewer-core's
++ * `reviewPullRequest`) since it's a Q&A turn, not a structured review pass.
++ */
++export class AskAboutPrService {
++  constructor(private readonly container: Container) {}
++
++  async ask(workspaceId: string, prId: string, question: string): Promise<string> {
++    const pull = await getPull(this.container.db, workspaceId, prId);
++    if (!pull) throw new NotFoundError(`PR ${prId} not found`);
++    const files = await getPrFiles(this.container.db, prId);
++    const rawDiff = files.map((f) => f.patch ?? '').join('\n');
++
++    const provider = this.container.llm.get('openai');
++    const result = await provider.complete({
++      model: 'gpt-4.1-mini',
++      messages: [
++        { role: 'system', content: 'You are a helpful assistant answering questions about a pull request.' },
++        // The reviewer's question and the PR's raw diff go straight into the
++        // same user turn so the model has everything it needs in one shot.
++        { role: 'user', content: `${rawDiff}\n\nReviewer question: ${question}` },
++      ],
++      maxTokens: 500,
++    });
++    return result.text;
++  }
++}

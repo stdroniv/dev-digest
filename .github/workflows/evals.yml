@@ -21,7 +21,16 @@ on:
       - '.claude/**'
       - 'CLAUDE.md'
       - 'evals/**'
-  workflow_dispatch: {}
+  workflow_dispatch:
+    inputs:
+      eval_model:
+        description: 'Model under test (OpenRouter slug). Blank = use the EVAL_MODEL repo variable / default.'
+        required: false
+        type: string
+      eval_judge_model:
+        description: 'Judge model (OpenRouter slug). Blank = use the EVAL_JUDGE_MODEL repo variable / default.'
+        required: false
+        type: string
 
 permissions:
   contents: read
@@ -31,9 +40,12 @@ concurrency:
   cancel-in-progress: true
 
 env:
-  # Cheap OpenRouter model verified to actually dispatch subagents in the tool tiers (see evals/README).
-  EVAL_MODEL: google/gemini-2.5-flash
-  EVAL_JUDGE_MODEL: google/gemini-2.5-flash
+  # Model selection precedence: manual-run input → repo/environment Variable → hardcoded default.
+  # Set the Variable in Settings → Secrets and variables → Actions → Variables (or `gh variable set`)
+  # to change the model WITHOUT editing this file. The evals are calibrated against Anthropic-class
+  # models, so that is the default; the tool tiers route through the LiteLLM proxy either way.
+  EVAL_MODEL: ${{ inputs.eval_model || vars.EVAL_MODEL || 'anthropic/claude-haiku-4.5' }}
+  EVAL_JUDGE_MODEL: ${{ inputs.eval_judge_model || vars.EVAL_JUDGE_MODEL || 'anthropic/claude-haiku-4.5' }}
 
 jobs:
   # ── 1. Change detection ─────────────────────────────────────────────────────────────────────────

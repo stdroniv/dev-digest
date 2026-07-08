@@ -10,6 +10,8 @@ import {
   API_CONTRACT_REVIEWER_PROMPT,
 } from './seed-prompts.js';
 import { DEMO_SKILLS, AGENT_SKILL_LINKS, STATS_DEMO_REVIEWS } from './seed-skills.js';
+import { seedEvalCases } from './seed-evals.js';
+import { seedHardEvalCases } from './seed-evals-hard.js';
 
 /** Default provider/model for the built-in reviewer agents. */
 const DEFAULT_PROVIDER = 'openrouter' as const;
@@ -436,6 +438,12 @@ export async function seed(db: Db): Promise<{ workspaceId: string; userId: strin
       );
     }
   }
+
+  // ---- L06 — eval cases for the demo Security Reviewer agent (AC-7) ----
+  await seedEvalCases(db, workspaceId, repoId);
+
+  // ---- Hard, real-world eval cases across all 5 reviewer agents ----
+  await seedHardEvalCases(db, workspaceId, repoId);
 
   return { workspaceId, userId };
 }

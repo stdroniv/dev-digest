@@ -160,6 +160,29 @@ kind of rework):
 Draw these from the spec's own edge-case and failure ACs; if the spec is silent on one
 that clearly applies, raise it as a HOW-level clarifying question rather than guessing.
 
+**Design-fidelity completeness (when the spec references a design/mockup).** A plan that
+points at "the design" without pinning specifics is how a build silently drifts from it —
+a row-list becomes a card-grid, colored metrics render gray, a `0.04` delta renders
+`4.00`, an empty screen never gets the data that makes it match the mock. For every screen
+the spec puts in scope:
+- **Anchor by a stable id, never an ordinal.** Reference the exact screen — its artboard
+  id / route / a quoted heading — not "design 2"; ordinal labels desync from the artifact
+  the moment it is re-ordered or re-exported.
+- **Make the visual contract measurable in the task's Acceptance.** Name the layout
+  structure (list vs grid), the exact copy strings, the colour token per element
+  (`--accent`/`--ok`/`--warn`, …), the number/delta formatting, and each empty / loading /
+  error state — so "renders the dashboard" becomes "renders one row per agent (not a
+  grid), metrics tinted accent/ok/warn, delta as a 2-dp fraction, per the `eval-dashboard`
+  screen".
+- **Extract tokens and copy once.** Pull the design's exact colour tokens and user-facing
+  strings into the plan (or an early task) so implementers don't invent them.
+- **Plan the demo data the design implies.** If the design's populated state needs data
+  the system won't have on a fresh install (run history for a trend, a regression for an
+  alert), add a seed/fixture task — otherwise the built screen can never match the design,
+  and empty-state defects (e.g. a single-point chart dividing by zero) hide until first use.
+Draw these from the spec's **Screens & states** section; if the spec is silent on a screen
+the design clearly shows, raise it as a HOW-level clarifying question rather than guessing.
+
 ## Project map — what exists (load only what is relevant)
 
 ### Read-when routing
@@ -285,6 +308,9 @@ to a task. Every task below should serve at least one requirement listed here.>
 - [ ] Failure & edge states are covered by owning tasks — first-ever vs. prior-artifact
       failure, partial/one-of-N failure isolation, preserve-prior-on-retry, in-progress +
       navigate-away, and unavailable-precondition (see Step 3's completeness checklist)
+- [ ] (design referenced) Every in-scope screen is anchored by a stable id with a
+      measurable visual contract (layout / copy / colour tokens / states), and demo data
+      the design implies has an owning seed/fixture task
 ```
 
 ## When you cannot produce a plan

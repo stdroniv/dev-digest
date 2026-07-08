@@ -21,6 +21,8 @@ import type { FindingRecord, FindingActionKind } from "@devdigest/shared";
 import { SEV_COLOR, SEV_COLOR_FALLBACK } from "./constants";
 import { lineLabel } from "./helpers";
 import { githubPrFileUrl } from "@/lib/github-urls";
+import { useCreateCaseFromFinding } from "@/lib/hooks/evals";
+import { notify } from "@/lib/toast";
 import { s } from "./styles";
 
 export function FindingCard({
@@ -44,6 +46,7 @@ export function FindingCard({
   pathSha?: string;
 }) {
   const t = useTranslations("prReview");
+  const tEvals = useTranslations("evals");
   const [expanded, setExpanded] = React.useState(defaultExpanded ?? false);
   const sevColor = SEV_COLOR[f.severity] ?? SEV_COLOR_FALLBACK;
   const fileHref =
@@ -53,6 +56,44 @@ export function FindingCard({
   const accepted = !!f.accepted_at;
   const dismissed = !!f.dismissed_at;
   const muted = accepted || dismissed;
+  const hasDecision = accepted || dismissed;
+
+  const createCase = useCreateCaseFromFinding();
+  // The server is the source of truth for idempotency across sessions/reloads
+  // (AC-5): `already_added` on the mutation result is a real cross-session
+  // signal, not a client-only session guard. `caseAdded` mirrors that the
+  // finding now has a case (freshly created or pre-existing); `wasAlreadyAdded`
+  // remembers WHICH of the two it was, so the button label can distinguish
+  // "Added" (this click created it) from "Already added" (it already existed).
+  const [caseAdded, setCaseAdded] = React.useState(false);
+  const [wasAlreadyAdded, setWasAlreadyAdded] = React.useState(false);
+
+  function handleTurnIntoEvalCase() {
+    if (caseAdded) {
+      notify.info(tEvals("findingCard.alreadyAdded"));
+      return;
+    }
+    createCase.mutate(f.id, {
+      onSuccess: (data) => {
+        setCaseAdded(true);
+        setWasAlreadyAdded(data.already_added);
+        notify.success(
+          data.already_added
+            ? tEvals("findingCard.alreadyAddedConfirmation", { name: data.case.name })
+            : tEvals("findingCard.confirmation", { name: data.case.name }),
+        );
+      },
+      onError: (err) => {
+        notify.error(err instanceof Error ? err.message : "Couldn't create the eval case.");
+      },
+    });
+  }
+
+  const evalButtonLabel = !caseAdded
+    ? tEvals("findingCard.turnIntoEvalCase")
+    : wasAlreadyAdded
+      ? tEvals("findingCard.alreadyAdded")
+      : tEvals("findingCard.added");
 
   return (
     <div data-finding-id={f.id} style={s.card(!!focused, sevColor, muted)}>
@@ -111,6 +152,17 @@ export function FindingCard({
               onClick={() => onAction?.("dismiss")}
             >
               {t("finding.dismiss")}
+            </Button>
+            <Button
+              kind="ghost"
+              size="sm"
+              icon="FlaskConical"
+              disabled={!hasDecision || createCase.isPending}
+              active={caseAdded}
+              title={!hasDecision ? tEvals("findingCard.noDecisionTooltip") : undefined}
+              onClick={handleTurnIntoEvalCase}
+            >
+              {evalButtonLabel}
             </Button>
           </div>
         </div>

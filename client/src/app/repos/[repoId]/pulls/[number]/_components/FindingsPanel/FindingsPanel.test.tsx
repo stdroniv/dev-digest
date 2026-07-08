@@ -3,9 +3,17 @@ import { render, screen, cleanup, fireEvent } from "@testing-library/react";
 import { NextIntlClientProvider } from "next-intl";
 import type { FindingRecord } from "@devdigest/shared";
 import messages from "../../../../../../../../messages/en/prReview.json";
+import evalsMessages from "../../../../../../../../messages/en/evals.json";
 
 vi.mock("../../../../../../../lib/hooks/reviews", () => ({
   useFindingAction: () => ({ mutate: vi.fn(), isPending: false }),
+}));
+
+// FindingCard (rendered by FindingsPanel) uses the eval-case mutation hook
+// (T14, "Turn into eval case"); mock it so this suite doesn't need a
+// QueryClientProvider just to satisfy that nested hook.
+vi.mock("../../../../../../../lib/hooks/evals", () => ({
+  useCreateCaseFromFinding: () => ({ mutate: vi.fn(), isPending: false }),
 }));
 
 import { FindingsPanel } from "./FindingsPanel";
@@ -45,7 +53,7 @@ const MIXED: FindingRecord[] = [
 
 function renderWithIntl(ui: React.ReactElement) {
   return render(
-    <NextIntlClientProvider locale="en" messages={{ prReview: messages }}>
+    <NextIntlClientProvider locale="en" messages={{ prReview: messages, evals: evalsMessages }}>
       {ui}
     </NextIntlClientProvider>,
   );

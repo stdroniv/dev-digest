@@ -134,6 +134,13 @@
       "when": 1783024404435,
       "tag": "0018_tired_purple_man",
       "breakpoints": true
+    },
+    {
+      "idx": 19,
+      "version": "7",
+      "when": 1783457473477,
+      "tag": "0019_curious_supreme_intelligence",
+      "breakpoints": true
     }
   ]
 }

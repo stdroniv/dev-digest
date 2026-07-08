@@ -28,6 +28,11 @@ Three metrics come out of a run:
 - **citation_accuracy** — did its findings survive the grounding gate (cite a real
   `file:line` inside the frozen diff).
 
+The model that executes an eval run is selectable in **Settings → Feature Models**
+(the **Eval Runner** slot) and defaults to each agent's own configured model —
+see [Accepted limitations](#accepted-limitations) below for the caveat that comes
+with overriding it.
+
 ## Turn a finding into an eval case
 
 On any `FindingCard` (PR detail → Findings tab), click **Turn into eval case**:
@@ -140,7 +145,7 @@ independently fixture-tested — no I/O, no LLM calls.
   cases, an empty diff, a run with no findings, a correctly-silent `must_not_flag`
   case all score cleanly).
 
-### Two accepted limitations
+### Accepted limitations
 
 - **Promote is append-only, not a version-pointer reset.** There is no "set active
   version = N" primitive in the agents store — versions are append-only snapshots.
@@ -152,6 +157,19 @@ independently fixture-tested — no I/O, no LLM calls.
 - **`.it.test.ts` eval suites are DB-backed** and run against real Postgres in CI
   (testcontainers), like the rest of the server's integration tests — see
   [`../TESTING.md`](../TESTING.md) for the split.
+- **The eval-runner model override decouples "which model executed a run" from
+  "which agent version ran it."** Settings → Feature Models has an **Eval Runner**
+  slot (`eval_runner`); left unset (the default), every eval case/agent run executes
+  on that reviewer agent's own configured `provider`/`model` — behaviour is
+  byte-identical to a workspace that never touches the setting. Setting it pins
+  **every** eval run, across every agent, to that one fixed model instead. This is a
+  deliberate decoupling: Compare's system-prompt diff still reflects real
+  version-to-version prompt differences, but once an override is active the
+  executing model is no longer implied by `agent_version` alone. The executing model
+  is **not** persisted on `eval_runs` or surfaced anywhere in the dashboard/Compare
+  view — there is no `eval_runs.provider`/`model` column — so treat an active
+  override as an operator-known fact, not something the UI will ever show you after
+  the fact.
 
 ## Verification
 

@@ -7,6 +7,7 @@ import * as t from '../src/db/schema.js';
 import type { SecretsProvider } from '@devdigest/shared';
 import {
   resolveFeatureModel,
+  resolveFeatureModelWithFallback,
   getFeatureModelOverride,
 } from '../src/modules/settings/feature-models.js';
 
@@ -55,6 +56,44 @@ d('Settings: feature models + secrets status (Testcontainers pg)', () => {
       provider: 'openai',
       model: 'gpt-4.1',
     });
+
+    await app.close();
+  });
+
+  it('resolveFeatureModel: eval_runner registry default until overridden, else the fallback via resolveFeatureModelWithFallback', async () => {
+    const app = await buildApp({ config: config(), db: pg.handle.db, overrides: {} });
+
+    // No override yet → registry default; getFeatureModelOverride is undefined.
+    expect(await getFeatureModelOverride(app.container, workspaceId, 'eval_runner')).toBeUndefined();
+    expect(await resolveFeatureModel(app.container, workspaceId, 'eval_runner')).toEqual({
+      provider: 'openai',
+      model: 'gpt-4.1',
+    });
+
+    // No override → resolveFeatureModelWithFallback returns the caller-supplied
+    // "reachable" model (e.g. the agent's own provider/model) with source 'fallback'.
+    const reachable = { provider: 'openai' as const, model: 'gpt-4o-mini' };
+    expect(
+      await resolveFeatureModelWithFallback(app.container, workspaceId, 'eval_runner', reachable),
+    ).toEqual({ ...reachable, source: 'fallback' });
+
+    // Persist an override through the normal PUT /settings path.
+    const put = await app.inject({
+      method: 'PUT',
+      url: '/settings',
+      payload: { feature_models: { eval_runner: { provider: 'openrouter', model: 'openrouter/eval-runner-x' } } },
+    });
+    expect(put.statusCode).toBe(200);
+
+    expect(await resolveFeatureModel(app.container, workspaceId, 'eval_runner')).toEqual({
+      provider: 'openrouter',
+      model: 'openrouter/eval-runner-x',
+    });
+    // With an override set, resolveFeatureModelWithFallback returns the override
+    // (not the reachable model), tagged 'override'.
+    expect(
+      await resolveFeatureModelWithFallback(app.container, workspaceId, 'eval_runner', reachable),
+    ).toEqual({ provider: 'openrouter', model: 'openrouter/eval-runner-x', source: 'override' });
 
     await app.close();
   });

@@ -20,6 +20,7 @@ export const FeatureModelId = z.enum([
   'file_summary',
   'conformance',
   'conventions',
+  'eval_runner',
 ]);
 export type FeatureModelId = z.infer<typeof FeatureModelId>;
 
@@ -92,6 +93,13 @@ export const FEATURE_MODELS: FeatureModelDef[] = [
     description: 'Extracts coding conventions from the repo.',
     defaultProvider: 'openai',
     defaultModel: 'gpt-5.4',
+  },
+  {
+    id: 'eval_runner',
+    label: 'Eval Runner',
+    description: "Model that executes agent reviews when running eval cases. Leave unset to use each agent's own configured model.",
+    defaultProvider: 'openai',
+    defaultModel: 'gpt-4.1',
   },
 ];
 

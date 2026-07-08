@@ -140,6 +140,26 @@ cold; never edit or delete existing entries.
   (b) under `mcp/tsconfig.json`, server source's `import '@devdigest/shared'` re-resolves to `mcp/src/vendor/shared`
   (mcp's OWN copied vendor), so that copy MUST stay byte-aligned with `server/src/vendor/shared` (re-copy on
   upstream change — same situation as reviewer-core aliasing into server's vendor).
+- Adding a genuinely NEW `FeatureModelId` slot (not just changing an existing
+  default's value) has no alternative to editing the vendored registry directly —
+  confirmed shipping the `eval_runner` slot (eval-runner-model-picker plan): the enum
+  member + `FEATURE_MODELS` array entry had to be hand-added, identically, in all
+  FOUR copies (`server/`, `client/`, `mcp/` vendored `vendor/shared/contracts/
+  platform.ts` + the separate hand-maintained `client/src/lib/feature-models.ts`
+  runtime mirror) in one sitting to avoid drift — nothing automates the sync; the
+  only enforcement is a manual cross-file check (`grep -n '<new-id>' <file>` ×4)
+  plus `tsc --noEmit` in all three packages. To WIRE the new slot into an EXISTING
+  pipeline without changing default behavior, reuse
+  `resolveFeatureModelWithFallback(container, workspaceId, id, reachableModel)`
+  (`server/src/modules/settings/feature-models.ts`) with the call site's OWN
+  current `{provider, model}` passed as `reachableModel` — e.g. `EvalService.runCase`
+  resolves `'eval_runner'` with the agent's own `{provider: agent.provider, model:
+  agent.model}` as the fallback, so an unset override is byte-identical to today
+  (verified by re-running the pre-existing `eval-service.it.test.ts` /
+  `eval-routes.it.test.ts` suites UNMODIFIED) while a set override cleanly takes
+  precedence. This is the same pattern `intent.service.ts` already uses for
+  `review_intent` — grep for `resolveFeatureModelWithFallback` callers before
+  hand-rolling a new resolution step at a call site.
 - The MCP "block until the async review finishes" pattern (`mcp/src/tools/review-pr.ts`): call the
   fire-and-forget `ReviewService.runReview` for the run ids, then `Promise.race` `Promise.all(runIds.map(id =>
   new Promise(res => runBus.onDone(id, res))))` against a `setTimeout`. `RunBus.onDone` (`server/src/platform/sse.ts`)

@@ -7,6 +7,8 @@
     { "cmd": ["wait", "--load", "networkidle"], "label": "skills list fetch settles" },
     { "cmd": ["wait", "--text", "pr-quality-rubric"], "label": "seeded skill card is visible" },
     { "cmd": ["find", "text", "pr-quality-rubric", "click"], "label": "open the skill" },
+    { "cmd": ["wait", "--url", "/skills/"], "label": "client-side navigation to the skill editor route lands" },
+    { "cmd": ["wait", "--load", "networkidle"], "label": "the skill editor mounts and its fetch settles (avoids racing the tab render in CI)" },
     { "cmd": ["wait", "--text", "Stats"], "label": "the skill editor tabs render" },
     { "cmd": ["find", "role", "button", "click", "--name", "Stats"], "label": "switch to the Stats tab" },
     { "cmd": ["wait", "--url", "tab=stats"], "label": "stats tab is active in the URL" },

@@ -101,7 +101,9 @@ export function AgentEvalDetail({
 
   const crumb = [
     { label: "Skills Lab" },
-    { label: t("dashboard.header"), href: "/evals" },
+    // Drilling in never changes the URL (it's client-side view state owned by
+    // EvalDashboard), so an `href` back to "/evals" would be a same-URL no-op.
+    { label: t("dashboard.header"), onClick: onNavigate ? () => onNavigate(null) : undefined },
     { label: displayName },
   ];
 

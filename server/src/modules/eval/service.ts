@@ -21,6 +21,7 @@ import type { Container } from '../../platform/container.js';
 import { NotFoundError, ValidationError } from '../../platform/errors.js';
 import { parseUnifiedDiff } from '../../adapters/git/diff-parser.js';
 import { loadDiff } from '../reviews/diff-loader.js';
+import { resolveFeatureModelWithFallback } from '../settings/feature-models.js';
 import { toAgentDto } from '../agents/helpers.js';
 import type { AgentRow } from '../../db/rows.js';
 import {
@@ -365,14 +366,26 @@ export class EvalService {
     caseRow: EvalCaseRow,
     runGroupId: string,
     opts: RunOptions,
+    workspaceId: string,
   ): Promise<EvalRunRow> {
     const start = Date.now();
     const diff = parseUnifiedDiff(caseRow.inputDiff ?? '');
-    const llm = opts.llmOverride ?? (await this.container.llm(agent.provider as Provider));
+
+    // Resolve the 'eval_runner' feature-model slot via three-tier policy:
+    // workspace override → the agent's own {provider, model} as the caller-
+    // supplied reachable model → registry default. With no override this is
+    // byte-identical to running the agent's own configured model (R1a).
+    const resolved = await resolveFeatureModelWithFallback(
+      this.container,
+      workspaceId,
+      'eval_runner',
+      { provider: agent.provider as Provider, model: agent.model },
+    );
+    const llm = opts.llmOverride ?? (await this.container.llm(resolved.provider));
 
     const outcome = await reviewPullRequest({
       systemPrompt: agent.systemPrompt,
-      model: agent.model,
+      model: resolved.model,
       diff,
       llm,
       strategy: (agent.strategy as ReviewStrategy) ?? undefined,
@@ -420,7 +433,7 @@ export class EvalService {
     const runGroupId = randomUUID();
     const rows: EvalRunRow[] = [];
     for (const c of cases) {
-      rows.push(await this.runCase(agent, c, runGroupId, opts));
+      rows.push(await this.runCase(agent, c, runGroupId, opts, workspaceId));
     }
     const ranAt = rows.reduce((max, r) => (r.ranAt > max ? r.ranAt : max), new Date());
     return toRunGroupDto(agentId, { runGroupId, agentVersion: agent.version, ranAt, rows });
@@ -442,7 +455,7 @@ export class EvalService {
     const agent = await this.agentsRepo.getById(workspaceId, caseRow.ownerId);
     if (!agent) throw new NotFoundError('Owning agent not found');
     const runGroupId = randomUUID();
-    const run = await this.runCase(agent, caseRow, runGroupId, opts);
+    const run = await this.runCase(agent, caseRow, runGroupId, opts, workspaceId);
     return { run: toRunRecordDto(run, caseRow.name), case: toEvalCaseDto(caseRow) };
   }
 

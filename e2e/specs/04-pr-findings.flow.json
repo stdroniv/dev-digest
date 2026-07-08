@@ -4,7 +4,7 @@
   "steps": [
     { "cmd": ["open", "{BASE}/"], "label": "load the app root" },
     { "cmd": ["wait", "--url", "/pulls"], "label": "land on the PR list" },
-    { "cmd": ["wait", "--text", "Findings"], "label": "PR list shows the new Findings column header" },
+    { "cmd": ["wait", "--text", "FINDINGS"], "label": "PR list shows the new Findings column header (rendered uppercase via CSS text-transform; agent-browser matches the rendered glyphs)" },
     { "cmd": ["find", "text", "Add rate limiting to public API endpoints", "click"], "label": "open the PR row" },
     { "cmd": ["wait", "--url", "/pulls/482"], "label": "navigate to the PR detail route" },
     { "cmd": ["wait", "--load", "networkidle"], "label": "PR detail data settles" },

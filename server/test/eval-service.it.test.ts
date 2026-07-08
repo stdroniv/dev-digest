@@ -4,12 +4,13 @@ import { startPg, dockerAvailable, type PgFixture } from './helpers/pg.js';
 import { buildApp } from '../src/app.js';
 import { loadConfig } from '../src/platform/config.js';
 import { seed } from '../src/db/seed.js';
-import { MockGitClient, MockGitHubClient } from '../src/adapters/mocks.js';
+import { MockGitClient, MockGitHubClient, MockLLMProvider, MockSecretsProvider } from '../src/adapters/mocks.js';
 import * as t from '../src/db/schema.js';
 import { EvalService } from '../src/modules/eval/service.js';
 import { EvalRepository } from '../src/modules/eval/repository.js';
 import { createMockReviewerLLM } from '../src/modules/eval/mock-reviewer.js';
 import { parseUnifiedDiff } from '../src/adapters/git/diff-parser.js';
+import type { Review } from '@devdigest/shared';
 
 const hasDocker = await dockerAvailable();
 const d = hasDocker ? describe : describe.skip;
@@ -21,6 +22,16 @@ if (!hasDocker) {
 
 const FIXTURE_DIFF =
   'diff --git a/src/config.ts b/src/config.ts\n--- a/src/config.ts\n+++ b/src/config.ts\n@@ -10,0 +10,3 @@\n+  const a = 1;\n+  const b = 2;\n+  const c = 3;';
+
+/** A minimal, always-valid Review fixture for the eval-runner model-picker
+ *  tests (T4) — content doesn't matter, only which model/provider threaded
+ *  the completeStructured call. */
+const NEUTRAL_REVIEW_FIXTURE: Review = {
+  verdict: 'approve',
+  summary: 'Nothing notable.',
+  score: 95,
+  findings: [],
+};
 
 /**
  * T6 — eval service. Uses the T5 mock reviewer (`llmOverride`) throughout so
@@ -344,6 +355,164 @@ d('EvalService (Testcontainers pg)', () => {
     // Same-version compare/promote → no-op (edge case).
     const noop = await service.promote(workspaceId, promoteAgent.id, promoted!.version);
     expect(noop?.version).toBe(promoted!.version);
+    await app.close();
+  });
+
+  // ---- Eval Runner model picker (R1a/R1b/R2) -------------------------------
+
+  it('unset eval_runner → the case executes on the agent\'s OWN model (R1a)', async () => {
+    const mockOpenai = new MockLLMProvider('openai', {
+      structuredBySchema: { Review: NEUTRAL_REVIEW_FIXTURE },
+    });
+    const config = loadConfig({ ...process.env, NODE_ENV: 'test' } as NodeJS.ProcessEnv);
+    const app = await buildApp({
+      config,
+      db: pg.handle.db,
+      overrides: {
+        git: new MockGitClient({ diff: FIXTURE_DIFF }),
+        github: new MockGitHubClient(),
+        llm: { openai: mockOpenai },
+      },
+    });
+    const repo = new EvalRepository(app.container.db);
+    const service = new EvalService(app.container);
+
+    const caseRow = await repo.insertCase({
+      workspaceId,
+      ownerKind: 'agent',
+      ownerId: agentId,
+      name: 'eval_runner unset fixture',
+      inputDiff: FIXTURE_DIFF,
+      expectedOutput: [],
+    });
+
+    // No opts.llmOverride and no eval_runner settings override anywhere yet.
+    const result = await service.runSingleCase(workspaceId, caseRow.id);
+    expect(result).toBeDefined();
+
+    const structuredCalls = mockOpenai.calls.filter((c) => c.method === 'completeStructured');
+    expect(structuredCalls.length).toBeGreaterThan(0);
+    for (const call of structuredCalls) {
+      expect((call.req as { model: string }).model).toBe('gpt-4.1'); // the fixture agent's own model
+    }
+
+    await app.close();
+  });
+
+  it('eval_runner override → the case executes on the FIXED override model, not the agent\'s own (R1b)', async () => {
+    const mockOpenrouter = new MockLLMProvider('openrouter', {
+      structuredBySchema: { Review: NEUTRAL_REVIEW_FIXTURE },
+    });
+    const config = loadConfig({ ...process.env, NODE_ENV: 'test' } as NodeJS.ProcessEnv);
+    const app = await buildApp({
+      config,
+      db: pg.handle.db,
+      overrides: {
+        git: new MockGitClient({ diff: FIXTURE_DIFF }),
+        github: new MockGitHubClient(),
+        llm: { openrouter: mockOpenrouter },
+      },
+    });
+
+    const put = await app.inject({
+      method: 'PUT',
+      url: '/settings',
+      payload: {
+        feature_models: { eval_runner: { provider: 'openrouter', model: 'openrouter/eval-fixed-x' } },
+      },
+    });
+    expect(put.statusCode).toBe(200);
+
+    const repo = new EvalRepository(app.container.db);
+    const service = new EvalService(app.container);
+    const caseRow = await repo.insertCase({
+      workspaceId,
+      ownerKind: 'agent',
+      ownerId: agentId, // this agent's OWN model is openai/gpt-4.1 — the override must win
+      name: 'eval_runner override fixture',
+      inputDiff: FIXTURE_DIFF,
+      expectedOutput: [],
+    });
+
+    const result = await service.runSingleCase(workspaceId, caseRow.id);
+    expect(result).toBeDefined();
+
+    const structuredCalls = mockOpenrouter.calls.filter((c) => c.method === 'completeStructured');
+    expect(structuredCalls.length).toBeGreaterThan(0);
+    for (const call of structuredCalls) {
+      expect((call.req as { model: string }).model).toBe('openrouter/eval-fixed-x');
+    }
+
+    await app.close();
+  });
+
+  it('batch isolation: an eval_runner override pointing at an unreachable provider fails only the agents with cases, not the whole batch (R2)', async () => {
+    const config = loadConfig({ ...process.env, NODE_ENV: 'test' } as NodeJS.ProcessEnv);
+    const app = await buildApp({
+      config,
+      db: pg.handle.db,
+      overrides: {
+        git: new MockGitClient({ diff: FIXTURE_DIFF }),
+        github: new MockGitHubClient(),
+        // No provider has a configured key on THIS app instance, regardless of
+        // the host machine's real ~/.devdigest/secrets.json — makes the override
+        // provider deterministically unreachable.
+        secrets: new MockSecretsProvider({}),
+      },
+    });
+
+    const put = await app.inject({
+      method: 'PUT',
+      url: '/settings',
+      payload: {
+        feature_models: { eval_runner: { provider: 'anthropic', model: 'claude-unreachable' } },
+      },
+    });
+    expect(put.statusCode).toBe(200);
+
+    const repo = new EvalRepository(app.container.db);
+    const service = new EvalService(app.container);
+
+    // An agent with a case attached — its run must fail, but in isolation.
+    const failingAgent = await app.container.agentsRepo.insert({
+      workspaceId,
+      name: 'Eval Isolation Fixture Agent',
+      provider: 'openai',
+      model: 'gpt-4.1',
+      systemPrompt: 'Isolation fixture agent.',
+    });
+    await repo.insertCase({
+      workspaceId,
+      ownerKind: 'agent',
+      ownerId: failingAgent.id,
+      name: 'isolation fixture case',
+      inputDiff: FIXTURE_DIFF,
+      expectedOutput: [],
+    });
+
+    // A zero-case agent — an empty set never resolves/calls the LLM (AC-20),
+    // so it must still succeed even though the override is unreachable.
+    const zeroCaseAgent = await app.container.agentsRepo.insert({
+      workspaceId,
+      name: 'Eval Isolation Zero-Case Agent',
+      provider: 'openai',
+      model: 'gpt-4.1',
+      systemPrompt: 'No cases attached.',
+    });
+
+    const results = await service.runAllAgents(workspaceId);
+
+    const failingResult = results.find((r) => r.agent_id === failingAgent.id);
+    expect(failingResult?.ok).toBe(false);
+    expect(failingResult?.error).toBeTruthy();
+
+    const zeroCaseResult = results.find((r) => r.agent_id === zeroCaseAgent.id);
+    expect(zeroCaseResult?.ok).toBe(true);
+    expect(zeroCaseResult?.run?.traces_total).toBe(0);
+
+    // The batch completed for every agent — no early abort on a prior failure.
+    expect(results.length).toBeGreaterThanOrEqual(2);
+
     await app.close();
   });
 });

@@ -40,4 +40,8 @@ export interface Crumb {
   label: string;
   mono?: boolean;
   href?: string;
+  /** Used instead of `href` when the crumb navigates via caller-owned view
+   *  state rather than a route change (e.g. a master/detail drill-in that
+   *  never changes the URL) — an `href` back to the current URL is a no-op. */
+  onClick?: () => void;
 }

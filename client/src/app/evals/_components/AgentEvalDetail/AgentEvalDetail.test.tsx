@@ -152,4 +152,14 @@ describe("AgentEvalDetail (T17, AC-15/AC-18)", () => {
     expect(screen.getByRole("dialog")).toBeInTheDocument();
     expect(compareMutate).toHaveBeenCalledWith({ old_run_group_id: "rg1", new_run_group_id: "rg2" });
   });
+
+  it("clicking the 'Eval Dashboard' breadcrumb calls onNavigate(null) instead of a same-URL href", () => {
+    // Regression: drilling in never changes the URL (client-side view state
+    // owned by EvalDashboard), so the crumb must use a callback, not an
+    // `href="/evals"` — a Link back to the current URL is a silent no-op.
+    const onNavigate = vi.fn();
+    renderWithIntl(<AgentEvalDetail agentId="ag1" agentName="Security Reviewer" onNavigate={onNavigate} />);
+    fireEvent.click(screen.getByRole("button", { name: "Eval Dashboard" }));
+    expect(onNavigate).toHaveBeenCalledWith(null);
+  });
 });

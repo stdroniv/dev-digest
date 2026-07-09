@@ -6,6 +6,7 @@
     { "cmd": ["wait", "--url", "/skills"], "label": "skills route reached" },
     { "cmd": ["wait", "--load", "networkidle"], "label": "skills list fetch settles" },
     { "cmd": ["wait", "--text", "pr-quality-rubric"], "label": "seeded skill card is visible" },
+    { "cmd": ["find", "placeholder", "Search skills…", "fill", "pr-quality-rubric"], "label": "filter the list to the target so its card is the only one and in view (the row sits below the fold otherwise, and clicking an off-screen card does not register the navigation in CI)" },
     { "cmd": ["find", "text", "pr-quality-rubric", "click"], "label": "open the skill" },
     { "cmd": ["wait", "--url", "/skills/"], "label": "client-side navigation to the skill editor route lands" },
     { "cmd": ["wait", "--load", "networkidle"], "label": "the skill editor mounts and its fetch settles (avoids racing the tab render in CI)" },

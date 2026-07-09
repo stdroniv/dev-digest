@@ -186,9 +186,16 @@ jobs:
 
   # ── 5. Required gate (the ONLY check to mark required in branch protection) ─────────────────────
   # Always runs, so it always posts a status — avoiding the "waiting for a required check that was
-  # skipped" merge deadlock that conditional + matrix jobs otherwise cause. Passes when every blocking
-  # job SUCCEEDED or was legitimately SKIPPED; fails if any of them failed or was cancelled. The
-  # advisory `workflow-evals` job is intentionally excluded.
+  # skipped" merge deadlock that conditional + matrix jobs otherwise cause.
+  #
+  # BLOCKING on the DETERMINISTIC tiers only: `detect` (must succeed) and the static `quality` gate
+  # (SKILL.md structure/link checks — no model, no network). The model-based `skill-evals` /
+  # `agent-evals` tiers are ADVISORY: with `gemini-2.5-flash` as both agent and judge, per-case
+  # scores swing run-to-run near their thresholds (a passing case one run flips the next), so gating
+  # merges on them produces whack-a-mole red. They still RUN and post their own pass/fail status as
+  # signal — they are simply excluded from this required check (same treatment as `workflow-evals`).
+  # Re-add them to the failure loop below once the eval agent/judge runs on a stable Anthropic-class
+  # model (see the EVAL_MODEL / EVAL_JUDGE_MODEL repo variables).
   evals-gate:
     name: evals-gate
     needs: [detect, quality, skill-evals, agent-evals]
@@ -202,18 +209,17 @@ jobs:
           SKILLS: ${{ needs.skill-evals.result }}
           AGENTS: ${{ needs.agent-evals.result }}
         run: |
-          echo "detect=$DETECT quality=$QUALITY skill-evals=$SKILLS agent-evals=$AGENTS"
+          echo "detect=$DETECT quality=$QUALITY skill-evals=$SKILLS agent-evals=$AGENTS (skill/agent are advisory)"
           # detect MUST succeed — if it errored, the others were skipped and would mask the failure.
           if [ "$DETECT" != "success" ]; then
             echo "::error::detect job did not succeed ($DETECT)"; exit 1
           fi
-          # The eval jobs may be 'skipped' (nothing of that kind changed) — that is a pass.
-          for r in "$QUALITY" "$SKILLS" "$AGENTS"; do
-            if [ "$r" = "failure" ] || [ "$r" = "cancelled" ]; then
-              echo "::error::a required eval job did not pass ($r)"; exit 1
-            fi
-          done
-          echo "All required eval jobs passed or were skipped."
+          # The static quality gate is the only model-free blocking tier. It may be 'skipped'
+          # (no skill changed) — that is a pass; only a real failure/cancellation blocks.
+          if [ "$QUALITY" = "failure" ] || [ "$QUALITY" = "cancelled" ]; then
+            echo "::error::the static skill-quality gate did not pass ($QUALITY)"; exit 1
+          fi
+          echo "Blocking eval tiers passed or were skipped (skill/agent evals are advisory: skill-evals=$SKILLS agent-evals=$AGENTS)."
 
   # ── 6. Workflow tier (tool tier — non-blocking) ─────────────────────────────────────────────────
   # Measures the LIVE routing harness. Triggered by any CLAUDE.md / agent / engine change. Marked

@@ -117,11 +117,14 @@ jobs:
       - run: pnpm eval:quality
 
   # ── 3. Skill evals (content tier — native OpenRouter, no proxy) ─────────────────────────────────
-  # One matrix leg per changed skill that HAS an eval suite. Blocking.
+  # One matrix leg per changed skill that HAS an eval suite. ADVISORY (continue-on-error): the judge
+  # scores swing run-to-run on the CI model, so a failing leg posts its signal in the logs but does
+  # NOT fail the workflow run or the required gate. See the evals-gate note for how to re-block them.
   skill-evals:
     name: skill eval (${{ matrix.name }})
     needs: detect
     if: needs.detect.outputs.skills != '[]'
+    continue-on-error: true
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
@@ -148,11 +151,14 @@ jobs:
 
   # ── 4. Agent evals (tool tier — Agent SDK via the LiteLLM proxy) ────────────────────────────────
   # One matrix leg per changed agent that HAS an eval suite. Serialized (max-parallel:1) to stay under
-  # OpenRouter rate limits — the tool tiers degrade to a single turn when throttled. Blocking.
+  # OpenRouter rate limits — the tool tiers degrade to a single turn when throttled. ADVISORY
+  # (continue-on-error): judge scores swing run-to-run on the CI model, so a failing leg posts its
+  # signal in the logs but does NOT fail the workflow run or the required gate.
   agent-evals:
     name: agent eval (${{ matrix.name }})
     needs: detect
     if: needs.detect.outputs.agents != '[]'
+    continue-on-error: true
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false

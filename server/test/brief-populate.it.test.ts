@@ -11,7 +11,7 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { eq } from 'drizzle-orm';
 import { startPg, dockerAvailable, type PgFixture } from './helpers/pg.js';
-import { waitForPrRuns } from './helpers/runs.js';
+import { waitForPrRuns, waitForBrief } from './helpers/runs.js';
 import { buildApp } from '../src/app.js';
 import { loadConfig } from '../src/platform/config.js';
 import { seed } from '../src/db/seed.js';
@@ -182,7 +182,7 @@ d('Brief population — DB-backed (Testcontainers pg)', () => {
     await waitForPrRuns(pg.handle.db, pr.id, { expected: 1 });
 
     // (a) getBrief returns a defined PrBrief whose risks match the fixture
-    const brief = await getBrief(pg.handle.db, pr.id);
+    const brief = await waitForBrief(pg.handle.db, pr.id);
     expect(brief).toBeDefined();
     expect(brief!.risks.risks).toHaveLength(1);
     expect(brief!.risks.risks[0]!.kind).toBe(RISKS_FIXTURE.risks[0]!.kind);
@@ -327,7 +327,7 @@ d('Brief population — DB-backed (Testcontainers pg)', () => {
 
     // (a) getBrief returns a defined PrBrief whose risks match the fixture
     // This FAILS before the fix (brief is undefined because llm('openai') throws)
-    const brief = await getBrief(pg.handle.db, pr.id);
+    const brief = await waitForBrief(pg.handle.db, pr.id);
     expect(brief).toBeDefined();
     expect(brief!.risks.risks).toHaveLength(1);
 

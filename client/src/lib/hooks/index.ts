@@ -9,3 +9,4 @@ export * from "./repo-intel";
 export * from "./use-path-shas";
 export * from "./brief";
 export * from "./blast";
+export * from "./evals";

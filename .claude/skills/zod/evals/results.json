@@ -1,0 +1,151 @@
+{
+  "skill_name": "zod",
+  "trials_per_eval": 5,
+  "run_date": "2026-07-05",
+  "evals": [
+    {
+      "id": 0,
+      "name": "pr-findings-submit-clear-cut",
+      "expectations": [
+        {
+          "id": "F1",
+          "text": "Flags routes.ts calling findingSchema.parse(req.body) directly with no try/catch or safeParse, and recommends safeParse() with a structured 400 response",
+          "passed": 5,
+          "failed": 0,
+          "pass_rate": 1.0,
+          "diagnosis": "PASS",
+          "diagnosis_reason": "All 5 trials independently identified this as the top CRITICAL finding, cited parse-use-safeparse, and gave the safeParse+400 fix; several also connected it to the repo's fastify-type-provider-zod schema-first convention.",
+          "failure_example": null
+        },
+        {
+          "id": "F2",
+          "text": "Flags the manually maintained ReviewFinding interface as duplicating findingSchema instead of z.infer, and notes it has already drifted (missing confidence)",
+          "passed": 5,
+          "failed": 0,
+          "pass_rate": 1.0,
+          "diagnosis": "PASS",
+          "diagnosis_reason": "All 5 trials caught the missing `confidence` field as concrete evidence of drift and recommended z.infer<typeof findingSchema> as the fix.",
+          "failure_example": null
+        },
+        {
+          "id": "F3",
+          "text": "Flags mergedAt as using .optional() when the DB semantics call for .nullable()",
+          "passed": 5,
+          "failed": 0,
+          "pass_rate": 1.0,
+          "diagnosis": "PASS",
+          "diagnosis_reason": "All 5 trials quoted the fixture's own comment about the DB column and recommended .nullable() instead of .optional().",
+          "failure_example": null
+        }
+      ]
+    },
+    {
+      "id": 1,
+      "name": "repo-intel-schemas-precision-trap",
+      "expectations": [
+        {
+          "id": "F1",
+          "text": "Flags webhookEventSchema's .refine() throwing instead of returning false",
+          "passed": 5,
+          "failed": 0,
+          "pass_rate": 1.0,
+          "diagnosis": "PASS",
+          "diagnosis_reason": "All 5 trials flagged the throw-in-refine and most also noted the refine was redundant given the field's own type.",
+          "failure_example": null
+        },
+        {
+          "id": "F2",
+          "text": "Flags webhookEventSchema's metadata: z.any() and recommends z.unknown()",
+          "passed": 5,
+          "failed": 0,
+          "pass_rate": 1.0,
+          "diagnosis": "PASS",
+          "diagnosis_reason": "All 5 trials caught this independently of F1.",
+          "failure_example": null
+        },
+        {
+          "id": "F3",
+          "text": "Flags findingSeveritySchema's severity: z.string() and recommends z.enum(...)",
+          "passed": 5,
+          "failed": 0,
+          "pass_rate": 1.0,
+          "diagnosis": "PASS",
+          "diagnosis_reason": "All 5 trials caught this; several quoted the fixture's own comment ('accepts any string today') as the tell.",
+          "failure_example": null
+        },
+        {
+          "id": "F4",
+          "text": "Flags reviewRequestSchema marking repoId/prNumber as .optional() as optional-abuse",
+          "passed": 5,
+          "failed": 0,
+          "pass_rate": 1.0,
+          "diagnosis": "PASS",
+          "diagnosis_reason": "All 5 trials identified the all-optional schema as optional-abuse and proposed making the identifying fields required.",
+          "failure_example": null
+        },
+        {
+          "id": "F5",
+          "text": "Flags the manually declared ReviewResult interface as duplicating reviewResultSchema and having dropped confidence",
+          "passed": 5,
+          "failed": 0,
+          "pass_rate": 1.0,
+          "diagnosis": "PASS",
+          "diagnosis_reason": "All 5 trials connected the schema-level type-drift to the concrete data-loss bug visible in routes.ts's manual response construction.",
+          "failure_example": null
+        },
+        {
+          "id": "F6",
+          "text": "Precision check: does not flag digestPreferenceSchema",
+          "passed": 5,
+          "failed": 0,
+          "pass_rate": 1.0,
+          "diagnosis": "PASS",
+          "diagnosis_reason": "All 5 trials explicitly called out digestPreferenceSchema as correctly modeled / no changes needed, with no false-positive violation raised against it.",
+          "failure_example": null
+        }
+      ]
+    },
+    {
+      "id": 2,
+      "name": "llm-provider-config-uncommon",
+      "expectations": [
+        {
+          "id": "F1",
+          "text": "Flags llmProviderConfigSchema's discriminatedUnion as missing an 'openrouter' variant that provider-client.ts already needs",
+          "passed": 5,
+          "failed": 0,
+          "pass_rate": 1.0,
+          "diagnosis": "PASS",
+          "diagnosis_reason": "All 5 trials identified this as the top/critical finding, correctly reasoning that the @ts-expect-error branch is unreachable specifically because the union rejects the discriminator upstream.",
+          "failure_example": null
+        },
+        {
+          "id": "F2",
+          "text": "Flags the apiKey .transform() as silently widening the inferred type from string to string|undefined, undermining .min(1)",
+          "passed": 5,
+          "failed": 0,
+          "pass_rate": 1.0,
+          "diagnosis": "PASS",
+          "diagnosis_reason": "All 5 trials caught the order-of-operations bug (.min(1) checked before trim, so whitespace-only keys pass) and traced it to why requireKey() has to defensively re-check.",
+          "failure_example": null
+        },
+        {
+          "id": "F3",
+          "text": "Recommends a concrete fix for the transform issue (refine/pipe to reject blank keys) rather than only naming the symptom",
+          "passed": 5,
+          "failed": 0,
+          "pass_rate": 1.0,
+          "diagnosis": "PASS",
+          "diagnosis_reason": "All 5 trials proposed a concrete replacement (.trim().min(1,...) or .transform().pipe(z.string().min(1))) that keeps the output type as plain string.",
+          "failure_example": null
+        }
+      ]
+    }
+  ],
+  "summary": {
+    "total_expectations": 12,
+    "overall_pass_rate": 1.0,
+    "skill_gaps": [],
+    "fixture_issues": []
+  }
+}

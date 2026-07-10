@@ -88,6 +88,28 @@ Naming, formatting, code style, micro-optimizations, test coverage counts, and
 anything a linter owns. If it doesn't affect dependency direction, coupling,
 cohesion, boundaries, or SoC, leave it out.
 
+Do not append secondary consequences (testability, performance, DX, "this also
+means…") as extra bullets under a finding. One violation = one finding in the
+format below — Observed/Direction only, no elaboration list.
+
+## Rule identifiers (cite one per finding)
+
+Every finding **must** name one of these slugs — the documented rule it
+violates. If a real violation doesn't fit any slug below, don't invent a new
+one on the spot; use the closest match and say so in `Observed`.
+
+| Slug | Violation |
+|------|-----------|
+| `inward-only-dependencies` | A source import points outward (domain/application importing a framework, or importing an outer-layer concrete type) |
+| `di-discipline` | A concrete adapter/repository is constructed outside the composition root (`container.ts`) instead of injected |
+| `layer-boundary-leak` | An infrastructure type (DB row, HTTP status) leaks into the domain/application layer instead of being mapped at the boundary |
+| `reviewer-core-zero-io` | `reviewer-core/` gains a DB/FS/GitHub/Fastify import — it may only depend on the injected `LLMProvider` |
+| `reviewer-core-ground-findings-gate` | A `reviewer-core` pipeline change returns findings without passing them through the mandatory `groundFindings()` gate |
+| `coupling-cohesion` | Fan-out (one entity importing many infra modules) or code that changes together is scattered across modules |
+| `separation-of-concerns` | Business rules mixed with I/O (HTTP, DB, clock, randomness) in one method/class |
+| `module-public-api` | Internal implementation details leak across a module boundary instead of through its intentional surface |
+| `cross-cutting-concerns` | Logging/auth/tracing/error-handling woven inline through business logic instead of injected/middleware |
+
 ## Skill routing — read the SKILL.md that matches the scope
 
 | Scope                                          | Read these skills…                          |
@@ -110,19 +132,26 @@ Use `CRITICAL | WARNING | SUGGESTION` (the same enum as
 
 ```
 🔴 CRITICAL — `path/to/file.ts:42`
+Rule: <slug from the table above>
 Principle: <Dependency Rule | SRP | Ports-and-Adapters | Pure-core | …>
-Observed: <what the code does, grounded in the cited line>
+Observed: <what the code does, grounded in the cited line — quote the line verbatim>
 Direction: <how to move — an approach, not a code rewrite>
 ```
 
-(🟡 WARNING / 🔵 SUGGESTION for lower severities.) End with a rollup:
+(🟡 WARNING / 🔵 SUGGESTION for lower severities.) End with a rollup **and** an
+explicit gate line:
 
 ```
 **<N> findings** · <c> critical · <w> warning · <s> suggestion
+Gate: PASS
 ```
 
-If there are no real architectural problems, say so plainly — `No architectural
-findings.` — rather than inventing nits.
+`Gate` is `FAIL` if any finding is CRITICAL, `PASS` otherwise (WARNING/SUGGESTION-only
+findings are still reported but don't fail the gate — mirrors `pr-self-review`'s
+"blocks on CRITICALs" convention). This is the line a caller greps for. If there
+are no real architectural problems,
+say so plainly — `No architectural findings.` / `Gate: PASS` — rather than
+inventing nits.
 
 ## Hard constraints
 

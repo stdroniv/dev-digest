@@ -1,0 +1,51 @@
+{
+  "skill_name": "typescript-expert",
+  "trials_per_eval": 5,
+  "run_date": "2026-07-05",
+  "evals": [
+    {
+      "id": 0,
+      "name": "any-laden-classifier",
+      "expectations": [
+        {"id": "F1", "text": "Flags classifyFinding(finding: any): any as unsafe with a concrete generic/typed fix", "passed": 5, "failed": 0, "pass_rate": 1.0, "diagnosis": "PASS", "diagnosis_reason": "All 5 trials flagged this and proposed a concrete ReviewFinding-typed signature.", "failure_example": ""},
+        {"id": "F2", "text": "Flags the unvalidated `as ReviewFinding[]` cast on JSON.parse and suggests runtime validation", "passed": 5, "failed": 0, "pass_rate": 1.0, "diagnosis": "PASS", "diagnosis_reason": "All 5 trials flagged the assertion and proposed Zod-based validation.", "failure_example": ""},
+        {"id": "F3", "text": "Flags severityLabel's non-exhaustive switch (missing 'nit', no never-check)", "passed": 5, "failed": 0, "pass_rate": 1.0, "diagnosis": "PASS", "diagnosis_reason": "All 5 trials caught the missing case and proposed a never-typed exhaustiveness guard.", "failure_example": ""},
+        {"id": "F4", "text": "(precision check) Does not raise a type-safety complaint about sortByPriority", "passed": 0, "failed": 5, "pass_rate": 0.0, "diagnosis": "FIXTURE_ISSUE", "diagnosis_reason": "The 'clean' distractor (rank object built with `as const`) is not actually a clean no-touch example: it's an object literal whose keys only coincidentally match the FindingSeverity union, so a thorough reviewer legitimately suggests hardening it to `Record<FindingSeverity, number>`. The fixture needed a genuinely inert clean example (e.g. an already-typed Record, or a function with no drift risk) to serve as a real precision trap.", "failure_example": "Trial 1: 'Fix: annotate rank explicitly as Record<FindingSeverity, number> ... adding a member to FindingSeverity without updating rank now fails to compile.'"}
+      ]
+    },
+    {
+      "id": 1,
+      "name": "finding-normalizer-mixed-violations",
+      "expectations": [
+        {"id": "F1", "text": "Flags toFindingId as an unvalidated branded-type constructor", "passed": 5, "failed": 0, "pass_rate": 1.0, "diagnosis": "PASS", "diagnosis_reason": "All 5 trials caught the 'brand with no validation' pattern and contrasted it with toUserId.", "failure_example": ""},
+        {"id": "F2", "text": "Flags pickIds<T extends {id: unknown}> as too loose a constraint with a lossy unknown[] return", "passed": 5, "failed": 0, "pass_rate": 1.0, "diagnosis": "PASS", "diagnosis_reason": "All 5 trials identified the loose constraint and proposed narrowing (string/FindingId/generic Id param).", "failure_example": ""},
+        {"id": "F3", "text": "Flags loadConfig's unchecked `as AppConfig` cast on JSON.parse", "passed": 5, "failed": 0, "pass_rate": 1.0, "diagnosis": "PASS", "diagnosis_reason": "All 5 trials flagged the cast and recommended Zod validation at the file-read boundary.", "failure_example": ""},
+        {"id": "F4", "text": "Flags renderFinding's `default: return finding as any` instead of a never-typed exhaustiveness check", "passed": 5, "failed": 0, "pass_rate": 1.0, "diagnosis": "PASS", "diagnosis_reason": "All 5 trials caught that the any-cast default defeats exhaustiveness checking for future NormalizedFinding variants.", "failure_example": ""},
+        {"id": "F5", "text": "(precision check) Does not flag toUserId", "passed": 5, "failed": 0, "pass_rate": 1.0, "diagnosis": "PASS", "diagnosis_reason": "All 5 trials explicitly called out toUserId as the correct validate-then-brand pattern.", "failure_example": ""},
+        {"id": "F6", "text": "(precision check) Does not flag firstOf<T>", "passed": 5, "failed": 0, "pass_rate": 1.0, "diagnosis": "PASS", "diagnosis_reason": "All 5 trials explicitly marked firstOf as correctly typed with nothing to change.", "failure_example": ""}
+      ]
+    },
+    {
+      "id": 2,
+      "name": "distributive-conditional-and-barrel-cycle",
+      "expectations": [
+        {"id": "F1", "text": "Flags EventHandler<T> as a bare conditional type that distributes over the ReviewEvent union", "passed": 5, "failed": 0, "pass_rate": 1.0, "diagnosis": "PASS", "diagnosis_reason": "All 5 trials correctly diagnosed the distributive-conditional mechanism.", "failure_example": ""},
+        {"id": "F2", "text": "Explains the concrete consequence: dispatch type-checks while only truly handling one variant, silently losing type safety", "passed": 2, "failed": 3, "pass_rate": 0.4, "diagnosis": "FIXTURE_ISSUE (fixed)", "diagnosis_reason": "ORIGINAL: 2 of 5 trials actually ran `tsc --strict` against the fixture and found that the literal `dispatch` assignment fails to compile with TS7006 (implicit any) rather than silently type-checking, because contextual typing for the arrow function's parameter doesn't resolve cleanly across the distributed union of call signatures. FIX: `dispatch` now uses an explicit narrow parameter annotation (`(event: { kind: 'finding-added'; findingId: string })`) instead of relying on contextual inference, sidestepping the TS7006 inference failure while still demonstrating the intended hazard (a single-variant handler satisfying the full-union handler type). Verified directly with `tsc --strict --noEmit` (target es2022, moduleResolution bundler): 0 errors on the assignment. VERIFICATION: 2/2 independent spot-check trials (fresh general-purpose agents given only the skill + fixture) both re-derived the same fix reasoning and independently confirmed via their own `tsc` runs that the assignment compiles cleanly under strict mode, correctly explaining the union-of-single-arm-handlers mechanism the expectation describes. One trial additionally noted (confirmed independently) that calling `dispatch` with a broad `ReviewEvent`-typed argument elsewhere does fail at the call site with TS2345 - so the hazard is a compile-clean declaration masking an incomplete implementation, not full runtime unsoundness; this refinement doesn't contradict the expectation, which only claims the assignment itself type-checks.", "failure_example": ""},
+        {"id": "F3", "text": "Identifies/proposes the tuple-wrapped non-distributive fix pattern", "passed": 5, "failed": 0, "pass_rate": 1.0, "diagnosis": "PASS", "diagnosis_reason": "All 5 trials pointed to (or independently proposed) the [T] extends [ReviewEvent] tuple-wrap fix already shown via NonDistributiveHandler.", "failure_example": ""},
+        {"id": "F4", "text": "Flags the circular re-export between findings/index.ts and reviewers/index.ts as a barrel-to-barrel cycle with build-performance/circular-type-error consequences", "passed": 3, "failed": 2, "pass_rate": 0.6, "diagnosis": "FIXTURE_ISSUE (fixed)", "diagnosis_reason": "ORIGINAL: the fixture didn't implement a literal barrel-to-barrel cycle - reviewers/index.ts re-exported from the concrete '../findings/finding.js' leaf file, not from findings/index.ts's barrel, so there was no direct back-edge at the file level. FIX: reviewers/index.ts now does `export { Finding } from '../findings/index.js';` (the sibling barrel, not the leaf file), so combined with findings/index.ts's existing `export { summarizeForReviewer } from '../reviewers/index.js';` there is now a genuine two-file back-edge: findings/index.ts -> reviewers/index.ts -> findings/index.ts. Confirmed by tracing both files' import specifiers and by `tsc --strict --noEmit` over the full fixture set (0 errors; the cycle compiles fine since one cross-edge is type-only and the other is a hoisted function declaration). VERIFICATION: 2/2 independent spot-check trials both correctly identified this as a genuine barrel-to-barrel cycle (explicitly contrasting it with a one-way/DAG dependency) and explained the isolated-module/incremental-build/TDZ-risk consequences; one trial additionally found the fixed line is itself a real `tsc` error under `verbatimModuleSyntax: true` (needs `export type { Finding }`), a valid bonus finding not anticipated by the original expectation text.", "failure_example": ""},
+        {"id": "F5", "text": "(precision check) Does not describe NonDistributiveHandler/safeDispatch as broken", "passed": 5, "failed": 0, "pass_rate": 1.0, "diagnosis": "PASS", "diagnosis_reason": "All 5 trials treated NonDistributiveHandler/safeDispatch as the correct contrast pair and did not flag it.", "failure_example": ""}
+      ]
+    }
+  ],
+  "summary": {
+    "total_expectations": 15,
+    "total_expectation_trials": 75,
+    "overall_pass_rate": 0.867,
+    "skill_gaps": [],
+    "fixture_issues": [
+      "eval0/F4: 'clean' sortByPriority distractor still invites legitimate hardening suggestions (as-const rank object not type-locked to FindingSeverity) — not a true no-touch example. (not yet fixed)",
+      "eval2/F2 (fixed 2026-07-06): dispatch's distributive-type assignment used to fail to compile under strict/noImplicitAny (TS7006) rather than silently type-checking as the expectation assumed. Fixed by giving dispatch's parameter an explicit narrow annotation instead of relying on contextual inference; tsc --strict now reports 0 errors, and 2/2 spot-check trials confirmed the intended 'silently type-checks with only one variant handled' narrative.",
+      "eval2/F4 (fixed 2026-07-06): findings/reviewers cross-import used to be a one-way dependency via a leaf-file import, not a literal barrel-to-barrel cycle. Fixed by pointing reviewers/index.ts's re-export at findings/index.ts (the sibling barrel) instead of the findings/finding.ts leaf, creating a genuine two-file cycle; confirmed by import tracing + tsc, and 2/2 spot-check trials correctly identified it as a true barrel-to-barrel cycle."
+    ]
+  }
+}

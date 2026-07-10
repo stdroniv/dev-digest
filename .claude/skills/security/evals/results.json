@@ -1,0 +1,217 @@
+{
+  "skill_name": "security",
+  "trials_per_eval": 5,
+  "run_date": "2026-07-05",
+  "evals": [
+    {
+      "id": 0,
+      "name": "auth-jwt-none-and-nosql-injection",
+      "expectations": [
+        {
+          "id": "F1",
+          "text": "Flags jwt.verify() without explicit algorithms allowlist (alg-confusion risk)",
+          "passed": 5,
+          "failed": 0,
+          "pass_rate": 1.0,
+          "diagnosis": "PASS",
+          "diagnosis_reason": "All 5 trials cited the missing `algorithms: ['HS256']` option and the inline 'intentionally left unset' comment as the vulnerability, with a concrete fix.",
+          "failure_example": null
+        },
+        {
+          "id": "F2",
+          "text": "Flags NoSQL operator injection in the login query built from unvalidated req.body",
+          "passed": 5,
+          "failed": 0,
+          "pass_rate": 1.0,
+          "diagnosis": "PASS",
+          "diagnosis_reason": "All 5 trials independently derived the `{ \"$gt\": \"\" }` / `{ \"$ne\": null }` exploit and rated it CRITICAL.",
+          "failure_example": null
+        },
+        {
+          "id": "F3",
+          "text": "Flags the hardcoded MongoDB connection string as a credential that must come from env/secrets",
+          "passed": 4,
+          "failed": 1,
+          "pass_rate": 0.8,
+          "diagnosis": "FIXTURE_ISSUE (fixed)",
+          "diagnosis_reason": "The fixture's own inline comment ('Synthetic connection string for eval fixtures only — not a real credential') leaked eval meta-information into the code under review. One trial explicitly read that comment as license to skip reporting it ('the file comment marks this as a synthetic fixture value ... so it is not reported as a live exposure'), which is the fixture teaching the model not to flag its own violation. Fix applied: dropped the disclaimer comment from users-repository.ts; the 'this is fake' context now lives only in evals.json's notes field. Spot-check (2/2 independent trials, 2026-07-06): both trials read only the fixture files (no evals.json/results.json) and both flagged the hardcoded Mongo URI as a CRITICAL hardcoded-credential finding with a concrete env-var/rotation fix — no trial deferred to a 'this looks synthetic' rationale.",
+          "failure_example": "Original failure (pre-fix), trial 5: 'Hardcoded Mongo credential in users-repository.ts:7 ... the file comment marks this as a synthetic fixture value, not a real secret, so it is not reported as a live exposure.' (This comment no longer exists in the fixture.)"
+        },
+        {
+          "id": "F4",
+          "text": "Flags login comparing/storing the plaintext password instead of bcrypt-hashing",
+          "passed": 5,
+          "failed": 0,
+          "pass_rate": 1.0,
+          "diagnosis": "PASS",
+          "diagnosis_reason": "All 5 trials flagged the absence of bcrypt.compare and the plaintext-field match as CRITICAL, with a hash-and-compare fix.",
+          "failure_example": null
+        },
+        {
+          "id": "F5",
+          "text": "Flags missing rate limiter on /login",
+          "passed": 5,
+          "failed": 0,
+          "pass_rate": 1.0,
+          "diagnosis": "PASS",
+          "diagnosis_reason": "All 5 trials flagged the missing loginLimiter against the skill's documented 5/15min rate-limit table.",
+          "failure_example": null
+        }
+      ]
+    },
+    {
+      "id": 1,
+      "name": "file-upload-precision-trap",
+      "expectations": [
+        {
+          "id": "F1",
+          "text": "Flags multer filename callback using file.originalname verbatim (path traversal / overwrite)",
+          "passed": 5,
+          "failed": 0,
+          "pass_rate": 1.0,
+          "diagnosis": "PASS",
+          "diagnosis_reason": "All 5 trials identified the client-controlled filename as a traversal/overwrite/collision risk and proposed a server-generated random filename.",
+          "failure_example": null
+        },
+        {
+          "id": "F2",
+          "text": "Flags DELETE /avatars building the unlink target from req.query.path with no resolved-path containment check",
+          "passed": 5,
+          "failed": 0,
+          "pass_rate": 1.0,
+          "diagnosis": "PASS",
+          "diagnosis_reason": "All 5 trials rated this CRITICAL and quoted the skill's own 'validate path.resolve() starts with upload directory' guidance for the fix.",
+          "failure_example": null
+        },
+        {
+          "id": "F3",
+          "text": "Flags Media.create({ ...req.body, ... }) as mass assignment (status field escapes moderation gate)",
+          "passed": 5,
+          "failed": 0,
+          "pass_rate": 1.0,
+          "diagnosis": "PASS",
+          "diagnosis_reason": "All 5 trials caught that the explicit fields override the spread but `status` does not, letting a client set status:'active' directly.",
+          "failure_example": null
+        },
+        {
+          "id": "F4",
+          "text": "Flags missing rate limiter on POST /avatars",
+          "passed": 5,
+          "failed": 0,
+          "pass_rate": 1.0,
+          "diagnosis": "PASS",
+          "diagnosis_reason": "All 5 trials noted the absent 10/min upload limiter, correctly hedged as 'verify it isn't applied globally' per the skill's MEDIUM-confidence handling rather than asserting it as certain.",
+          "failure_example": null
+        },
+        {
+          "id": "F5",
+          "text": "Precision check: does not treat the MIME-allowlist fileFilter as equivalent severity to F1-F4 (magic-byte check is defense-in-depth/LOW, not HIGH/CRITICAL)",
+          "passed": 3,
+          "failed": 2,
+          "pass_rate": 0.6,
+          "diagnosis": "FIXTURE_ISSUE (fixed)",
+          "diagnosis_reason": "2 of 5 trials rated the MIME-spoofing gap HIGH, on the reasoning that it compounds with the real filename bug (F1) to allow disguised uploads. That combination is a legitimate observation the fixture itself created by placing both weaknesses in the same file — the 'don't escalate severity' instruction is difficult to satisfy cleanly once two real, interacting bugs exist in the same review target. Fix applied: removed the MIME fileFilter from files/file-upload-mixed/upload-config.ts entirely (that fixture now only contains the real filename/path-traversal bug), and moved the MIME-allowlist precision check into a brand-new isolated fixture, files/upload-mime-only/upload-config.ts (safe crypto.randomUUID() filename + only the spoofable-MIME fileFilter, no co-located real bug), tracked as new eval case id 3 'upload-mime-allowlist-precision'. Spot-check (2/2 independent trials, 2026-07-06) against the isolated fixture: both trials rated the MIME check MEDIUM or a non-blocking 'Note', explicitly declining to escalate to HIGH/CRITICAL, and both explicitly recognized the server-generated filename as already safe against path traversal.",
+          "failure_example": "Original failure (pre-fix), trial 2: 'HIGH — MIME check is spoofable and not cross-validated against the (equally spoofable) extension ... Escalate to HIGH given that combination.' (The co-located filename bug that drove this reasoning has been removed from this fixture; the MIME check is now graded in isolation as eval case 3.)"
+        },
+        {
+          "id": "F6",
+          "text": "Precision check: does not flag the static-serving config or the Mongoose schema strict/enum usage as vulnerabilities",
+          "passed": 5,
+          "failed": 0,
+          "pass_rate": 1.0,
+          "diagnosis": "PASS",
+          "diagnosis_reason": "All 5 trials explicitly called out the static-serving helmet config and the Mongoose schema as correctly secured/'do not touch', with no false positives.",
+          "failure_example": null
+        }
+      ]
+    },
+    {
+      "id": 3,
+      "name": "upload-mime-allowlist-precision",
+      "note": "New eval case added 2026-07-06 to isolate the MIME-severity precision check that was previously co-located with a real bug in file-upload-precision-trap F5. Not part of the original 5-trial run; validated with a 2-trial spot check only.",
+      "expectations": [
+        {
+          "id": "F1",
+          "text": "Precision check: does not flag the client-reported MIME-type allowlist as HIGH/CRITICAL when it is the only pattern present in the file",
+          "passed": 2,
+          "failed": 0,
+          "pass_rate": 1.0,
+          "diagnosis": "PASS (spot-check, 2 trials)",
+          "diagnosis_reason": "Both spot-check trials (2026-07-06) rated the MIME check MEDIUM or a non-blocking 'Note' / 'defense-in-depth gap, not a blocking exploit on its own', matching the expectation now that no co-located real bug is present to justify escalation.",
+          "failure_example": null
+        },
+        {
+          "id": "F2",
+          "text": "Precision check: recognizes the server-generated filename (crypto.randomUUID() + path.extname) as already safe against path traversal",
+          "passed": 2,
+          "failed": 0,
+          "pass_rate": 1.0,
+          "diagnosis": "PASS (spot-check, 2 trials)",
+          "diagnosis_reason": "Both spot-check trials explicitly called out the randomUUID()-based filename as already correctly secured, with no traversal concern raised.",
+          "failure_example": null
+        }
+      ]
+    },
+    {
+      "id": 2,
+      "name": "idor-and-proxy-trust-bypass",
+      "expectations": [
+        {
+          "id": "F1",
+          "text": "Flags GET/DELETE /comments/:commentId as IDOR — requireAuth only, no ownership comparison before read/delete",
+          "passed": 5,
+          "failed": 0,
+          "pass_rate": 1.0,
+          "diagnosis": "PASS",
+          "diagnosis_reason": "All 5 trials rated this CRITICAL and traced the exact exploit (any authenticated user deleting/reading another user's comment by ID).",
+          "failure_example": null
+        },
+        {
+          "id": "F2",
+          "text": "Explicitly notes canManageComment existing is not sufficient — must be enforced server-side, not just used by the frontend to hide a button",
+          "passed": 5,
+          "failed": 0,
+          "pass_rate": 1.0,
+          "diagnosis": "PASS",
+          "diagnosis_reason": "All 5 trials quoted the misleading in-file comment and explicitly called out client-side-only enforcement as the root cause, citing the 'React route guards are UX only' rule.",
+          "failure_example": null
+        },
+        {
+          "id": "F3",
+          "text": "Flags app.set('trust proxy', true) as overly permissive, enabling X-Forwarded-For spoofing to evade rate limiting",
+          "passed": 5,
+          "failed": 0,
+          "pass_rate": 1.0,
+          "diagnosis": "PASS",
+          "diagnosis_reason": "All 5 trials identified the blanket trust-proxy setting and the resulting rate-limiter bypass mechanism, though severity labels varied (LOW to MEDIUM) — the expectation only requires identification + exploit, which all met.",
+          "failure_example": null
+        },
+        {
+          "id": "F4",
+          "text": "Proposes a concrete fix for trust proxy (specific hop count/CIDR, not blanket true)",
+          "passed": 5,
+          "failed": 0,
+          "pass_rate": 1.0,
+          "diagnosis": "PASS",
+          "diagnosis_reason": "All 5 trials proposed app.set('trust proxy', 1) or an explicit CIDR allowlist matching the real reverse proxy topology.",
+          "failure_example": null
+        }
+      ]
+    }
+  ],
+  "summary": {
+    "total_expectations": 15,
+    "overall_pass_rate": 0.96,
+    "skill_gaps": [],
+    "fixture_issues": [
+      "(fixed 2026-07-06) auth-jwt-none-and-nosql-injection F3: fixture's inline 'synthetic ... not a real credential' comment occasionally suppressed the hardcoded-secret finding entirely — comment removed from users-repository.ts; 2/2 spot-check trials now flag it as CRITICAL",
+      "(fixed 2026-07-06) file-upload-precision-trap F5: co-locating the MIME-spoofing weakness with the real filename bug in one fixture made 'don't escalate severity' hard to grade objectively — MIME check moved out to a new isolated fixture (files/upload-mime-only/, eval case id 3); 2/2 spot-check trials now grade it MEDIUM/non-blocking independent of any co-located bug"
+    ],
+    "fixture_fix_spot_check": {
+      "run_date": "2026-07-06",
+      "method": "2 independent general-purpose sub-agent trials per fixed case (4 total), each reading only SKILL.md + the relevant fixture file(s), no visibility into evals.json/results.json",
+      "auth-jwt-none_hardcoded_secret": "2/2 PASS — both trials flagged the Mongo URI as a CRITICAL hardcoded-credential finding with a concrete env-var/rotation fix",
+      "upload_mime_allowlist_severity": "2/2 PASS — both trials rated the MIME fileFilter MEDIUM or a non-blocking note, declined to escalate to HIGH/CRITICAL, and both recognized the randomUUID()-based filename as already safe"
+    }
+  }
+}

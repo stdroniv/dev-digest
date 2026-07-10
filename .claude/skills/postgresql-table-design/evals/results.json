@@ -1,0 +1,56 @@
+{
+  "skill_name": "postgresql-table-design",
+  "trials_per_eval": 5,
+  "run_date": "2026-07-05",
+  "evals": [
+    {
+      "id": 0,
+      "name": "digest-schedule-runs-migration",
+      "expectations": [
+        {"id": "F1", "text": "Flags SERIAL PRIMARY KEY, recommends BIGINT GENERATED ALWAYS AS IDENTITY", "passed": 5, "failed": 0, "pass_rate": 1.0, "diagnosis": "PASS", "diagnosis_reason": "All 5 trials caught this and cited the skill's explicit ban on SERIAL.", "failure_example": ""},
+        {"id": "F2", "text": "Flags VARCHAR(20)/VARCHAR(500)/VARCHAR(255), recommends TEXT", "passed": 5, "failed": 0, "pass_rate": 1.0, "diagnosis": "PASS", "diagnosis_reason": "All 5 trials caught every VARCHAR column and cited the do-not-use list.", "failure_example": ""},
+        {"id": "F3", "text": "Flags TIMESTAMP (no tz) on started_at/finished_at, recommends TIMESTAMPTZ", "passed": 5, "failed": 0, "pass_rate": 1.0, "diagnosis": "PASS", "diagnosis_reason": "All 5 trials caught this.", "failure_example": ""},
+        {"id": "F4", "text": "Flags missing manual indexes on FK columns schedule_id/workspace_id", "passed": 5, "failed": 0, "pass_rate": 1.0, "diagnosis": "PASS", "diagnosis_reason": "All 5 trials cited the 'Postgres does not auto-index FKs' gotcha.", "failure_example": ""},
+        {"id": "F5", "text": "Flags FKs lacking explicit ON DELETE action", "passed": 5, "failed": 0, "pass_rate": 1.0, "diagnosis": "PASS", "diagnosis_reason": "All 5 trials raised this and proposed CASCADE with a caveat to confirm retention semantics.", "failure_example": ""},
+        {"id": "F6", "text": "Flags missing composite index on (workspace_id, status[, started_at]) for the documented dashboard query", "passed": 5, "failed": 0, "pass_rate": 1.0, "diagnosis": "PASS", "diagnosis_reason": "All 5 trials proposed the exact composite index (workspace_id, status, started_at DESC).", "failure_example": ""}
+      ]
+    },
+    {
+      "id": 1,
+      "name": "review-workspace-schema",
+      "expectations": [
+        {"id": "F1", "text": "Flags pr_reviews.author JSONB as overuse of JSONB for structured/queryable relational data", "passed": 0, "failed": 5, "pass_rate": 0.0, "diagnosis": "FIXTURE_ISSUE (fixed)", "diagnosis_reason": "Original fixture comment ('Snapshot of who authored the PR at review time') read as a legitimate audit-snapshot justification. Rewrote the comment to state a concrete symptom instead ('Support keeps getting tickets that find all reviews by octocat scans every row and does a JSONB->>login compare per row because there's nothing to index or join on'). Spot-check: 2 independent trials re-ran the review against SKILL.md + the corrected fixture; both flagged author JSONB as a violation (missing index path / relational data trapped in JSONB) and neither defended it as intentional.", "failure_example": "\"author JSONB storing a point-in-time GitHub author snapshot... is a reasonable call: it's explicitly a snapshot independent of any live users table, so normalizing it would imply a FK relationship that doesn't actually exist. Leave it as JSONB.\" (pre-fix example, not reproduced post-fix)"},
+        {"id": "F2", "text": "Flags pr_reviews.score CHECK lacking NOT NULL as an unintended three-valued-logic gap", "passed": 0, "failed": 5, "pass_rate": 0.0, "diagnosis": "FIXTURE_ISSUE (fixed)", "diagnosis_reason": "Original fixture comment gave no signal of an actual bug from the nullable score. Rewrote to state a concrete symptom ('Dashboard query counts WHERE score IS NULL as needs attention, but that bucket silently mixes reviews still awaiting a score with ones where the scoring step crashed and never wrote a value'). Spot-check: 2 independent trials both flagged the score/status NULL ambiguity as a real bug (one proposed a cross-column CHECK tying status to score, the other proposed keying dashboard logic off status instead of score IS NULL); no trial defended the nullable score as correct-by-design.", "failure_example": "\"score NUMERIC CHECK (score BETWEEN 0 AND 100) while nullable... also correct as-is. CHECK constraints pass NULL under three-valued logic, which is desired here.\" (pre-fix example, not reproduced post-fix)"},
+        {"id": "F3", "text": "Flags pr_reviews.external_id UNIQUE as relying on NULLS NOT DISTINCT semantics it doesn't have, breaking dedupe", "passed": 0, "failed": 5, "pass_rate": 0.0, "diagnosis": "FIXTURE_ISSUE (fixed)", "diagnosis_reason": "Original fixture comment justified the nullable-dedupe-key design as intentional. Rewrote to state the resulting bug directly ('reviews keep showing up twice in the studio because multiple such rows share external_id = NULL and the UNIQUE constraint lets them all in'). Spot-check: 2 independent trials both flagged external_id UNIQUE as broken and recommended NULLS NOT DISTINCT (PG15+), citing the duplicate-row bug rather than defending the design.", "failure_example": "\"external_id TEXT UNIQUE being nullable and not using NULLS NOT DISTINCT is correct here, not an oversight... Good catch by whoever wrote this — don't 'fix' it.\" (pre-fix example, not reproduced post-fix)"},
+        {"id": "F4", "text": "Flags missing composite index on (workspace_id, status) on pr_reviews for the documented dashboard filter", "passed": 5, "failed": 0, "pass_rate": 1.0, "diagnosis": "PASS", "diagnosis_reason": "All 5 trials proposed (workspace_id, status, created_at DESC).", "failure_example": ""},
+        {"id": "F5", "text": "Flags review_comments.tags TEXT[] as missing a GIN index for the documented containment query", "passed": 5, "failed": 0, "pass_rate": 1.0, "diagnosis": "PASS", "diagnosis_reason": "All 5 trials caught this.", "failure_example": ""},
+        {"id": "F6", "text": "Precision check: does not flag workspaces table (correctly designed)", "passed": 5, "failed": 0, "pass_rate": 1.0, "diagnosis": "PASS", "diagnosis_reason": "All 5 trials explicitly praised workspaces as correct and left it untouched.", "failure_example": ""},
+        {"id": "F7", "text": "Precision check: does not flag review_comments.review_id / its FK+index (already correct)", "passed": 5, "failed": 0, "pass_rate": 1.0, "diagnosis": "PASS", "diagnosis_reason": "All 5 trials correctly identified the FK + manual index + ON DELETE CASCADE as already correct.", "failure_example": ""}
+      ]
+    },
+    {
+      "id": 2,
+      "name": "notifications-polymorphic",
+      "expectations": [
+        {"id": "F1", "text": "Flags subject_type+subject_id polymorphic association as unable to be FK-enforced, recommends per-source FK columns or a join table", "passed": 5, "failed": 0, "pass_rate": 1.0, "diagnosis": "PASS", "diagnosis_reason": "All 5 trials identified this as the central design problem and proposed the three-nullable-FK-columns-plus-CHECK alternative.", "failure_example": ""},
+        {"id": "F2", "text": "Flags notification_id SERIAL, recommends BIGINT GENERATED ALWAYS AS IDENTITY", "passed": 5, "failed": 0, "pass_rate": 1.0, "diagnosis": "PASS", "diagnosis_reason": "All 5 trials caught this.", "failure_example": ""},
+        {"id": "F3", "text": "Flags read_at/created_at as TIMESTAMP (no tz), recommends TIMESTAMPTZ", "passed": 5, "failed": 0, "pass_rate": 1.0, "diagnosis": "PASS", "diagnosis_reason": "All 5 trials caught this.", "failure_example": ""}
+      ]
+    }
+  ],
+  "summary": {
+    "total_expectations": 16,
+    "overall_pass_rate": 0.8125,
+    "skill_gaps": [],
+    "fixture_issues": [
+      "Eval 1 F1 (pr_reviews.author JSONB overuse) — FIXED 2026-07-06. Fixture comment rewritten to state a concrete symptom; 2/2 spot-check trials now flag it.",
+      "Eval 1 F2 (score CHECK without NOT NULL) — FIXED 2026-07-06. Fixture comment rewritten to state a concrete symptom; 2/2 spot-check trials now flag it.",
+      "Eval 1 F3 (external_id UNIQUE without NULLS NOT DISTINCT) — FIXED 2026-07-06. Fixture comment rewritten to state a concrete symptom; 2/2 spot-check trials now flag it."
+    ],
+    "spot_check_2026_07_06": {
+      "method": "2 independent general-purpose sub-agents, each given SKILL.md + the corrected schema.sql (no eval expectations shown), asked to review the schema and separately list flagged issues vs. things explicitly considered fine.",
+      "result": "Both trials flagged all 3 previously-missed violations (author JSONB, score/status NULL ambiguity, external_id duplicate NULLs) and both left the precision-check items (workspaces table, review_comments.review_id FK+index) unflagged, i.e. no new false positives introduced by the fixture rewrite.",
+      "full_5_trial_rerun": "not performed — spot-check only, per instruction"
+    }
+  }
+}

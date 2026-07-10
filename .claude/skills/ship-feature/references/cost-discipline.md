@@ -6,9 +6,12 @@
 
 A real run's telemetry showed **cache-read is ~93% of all tokens** — i.e. each agent's
 context is re-billed on *every* turn — so the cost driver is **conversation length ×
-context size**, not the model tier (tiers are already set per agent:
-explorers→Haiku, executors + the `plan-verifier`/`spec-conformance` gates→Sonnet,
-`spec-creator`/`implementation-plan`/reviewers→Opus). Optimise for *fewer, shorter,
+context size**, not the model tier (tiers are already set per agent, per
+`.claude/agents/*.md`: `researcher` + the executors (`implementer`/`test-writer`) + every
+gate (`plan-verifier`/`spec-conformance`/`architecture-reviewer`/`security-reviewer`)→Sonnet,
+and only `spec-creator`/`implementation-plan`→Opus — the *built-in* `Explore`/`claude`
+subagent has no tier of its own and inherits the orchestrator's model, so it runs on Opus
+when you do). Optimise for *fewer, shorter,
 leaner* agent turns and *zero wasted runs*:
 
 - **One-retry-then-DIY on a dropped agent.** If a long single-shot agent (esp.
@@ -21,6 +24,12 @@ leaner* agent turns and *zero wasted runs*:
   `client`) **or ~15+ files or a single run you expect to exceed ~150 turns**, spawn
   focused `implementer` tasks instead of one mega-run — cache-read grows super-linearly
   with turn count, so three ~100-turn agents cost far less than one ~300-turn agent.
+  **Phases sharing a wire-contract *file* (a hooks / contracts / routes module both
+  touch) is not an exception to the split** — thread that exact hook/route/type signature
+  forward (see the interface-threading rule at the end of this bullet) and split anyway. A
+  real run kept one **337-turn / ~$54** implementer as a single agent *precisely because*
+  its client and server phases both edited one hooks file; threading that hook's signature
+  into a second agent would have been far cheaper than the one long context.
   **This applies *within* a single package too:** a big **client-only** build (e.g. an
   App-Router screen with i18n + nav + hooks + ~6 components + the page/wiring) is over
   the threshold even though it's one package — split it **by sub-layer**
@@ -50,9 +59,13 @@ leaner* agent turns and *zero wasted runs*:
   the evidence the re-check would gather — e.g. the implementer's pasted green test output
   for exactly those items — skip the agent entirely. (This is the same fresh-minimal-agent
   rule the Step 6 *adjudicate-a-dispute* step relies on.)
-- **Lean exploration.** Prefer **1–2 broader explorers** (or pass a shared file list
-  so they don't each re-read the same files) over many overlapping ones. Lower
-  priority — explorers run on cheap Haiku.
+- **Lean exploration — and keep it off the Opus tier.** Prefer **1–2 broader explorers**
+  (or pass a shared file list so they don't each re-read the same files) over many
+  overlapping ones. Spawn the tiered **`researcher`** (Sonnet), *not* the built-in
+  `Explore`/`claude` subagent — the latter inherits the orchestrator's model, so exploring
+  while you're on Opus makes Opus explorers (a real run paid **~$9** for three broad file
+  sweeps that ran on the orchestrator's Opus instead of Sonnet). For a reasoning-light
+  sweep, pass an explicit `model: haiku` on the `Task` call.
 - **Don't background a verification the pipeline just waits on.** Run a sub-agent in the
   background only when there's *parallel* work to overlap it with. In a serial step (e.g.
   a single re-verify before the report) backgrounding buys nothing and can deadlock a Stop

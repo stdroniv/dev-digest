@@ -3,13 +3,16 @@ import { createDb, type Db } from './client.js';
 import * as t from './schema.js';
 import { eq, and } from 'drizzle-orm';
 import {
-  GENERAL_REVIEWER_PROMPT,
   SECURITY_REVIEWER_PROMPT,
   PERFORMANCE_REVIEWER_PROMPT,
   TEST_QUALITY_REVIEWER_PROMPT,
   API_CONTRACT_REVIEWER_PROMPT,
 } from './seed-prompts.js';
+import { GENERAL_REVIEWER_PROMPT } from '../platform/reviewer-prompts.js';
 import { DEMO_SKILLS, AGENT_SKILL_LINKS, STATS_DEMO_REVIEWS } from './seed-skills.js';
+import { seedEvalCases } from './seed-evals.js';
+import { seedHardEvalCases } from './seed-evals-hard.js';
+import { seedApiContractSkillEvalCases } from './seed-evals-skills.js';
 
 /** Default provider/model for the built-in reviewer agents. */
 const DEFAULT_PROVIDER = 'openrouter' as const;
@@ -31,7 +34,26 @@ const DEFAULT_MODEL = 'deepseek/deepseek-v4-flash';
 export const DEFAULT_WORKSPACE_NAME = 'default';
 export const SYSTEM_USER_EMAIL = 'you@local';
 
-export async function seed(db: Db): Promise<{ workspaceId: string; userId: string }> {
+/**
+ * Options for {@link seed}.
+ *
+ * `includeEvalFixtures` controls whether the demo eval cases (AC-7 Security
+ * Reviewer + the hard cross-agent set) are seeded. They insert extra reviews /
+ * findings / agent-runs against the demo reviewer agents, which perturbs the
+ * counts that the pre-existing integration tests assert on (e.g. skill-stats'
+ * `findings_30d`). So they are OFF by default — every `.it.test.ts` that calls
+ * `seed()` in `beforeAll` gets the deterministic demo data — and turned ON only
+ * at the CLI `db:seed` entrypoint used by dev / e2e, where the Eval Dashboard
+ * demo wants them present.
+ */
+export interface SeedOptions {
+  includeEvalFixtures?: boolean;
+}
+
+export async function seed(
+  db: Db,
+  opts: SeedOptions = {},
+): Promise<{ workspaceId: string; userId: string }> {
   // ---- workspace + user (no-auth defaults) ----
   let [ws] = await db
     .select()
@@ -437,6 +459,18 @@ export async function seed(db: Db): Promise<{ workspaceId: string; userId: strin
     }
   }
 
+  if (opts.includeEvalFixtures) {
+    // ---- L06 — eval cases for the demo Security Reviewer agent (AC-7) ----
+    await seedEvalCases(db, workspaceId, repoId);
+
+    // ---- Hard, real-world eval cases across all 5 reviewer agents ----
+    await seedHardEvalCases(db, workspaceId, repoId);
+
+    // ---- Eval cases for the API Contract Reviewer's four granular skills
+    //      (breaking-change, response-schema, semver-discipline, deprecation-policy) ----
+    await seedApiContractSkillEvalCases(db, workspaceId);
+  }
+
   return { workspaceId, userId };
 }
 
@@ -448,7 +482,8 @@ if (import.meta.url === `file://${process.argv[1]}`) {
     process.exit(1);
   }
   const handle = createDb(url);
-  seed(handle.db)
+  // The CLI seed backs the dev app + e2e — include the eval-dashboard demo data.
+  seed(handle.db, { includeEvalFixtures: true })
     .then(async (r) => {
       console.log('✓ seeded', r);
       await handle.close();

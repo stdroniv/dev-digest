@@ -1,0 +1,72 @@
+diff --git a/server/src/modules/repos/preview.ts b/server/src/modules/repos/preview.ts
+new file mode 100644
+index 0000000..a1b2c3d
+--- /dev/null
++++ b/server/src/modules/repos/preview.ts
+@@ -0,0 +1,17 @@
++/**
++ * Repo preview — best-effort fetch of the project homepage so the import
++ * card can show a live favicon/title instead of a generic placeholder.
++ */
++export interface RepoPreview {
++  title: string | null;
++  faviconUrl: string | null;
++}
++
++export async function fetchRepoPreview(homepageUrl: string): Promise<RepoPreview> {
++  // Best-effort: any reachable URL works, including the repo owner's own site.
++  const res = await fetch(homepageUrl);
++  const html = await res.text();
++  const title = /<title>([^<]*)<\/title>/i.exec(html)?.[1] ?? null;
++  return { title, faviconUrl: new URL('/favicon.ico', homepageUrl).toString() };
++}
+diff --git a/server/src/modules/repos/routes.ts b/server/src/modules/repos/routes.ts
+index 5555555..6666666 100644
+--- a/server/src/modules/repos/routes.ts
++++ b/server/src/modules/repos/routes.ts
+@@ -1,6 +1,6 @@
+ import type { FastifyInstance } from 'fastify';
+ import type { ZodTypeProvider } from 'fastify-type-provider-zod';
+-import { RepoInput } from '@devdigest/shared';
++import { RepoInput, RepoPreviewInput } from '@devdigest/shared';
+ import { getContext } from '../_shared/context.js';
+ import { IdParams } from '../_shared/schemas.js';
+ import { RepoService } from './service.js';
+@@ -29,6 +29,14 @@ export default async function reposRoutes(appBase: FastifyInstance) {
+     return service.list(workspaceId);
+   });
+
++  // Called from the "add repo" form's onBlur handler once the user pastes a
++  // homepage URL, so the import card can preview it before submit.
++  app.post('/repos/preview', { schema: { body: RepoPreviewInput } }, async (req) => {
++    await getContext(app.container, req);
++    return service.preview(req.body.homepageUrl);
++  });
++
+   app.post('/repos/:id/refresh', { schema: { params: IdParams } }, async (req) => {
+     const { workspaceId } = await getContext(app.container, req);
+     return service.refresh(workspaceId, req.params.id);
+diff --git a/server/src/modules/repos/service.ts b/server/src/modules/repos/service.ts
+index 3333333..7777777 100644
+--- a/server/src/modules/repos/service.ts
++++ b/server/src/modules/repos/service.ts
+@@ -2,6 +2,7 @@ import type { Container } from '../../platform/container.js';
+ import { type Repo } from '@devdigest/shared';
+ import { NotFoundError } from '../../platform/errors.js';
+ import { RepoRepository } from './repository.js';
++import { fetchRepoPreview, type RepoPreview } from './preview.js';
+ import { parseRepoUrl, withGitHubToken, toRepoDto } from './helpers.js';
+ import {
+   CLONE_JOB_KIND,
+@@ -18,6 +19,11 @@ export class RepoService {
+     this.repo = new RepoRepository(container.db);
+   }
+
++  /** Fetch a lightweight preview (title + favicon) of a user-supplied homepage URL. */
++  async preview(homepageUrl: string): Promise<RepoPreview> {
++    return fetchRepoPreview(homepageUrl);
++  }
++
+   /**
+    * Register the `clone` job handler once. Authenticates the clone with the
+    * stored GitHub PAT (so private repos work), clones via the GitClient adapter,

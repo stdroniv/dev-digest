@@ -1,0 +1,46 @@
+{
+  "expectations": [
+    {
+      "text": "F1: Flags routes.ts importing drizzle-orm/db schema and querying the DB directly inside the route handler (presentation touching infrastructure)",
+      "passed": true,
+      "evidence": "Finding #1: 'Route handler queries Drizzle directly ... This is presentation-layer code importing infrastructure directly — the exact anti-pattern in examples.md #1', cites dependency-cruiser rule 'handlers-never-touch-the-db'"
+    },
+    {
+      "text": "F2: Flags the endpoint-URL uniqueness check as business logic misplaced in the route handler",
+      "passed": true,
+      "evidence": "Finding #1: 'the duplicate-URL check here (existing.some(...)) is a business rule (uniqueness invariant), and it's sitting in the transport layer instead of the domain/application layer'"
+    },
+    {
+      "text": "F3: Flags claimDueRetries' backoff/MAX_ATTEMPTS logic as a domain rule embedded in the repository/infrastructure layer",
+      "passed": true,
+      "evidence": "Finding #6: 'Business rule (retry eligibility / backoff / dead-lettering) implemented inside the repository ... Retry-eligibility and backoff computation is exactly this kind of workflow decision — it's a domain invariant... not a data-access concern'"
+    },
+    {
+      "text": "F4: Flags repository methods returning raw Drizzle rows outward with no row->entity/DTO mapping",
+      "passed": true,
+      "evidence": "Finding #7: 'Repository returns raw Drizzle rows outward instead of mapping to domain entities/DTOs' — also independently catches that the leaked row round-trips the `secret` column back to the client"
+    },
+    {
+      "text": "F5: Flags service.ts constructing a concrete OpenAI client directly instead of going through the LLMProvider port/container",
+      "passed": true,
+      "evidence": "Finding #4: 'Application service owns a concrete OpenAI client instead of depending on an LLMProvider port ... This is the clearest violation in the module', cites SKILL.md tool->layer mapping verbatim"
+    }
+  ],
+  "summary": {
+    "passed": 5,
+    "failed": 0,
+    "total": 5,
+    "pass_rate": 1.0
+  },
+  "execution_metrics": {
+    "total_tool_uses": 15
+  },
+  "timing": {
+    "total_duration_seconds": 112.9
+  },
+  "extra_findings_beyond_seed": [
+    "Services/repositories constructed outside the composition root (container.ts) instead of injected",
+    "Route handler hand-rolls req.params/req.body casts instead of schema-first Zod params validation",
+    "No domain layer / repository interface exists for the module at all (WebhooksService depends on the concrete class, not a port)"
+  ]
+}

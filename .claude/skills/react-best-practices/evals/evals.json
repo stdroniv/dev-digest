@@ -1,0 +1,64 @@
+{
+  "skill_name": "react-best-practices",
+  "notes": [
+    "files/findings-panel, files/team-members, files/activity-feed are synthetic fixtures written to look like plausible DevDigest client/ components, but they intentionally seed react-best-practices violations for grading. They are not real product code and are not wired into any package.json/tsconfig/build — do not 'fix' them in place; they exist to be reviewed.",
+    "files/findings-panel is the clear-cut/obviously-broken fixture: one container component (FindingsPanel.tsx) stacking derived-state-via-effect, a stale-closure useEffect, index-as-key on a reorderable list, a render-factory function, and inline data fetching, plus a clean presentational FindingRow.tsx that must not be flagged.",
+    "files/team-members is the harder fixture: 6 files mixing subtle violations (inline array literal breaking a memoized child, unnecessary useMemo on trivial arithmetic, an over-engineered Context that also stores derived state via useState+useEffect, a `{count && ...}` falsy-zero render bug) with 2 correctly-written files (MemberBadge.tsx and WorkspaceThemeProvider.tsx) that must NOT be flagged.",
+    "files/activity-feed is the uncommon-scenario fixture: a custom hook (usePrActivityFeed.ts) that both returns a new object/array literal every render (defeating memo() on its consumer) and has a subscribe/unsubscribe mismatch (different inline function references passed to .on/.off, so cleanup never removes the original listener — under StrictMode's mount->unmount->remount dev cycle this leaks a duplicate listener). ActivityList.tsx itself is a correctly memoized presentational component."
+  ],
+  "evals": [
+    {
+      "id": 0,
+      "prompt": "We're about to merge client/src/features/findings/ (FindingsPanel.tsx, FindingRow.tsx) into the PR review studio. Review it for all React best-practice issues before it lands — including code organization and structure, not just bugs — and say specifically what to change.",
+      "expected_output": "A review that identifies each anti-pattern below, explains why it's a problem, and gives a concrete fix (not just 'this is bad').",
+      "files": [
+        "evals/files/findings-panel/FindingsPanel.tsx",
+        "evals/files/findings-panel/FindingRow.tsx"
+      ],
+      "expectations": [
+        "F1: Flags sortedFindings being stored in useState and synced from `findings`/derived via a useEffect instead of being computed inline during render (Derive, Don't Store)",
+        "F2: Flags the analytics useEffect for depending on `reviewId` only while reading `sortOrder` in its body without declaring it as a dependency (stale closure / incorrect dependency array)",
+        "F3: Flags `sortedFindings.map((finding, index) => <FindingRow key={index} ...>)` as using the array index as key on a list that can be reordered (the sort dropdown changes order)",
+        "F4: Flags `renderSortSummary` as a camelCase render-factory function returning JSX instead of a proper `<SortSummary />` component",
+        "F5: Flags the `useQuery` call being made directly in the component body instead of being wrapped in a custom hook (data fetching should live in hooks, not component bodies)"
+      ]
+    },
+    {
+      "id": 1,
+      "prompt": "We're about to merge client/src/features/team/ (TeamMembersPanel.tsx, TeamCountBadge.tsx, MemberBadge.tsx, useTeamStats.ts, PermissionsContext.tsx, WorkspaceThemeProvider.tsx) into the workspace settings area. Review it for React best-practice issues before it lands — point out anything that violates our conventions, say what to change, and call out any file that's already correctly written so we don't churn it needlessly.",
+      "expected_output": "A review that identifies each anti-pattern below, explains why it's a problem, gives a concrete fix, and does NOT flag MemberBadge.tsx or WorkspaceThemeProvider.tsx (which are intentionally correct).",
+      "files": [
+        "evals/files/team-members/TeamMembersPanel.tsx",
+        "evals/files/team-members/TeamCountBadge.tsx",
+        "evals/files/team-members/MemberBadge.tsx",
+        "evals/files/team-members/useTeamStats.ts",
+        "evals/files/team-members/PermissionsContext.tsx",
+        "evals/files/team-members/WorkspaceThemeProvider.tsx"
+      ],
+      "expectations": [
+        "F1: Flags TeamMembersPanel.tsx passing `roles={['viewer', 'reviewer']}` as a new inline array literal to the memo()-wrapped MemberBadge on every render, defeating the memoization",
+        "F2: Flags TeamCountBadge.tsx's `{count && <span>...}` as the falsy-zero conditional rendering bug — renders a literal `0` when count is 0 instead of nothing",
+        "F3: Flags useTeamStats.ts's `activePercentage`/`activeCount` useMemo calls as unnecessary memoization of cheap arithmetic/filtering over a small array, not a measured expensive computation",
+        "F4/F5 (combined): Flags PermissionsContext.tsx's core problem — that it stores `permissions` in useState and recomputes it via a useEffect keyed on workspaceRole instead of computing the object inline during render (Derive, Don't Store). Credit this expectation if the review EITHER (a) calls out the derived-state issue and the over-engineered-Context issue as two separate findings, OR (b) gives one combined finding on these same lines that addresses both angles — that a plain-render computation would resolve the useState+useEffect anti-pattern AND remove the need for a Context/Provider to hold a value each consumer could compute locally (or receive as a plain prop). Do not require two independently-titled findings.",
+        "F6 (precision check): Does not raise a memoization or correctness complaint about MemberBadge.tsx itself — it is a correctly implemented memoized presentational component; the memo-defeating bug is in its caller",
+        "F7 (precision check): Does not flag WorkspaceThemeProvider.tsx / useWorkspaceTheme — it is a correctly scoped Context (DI-style theme) with its provider value properly memoized via useMemo/useCallback"
+      ]
+    },
+    {
+      "id": 2,
+      "prompt": "We're about to merge client/src/features/activity/ (usePrActivityFeed.ts, ActivityFeedPanel.tsx, ActivityList.tsx) — a live activity sidebar for a PR. Review it for React best-practice issues before it lands, especially around hooks correctness and memoization, and say specifically what to change.",
+      "expected_output": "A review that identifies each anti-pattern below, explains why it's a problem (including the StrictMode implication), and gives a concrete fix.",
+      "files": [
+        "evals/files/activity-feed/usePrActivityFeed.ts",
+        "evals/files/activity-feed/ActivityFeedPanel.tsx",
+        "evals/files/activity-feed/ActivityList.tsx"
+      ],
+      "expectations": [
+        "F1: Flags usePrActivityFeed.ts passing a fresh inline arrow function to `activityBus.on(...)` and a *different* fresh inline arrow function to `activityBus.off(...)` in the cleanup — since they aren't the same reference, cleanup never actually removes the original listener",
+        "F2: Explains this subscribe/cleanup mismatch causes a real leak under React 18/19 StrictMode's dev-only mount->unmount->remount cycle (duplicate/accumulating listeners on the shared activityBus), not just a theoretical concern",
+        "F3: Flags usePrActivityFeed.ts returning a brand-new `{ events, stats }` object (with new `.filter()`-derived arrays) on every call, which means ActivityFeedPanel re-renders with new prop references and defeats `memo()` on the child ActivityList even though ActivityList itself is memoized correctly",
+        "F4 (precision check): Requires the review to root the fix primarily in usePrActivityFeed.ts (e.g. memoizing the returned `{ events, stats }` so ActivityList's memo() is effective) rather than treating ActivityList.tsx as broken — its `memo()` usage and its `key={event.id}` are both correct. A secondary, non-contradicting mention that ActivityList's memo() could also be dropped (since it's currently defeated anyway) is acceptable IF the hook-side fix is still given as the primary/required fix. Fails only if the review treats ActivityList.tsx's own implementation as the defect, or omits the hook-side fix entirely."
+      ]
+    }
+  ]
+}

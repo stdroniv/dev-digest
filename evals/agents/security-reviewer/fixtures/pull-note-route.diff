@@ -1,0 +1,59 @@
+diff --git a/server/src/modules/history/routes.ts b/server/src/modules/history/routes.ts
+index 8888888..9999999 100644
+--- a/server/src/modules/history/routes.ts
++++ b/server/src/modules/history/routes.ts
+@@ -9,6 +9,7 @@
+ import type { FastifyInstance } from 'fastify';
+ import type { ZodTypeProvider } from 'fastify-type-provider-zod';
+ import { getContext } from '../_shared/context.js';
++import { getReviewerNote } from './notes.repo.js';
+ import { IdParams } from '../_shared/schemas.js';
+ import { HistoryService } from './service.js';
+ import { PrHistory } from '@devdigest/shared';
+@@ -33,4 +34,20 @@ export default async function historyRoutes(appBase: FastifyInstance) {
+       return new HistoryService(container).getPriorPrs(workspaceId, req.params.id);
+     },
+   );
++
++  /**
++   * A reviewer's private free-text note on a PR (their own scratch comment,
++   * never shown to other workspace members in this iteration).
++   */
++  app.get(
++    '/pulls/:id/note',
++    { schema: { params: IdParams } },
++    async (req) => {
++      const { workspaceId, userId } = await getContext(container, req);
++      const note = await getReviewerNote(container.db, workspaceId, req.params.id);
++      req.log.info({ userId, prId: req.params.id }, 'reviewer note viewed');
++      return { note: note?.body ?? null };
++    },
++  );
+ }
+diff --git a/server/src/modules/history/notes.repo.ts b/server/src/modules/history/notes.repo.ts
+new file mode 100644
+index 0000000..aaaaaaa
+--- /dev/null
++++ b/server/src/modules/history/notes.repo.ts
+@@ -0,0 +1,20 @@
++import { and, eq } from 'drizzle-orm';
++import type { Db } from '../../db/client.js';
++import * as t from '../../db/schema.js';
++
++export type ReviewerNoteRow = typeof t.reviewerNotes.$inferSelect;
++
++/**
++ * Read a reviewer's note for a PR, scoped to the requesting workspace so one
++ * workspace can never read another workspace's note by guessing a PR id.
++ */
++export async function getReviewerNote(
++  db: Db,
++  workspaceId: string,
++  prId: string,
++): Promise<ReviewerNoteRow | undefined> {
++  const [row] = await db
++    .select()
++    .from(t.reviewerNotes)
++    .where(and(eq(t.reviewerNotes.workspaceId, workspaceId), eq(t.reviewerNotes.prId, prId)));
++  return row;
++}

@@ -1,0 +1,50 @@
+import type { CSSProperties } from "react";
+
+/** Co-located styles for CompareRunsModal. */
+export const s = {
+  body: { display: "flex", flexDirection: "column", gap: 20, padding: 24 } satisfies CSSProperties,
+  metricsGrid: {
+    display: "grid",
+    gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))",
+    gap: 12,
+  } satisfies CSSProperties,
+  metricCard: {
+    display: "flex",
+    flexDirection: "column",
+    gap: 6,
+    padding: 14,
+    border: "1px solid var(--border)",
+    borderRadius: 8,
+    background: "var(--bg-elevated)",
+  } satisfies CSSProperties,
+  metricLabel: {
+    fontSize: 11.5,
+    fontWeight: 700,
+    color: "var(--text-muted)",
+    letterSpacing: "0.04em",
+  } satisfies CSSProperties,
+  metricValueRow: { display: "flex", alignItems: "baseline", gap: 6, fontSize: 15, fontWeight: 700 } satisfies CSSProperties,
+  metricArrow: { fontSize: 13 } satisfies CSSProperties,
+  metricDelta: { fontSize: 12.5, fontWeight: 600 } satisfies CSSProperties,
+  diffSection: { display: "flex", flexDirection: "column", gap: 8 } satisfies CSSProperties,
+  diffHeading: { fontSize: 14, fontWeight: 700 } satisfies CSSProperties,
+  diffLegend: { display: "flex", gap: 16, fontSize: 12, color: "var(--text-secondary)" } satisfies CSSProperties,
+  diffBox: {
+    fontFamily: "var(--font-mono, monospace)",
+    fontSize: 12.5,
+    lineHeight: 1.6,
+    background: "var(--bg-surface)",
+    border: "1px solid var(--border)",
+    borderRadius: 8,
+    padding: "10px 14px",
+    maxHeight: 320,
+    overflow: "auto",
+    whiteSpace: "pre-wrap",
+  } satisfies CSSProperties,
+  diffAdded: { background: "rgba(34,197,94,0.12)", color: "var(--ok)", display: "block" } satisfies CSSProperties,
+  diffRemoved: { background: "rgba(239,68,68,0.12)", color: "var(--crit)", display: "block" } satisfies CSSProperties,
+  diffContext: { display: "block", color: "var(--text-secondary)" } satisfies CSSProperties,
+  footer: { display: "flex", alignItems: "center", justifyContent: "flex-end", gap: 10 } satisfies CSSProperties,
+  promotedNote: { fontSize: 12.5, color: "var(--ok)", marginRight: "auto" } satisfies CSSProperties,
+  confirmRow: { display: "flex", alignItems: "center", gap: 10, fontSize: 13 } satisfies CSSProperties,
+} as const;

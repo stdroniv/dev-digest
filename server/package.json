@@ -12,7 +12,8 @@
     "db:generate": "drizzle-kit generate",
     "db:migrate": "tsx src/db/migrate.ts",
     "db:seed": "tsx src/db/seed.ts",
-    "verify:l03": "vitest run src/modules/pulls/classifier.test.ts"
+    "verify:l03": "vitest run src/modules/pulls/classifier.test.ts",
+    "verify:l06": "vitest run src/modules/eval/scoring src/modules/eval/run-path.test.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.33.1",

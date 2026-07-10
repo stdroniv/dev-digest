@@ -1,0 +1,79 @@
+{
+  "skill_name": "security",
+  "notes": [
+    "files/auth-jwt-none/*.ts, files/file-upload-mixed/*.ts, and files/idor-ownership/*.ts are synthetic fixtures written to look like plausible DevDigest-adjacent Express/MongoDB/JWT modules, but they intentionally seed OWASP Top 10:2025 violations for grading. They are not real product code and are not wired into any package.json/tsconfig — do not 'fix' them in place; they exist to be reviewed.",
+    "Any credential-looking string in these fixtures (e.g. 'sk-fake-mongopw-9f2c1a') is synthetic and clearly fake; it exists only to exercise the secret-detection / hardcoded-secret checks. Do not put an in-source disclaimer comment next to a planted violation (it previously caused a model to decline to report the hardcoded-secret finding, reading the comment as license to skip it) — keep any 'this is fake/synthetic' context only here in notes.",
+    "files/file-upload-mixed/* is the hard/precision-trap case: 4 subtle violations are mixed with 2 correctly-secured pieces (helmet crossOriginResourcePolicy + no-directory-listing static serving, and a strict Mongoose schema) that must NOT be flagged. The MIME-allowlist fileFilter precision check used to live in this same file/function as the real filename path-traversal bug (F1), which let a legitimate 'these two compound' argument justify escalating the MIME check's severity — it has been moved out to files/upload-mime-only/ so the MIME-severity precision check is graded in isolation, with no co-located real bug nearby.",
+    "files/upload-mime-only/* is the isolated MIME-allowlist precision case: a multer config with a SAFE server-generated filename (crypto.randomUUID()) and ONLY the client-reported file.mimetype allowlist check, no other planted vulnerability. It exists purely to check that the skill doesn't escalate a spoofable-but-standard MIME allowlist to HIGH/CRITICAL when nothing else is wrong in the file.",
+    "files/idor-ownership/* is the uncommon/subtle case: ownership is checked only in a shared helper the React app calls to decide whether to render a button, never on the server before mutating/reading; and 'trust proxy' is set to blanket `true` rather than a specific hop count, which lets an attacker spoof X-Forwarded-For to defeat per-IP rate limiting."
+  ],
+  "evals": [
+    {
+      "id": 0,
+      "name": "auth-jwt-none-and-nosql-injection",
+      "prompt": "We're about to merge a new Express auth module (auth-middleware.ts, users-repository.ts, login-route.ts) that handles login and JWT-based session verification. Review it for security issues before it lands — call out anything that violates our security conventions, cite the exploit, and say specifically what the fix is.",
+      "expected_output": "A review that flags each HIGH/CRITICAL issue below with file, the concrete exploit scenario, and the specific fix (not just 'this is insecure').",
+      "files": [
+        "evals/files/auth-jwt-none/auth-middleware.ts",
+        "evals/files/auth-jwt-none/users-repository.ts",
+        "evals/files/auth-jwt-none/login-route.ts"
+      ],
+      "expectations": [
+        "F1: Flags jwt.verify() in auth-middleware.ts being called without an explicit `algorithms` option, enabling an algorithm-confusion / 'alg: none'-style attack where a forged token using an unexpected algorithm is accepted",
+        "F2: Flags findUserForLogin in users-repository.ts building a MongoDB query directly from the unvalidated req.body email/password fields, enabling NoSQL operator injection (e.g. `{ \"$gt\": \"\" }`) that could bypass authentication",
+        "F3: Flags the hardcoded MongoDB connection string (with an embedded username/password) in users-repository.ts as a credential that must come from an environment variable / secrets store instead of being committed inline",
+        "F4: Flags login-route.ts querying/comparing the plaintext password field directly (via findUserForLogin) instead of hashing on signup and comparing with bcrypt.compare against a stored hash",
+        "F5: Flags the missing rate limiter on the /login route (no loginLimiter applied), leaving it open to credential-stuffing / brute force"
+      ]
+    },
+    {
+      "id": 1,
+      "name": "file-upload-precision-trap",
+      "prompt": "We're about to merge a new avatar upload feature (upload-config.ts, media-model.ts, media-routes.ts) built with multer + Mongoose. Review it for security issues before it lands — call out anything that violates our security conventions, say specifically what the fix is, and call out anything that's already correctly secured so we don't churn it needlessly.",
+      "expected_output": "A review that flags each violation below with file and fix, and does NOT raise a complaint against the helmet/static-serving setup described in the routes.ts comment or the Mongoose schema's strict/enum usage.",
+      "files": [
+        "evals/files/file-upload-mixed/upload-config.ts",
+        "evals/files/file-upload-mixed/media-model.ts",
+        "evals/files/file-upload-mixed/media-routes.ts"
+      ],
+      "expectations": [
+        "F1: Flags the multer diskStorage filename callback in upload-config.ts using the client-supplied file.originalname verbatim (no server-generated name, no path.basename), enabling path traversal or overwriting another user's file on upload",
+        "F2: Flags the DELETE /avatars handler in media-routes.ts building the unlink target from req.query.path with a plain path.join and no check that the resolved path stays within UPLOAD_DIR, enabling path traversal to delete arbitrary files",
+        "F3: Flags Media.create({ ...req.body, ... }) in media-routes.ts as mass assignment — an attacker can inject arbitrary schema fields (e.g. `status: 'active'` or `uploadedBy` override) through the spread",
+        "F4: Flags the missing rate limiter on the POST /avatars upload route (no per-route limiter such as the documented 10 req / 1 min file-upload limit)",
+        "F5 (precision check): Does not flag the static-serving configuration described in the media-routes.ts trailing comment (crossOriginResourcePolicy cross-origin, index:false, dotfiles:deny) or the Mongoose schema's strict:true/enum usage in media-model.ts as vulnerabilities"
+      ]
+    },
+    {
+      "id": 3,
+      "name": "upload-mime-allowlist-precision",
+      "prompt": "We're about to merge a new document-upload multer config (upload-config.ts). Review it for security issues before it lands — call out anything that violates our security conventions, say specifically what the fix is, and call out anything that's already correctly secured so we don't churn it needlessly.",
+      "expected_output": "A review that does not raise the client-reported MIME-type allowlist (fileFilter) to HIGH/CRITICAL severity, and recognizes the server-generated filename as already safe against path traversal, since no other vulnerability is present in this fixture.",
+      "files": [
+        "evals/files/upload-mime-only/upload-config.ts"
+      ],
+      "expectations": [
+        "F1 (precision check): Does not flag the MIME allowlist fileFilter in upload-config.ts as a HIGH/CRITICAL vulnerability merely because it trusts the client-reported file.mimetype — it is the standard allowlist pattern the skill itself documents; may optionally note magic-byte validation as a LOW/defense-in-depth improvement, but must not treat it as a blocking finding when graded with no co-located real bug",
+        "F2 (precision check): Does not flag the server-generated filename (crypto.randomUUID() + path.extname(file.originalname)) as vulnerable to path traversal or overwrite — correctly recognizes that client input never reaches the filesystem path here"
+      ]
+    },
+    {
+      "id": 2,
+      "name": "idor-and-proxy-trust-bypass",
+      "prompt": "We're about to merge a PR-comments module (app-config.ts, comments-service.ts, comments-routes.ts, comment-model.ts) covering comment retrieval/deletion and the app's rate limiter setup. Review it for security issues before it lands — call out anything that violates our security conventions and say specifically what the fix is.",
+      "expected_output": "A review that flags the IDOR and the rate-limiter/proxy-trust issue below with file, exploit scenario, and fix.",
+      "files": [
+        "evals/files/idor-ownership/app-config.ts",
+        "evals/files/idor-ownership/comments-service.ts",
+        "evals/files/idor-ownership/comments-routes.ts",
+        "evals/files/idor-ownership/comment-model.ts"
+      ],
+      "expectations": [
+        "F1: Flags comments-routes.ts's GET and DELETE /comments/:commentId handlers as broken access control (IDOR) — they call requireAuth (authentication only) but never call canManageComment or otherwise compare comment.authorId to req.user.userId before returning/deleting, so any authenticated user can read or delete another user's comment by ID",
+        "F2: Explicitly notes that canManageComment in comments-service.ts existing is not sufficient by itself — the ownership check must be enforced server-side in the route/service before the mutation, not merely available as a helper the frontend uses to decide whether to render a button",
+        "F3: Flags app.set('trust proxy', true) in app-config.ts as overly permissive — trusting all hops means an attacker can forge the X-Forwarded-For header to change what req.ip resolves to, letting them evade per-IP rate limiting (loginLimiter/generalApiLimiter) by rotating the spoofed header value",
+        "F4: Proposes a concrete fix for F3 (e.g. set 'trust proxy' to a specific hop count/CIDR range matching the actual known reverse proxy, not a blanket true)"
+      ]
+    }
+  ]
+}

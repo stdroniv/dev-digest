@@ -1,0 +1,48 @@
+{
+  "skill_name": "react-testing-library",
+  "trials_per_eval": 5,
+  "run_date": "2026-07-05",
+  "evals": [
+    {
+      "id": 0,
+      "name": "verdict-banner-bad-test-review",
+      "expectations": [
+        {"id": "F1", "text": "Flags fireEvent.click(button) and recommends userEvent.setup() + await user.click(button)", "passed": 5, "failed": 0, "pass_rate": 1.0, "diagnosis": "PASS", "diagnosis_reason": "All 5 trials named fireEvent as the first issue and prescribed userEvent.setup()/await user.click.", "failure_example": null},
+        {"id": "F2", "text": "Flags getByTestId('verdict-heading') / getByTestId('regenerate-button') as Tier-3 queries where getByRole would work", "passed": 5, "failed": 0, "pass_rate": 1.0, "diagnosis": "PASS", "diagnosis_reason": "All 5 trials cited the query-priority table and swapped to getByRole('heading', ...) / getByRole('button', ...).", "failure_example": null},
+        {"id": "F3", "text": "Flags getByTestId('regenerate-error') and recommends getByRole('alert') instead", "passed": 5, "failed": 0, "pass_rate": 1.0, "diagnosis": "PASS", "diagnosis_reason": "All 5 trials noticed the component already renders role=\"alert\" on the error paragraph and used getByRole('alert').", "failure_example": null},
+        {"id": "F4", "text": "Flags destructuring `const { getByTestId } = render(...)` and recommends screen", "passed": 5, "failed": 0, "pass_rate": 1.0, "diagnosis": "PASS", "diagnosis_reason": "All 5 trials flagged this by name, citing the skill's 'always use screen' rule.", "failure_example": null},
+        {"id": "F5", "text": "Flags the post-click assertion in the 'regenerates the review' test as racing the async onRegenerate promise, recommends await/findBy", "passed": 5, "failed": 0, "pass_rate": 1.0, "diagnosis": "PASS", "diagnosis_reason": "All 5 trials identified the synchronous assertion as reading a stale/incorrect state and rewrote it with findByRole plus (in 3/5 trials) a deferred promise to deterministically observe the loading state.", "failure_example": null},
+        {"id": "F6", "text": "Flags the post-click assertion in the 'shows an error message' test as reading state before the rejected promise settles, recommends findByRole('alert')/waitFor", "passed": 5, "failed": 0, "pass_rate": 1.0, "diagnosis": "PASS", "diagnosis_reason": "All 5 trials replaced the synchronous getByTestId check with await screen.findByRole('alert').", "failure_example": null}
+      ]
+    },
+    {
+      "id": 1,
+      "name": "findings-list-precision-trap",
+      "expectations": [
+        {"id": "F1", "text": "Flags global.fetch mocking as wrong-layer/redundant given the hook is already mocked", "passed": 5, "failed": 0, "pass_rate": 1.0, "diagnosis": "PASS", "diagnosis_reason": "All 5 trials independently called this a 'dead/misleading mock' and traced through that useFindings was already replaced via vi.mock, so fetch is never invoked.", "failure_example": null},
+        {"id": "F2", "text": "Flags container.querySelector('[role=\"alert\"]') and recommends screen.getByRole('alert')", "passed": 5, "failed": 0, "pass_rate": 1.0, "diagnosis": "PASS", "diagnosis_reason": "All 5 trials named the container.querySelector anti-pattern explicitly.", "failure_example": null},
+        {"id": "F3", "text": "Flags the module-level sharedFindings array as shared mutable state never reset in beforeEach", "passed": 5, "failed": 0, "pass_rate": 1.0, "diagnosis": "PASS", "diagnosis_reason": "All 5 trials identified sharedFindings as leaking/order-dependent state and recommended deleting the test or using a locally-scoped array.", "failure_example": null},
+        {"id": "F4", "text": "Flags getByTestId('findings-empty') and recommends getByText(/no findings/i)", "passed": 5, "failed": 0, "pass_rate": 1.0, "diagnosis": "PASS", "diagnosis_reason": "All 5 trials flagged the Tier-3 query where Tier-1 getByText was available.", "failure_example": null},
+        {"id": "F5", "text": "Precision check: does NOT flag 'renders findings from the hook' as a violation", "passed": 5, "failed": 0, "pass_rate": 1.0, "diagnosis": "PASS", "diagnosis_reason": "All 5 trials explicitly labeled this test 'clean' / 'do not touch', citing correct vi.mock boundary, getByRole('list'), and within() scoping.", "failure_example": null},
+        {"id": "F6", "text": "Precision check: does NOT flag 'shows the loading state before findings resolve' as a violation", "passed": 5, "failed": 0, "pass_rate": 1.0, "diagnosis": "PASS", "diagnosis_reason": "All 5 trials explicitly labeled this test clean, citing correct getByRole('status') + toHaveTextContent usage.", "failure_example": null}
+      ]
+    },
+    {
+      "id": 2,
+      "name": "debounced-search-fake-timers",
+      "expectations": [
+        {"id": "F1", "text": "Uses userEvent (not fireEvent) to type into the input", "passed": 5, "failed": 0, "pass_rate": 1.0, "diagnosis": "PASS", "diagnosis_reason": "All 5 trials used userEvent.setup() + user.type().", "failure_example": null},
+        {"id": "F2", "text": "Calls vi.useFakeTimers() before interacting and restores real timers afterward", "passed": 5, "failed": 0, "pass_rate": 1.0, "diagnosis": "PASS", "diagnosis_reason": "All 5 trials wired vi.useFakeTimers()/vi.useRealTimers() via beforeEach/afterEach or inline before render.", "failure_example": null},
+        {"id": "F3", "text": "Explicitly reconciles userEvent's internal timing with fake timers (delay: null and/or advanceTimers: vi.advanceTimersByTime, or vi.advanceTimersByTimeAsync) rather than naively mixing user.type with vi.advanceTimersByTime", "passed": 5, "failed": 0, "pass_rate": 1.0, "diagnosis": "PASS", "diagnosis_reason": "All 5 trials configured userEvent.setup() with { advanceTimers: vi.advanceTimersByTime } and/or { delay: null }, or used vi.advanceTimersByTimeAsync — the exact gotcha the case was designed to probe did not trip up any trial.", "failure_example": null},
+        {"id": "F4", "text": "Asserts onQueryChange has NOT been called before the debounce window elapses", "passed": 5, "failed": 0, "pass_rate": 1.0, "diagnosis": "PASS", "diagnosis_reason": "All 5 trials asserted not.toHaveBeenCalled() immediately after typing and/or at the 299ms boundary.", "failure_example": null},
+        {"id": "F5", "text": "After advancing past the debounce window, asserts onQueryChange was called exactly once with the final typed value", "passed": 5, "failed": 0, "pass_rate": 1.0, "diagnosis": "PASS", "diagnosis_reason": "All 5 trials asserted toHaveBeenCalledTimes(1) and toHaveBeenCalledWith('auth').", "failure_example": null}
+      ]
+    }
+  ],
+  "summary": {
+    "total_expectations": 17,
+    "overall_pass_rate": 1.0,
+    "skill_gaps": [],
+    "fixture_issues": []
+  }
+}

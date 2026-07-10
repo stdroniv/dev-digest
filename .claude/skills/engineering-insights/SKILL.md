@@ -10,6 +10,8 @@ See `examples.md` for good vs bad entries.
 
 When you learn something non-obvious in a module, append it to that module's INSIGHTS.md.
 
+## Steps
+
 1. **Target the file** by where the work happened: root `INSIGHTS.md`, else `server/`, `client/`, `reviewer-core/`, or `e2e/INSIGHTS.md` (repo-intel → `server/INSIGHTS.md`). Spanned several? Write to each.
 2. **Read it first.** If a related entry already exists, extend it instead of adding a near-duplicate.
 3. **Pick one section**, creating the header if absent: **What Works**, **What Doesn't Work** (the most valuable — don't skip it), **Codebase Patterns**, **Tool & Library Notes**, **Recurring Errors & Fixes**, **Session Notes** (date with `### YYYY-MM-DD`), **Open Questions**.

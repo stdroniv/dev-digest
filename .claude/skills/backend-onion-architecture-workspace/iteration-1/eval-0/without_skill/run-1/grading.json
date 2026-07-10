@@ -1,0 +1,45 @@
+{
+  "expectations": [
+    {
+      "text": "F1: Flags routes.ts importing drizzle-orm/db schema and querying the DB directly inside the route handler (presentation touching infrastructure)",
+      "passed": true,
+      "evidence": "Finding #1 and #2: 'Routes hand-roll a DB query and bypass the repository/service entirely' + 'Route reads t (db schema) and eq from drizzle-orm — infrastructure leaking into presentation', compared against sibling agents/routes.ts"
+    },
+    {
+      "text": "F2: Flags the endpoint-URL uniqueness check as business logic misplaced in the route handler",
+      "passed": true,
+      "evidence": "Finding #1: 'Business logic (\"an endpoint URL must be unique per workspace\" — the 409 check) is implemented in the routes file, not the service, so it can't be reused or unit tested independently of Fastify'"
+    },
+    {
+      "text": "F3: Flags claimDueRetries' backoff/MAX_ATTEMPTS logic as a domain rule embedded in the repository/infrastructure layer",
+      "passed": true,
+      "evidence": "Finding #5: 'Retry-window/backoff policy (business rule) implemented in the repository ... This is domain/business logic ... sitting inside the repository, which per the onion/clean split should be pure data access'"
+    },
+    {
+      "text": "F4: Flags repository methods returning raw Drizzle rows outward with no row->entity/DTO mapping",
+      "passed": false,
+      "evidence": "No finding addresses row->DTO mapping or the repository leaking Drizzle's raw row shape outward; the summary table has no entry for it, and the secret-column round-trip to the client is never mentioned anywhere in the review"
+    },
+    {
+      "text": "F5: Flags service.ts constructing a concrete OpenAI client directly instead of going through the LLMProvider port/container",
+      "passed": true,
+      "evidence": "Finding #4: 'Direct OpenAI client construction and module-level singleton in the service — should go through the LLM adapter/container', contrasts with agents/service.ts's container.llm(provider) pattern"
+    }
+  ],
+  "summary": {
+    "passed": 4,
+    "failed": 1,
+    "total": 5,
+    "pass_rate": 0.8
+  },
+  "execution_metrics": {
+    "total_tool_uses": 9
+  },
+  "timing": {
+    "total_duration_seconds": 89.3
+  },
+  "extra_findings_beyond_seed": [
+    "fetch() to webhook URLs has no adapter/port and no error handling for thrown network errors (vs. only HTTP-status failures)",
+    "Retry route accepts an unvalidated, unused :endpointId param with no Zod params schema"
+  ]
+}

@@ -32,6 +32,14 @@ export const evalRuns = pgTable('eval_runs', {
   citationAccuracy: doublePrecision('citation_accuracy'),
   durationMs: integer('duration_ms'),
   costUsd: doublePrecision('cost_usd'),
+  // Ties the N per-case rows of ONE run together (one row per case, sharing
+  // this id). Nullable/back-compatible for any pre-existing rows.
+  runGroupId: uuid('run_group_id'),
+  // The `agent_versions` snapshot (agents.version) that produced this run —
+  // the agent id itself is reachable via eval_cases.owner_id. Nullable/
+  // back-compatible; not a hard FK because `agent_versions`' key is the
+  // composite (agent_id, version), not a single id column.
+  agentVersion: integer('agent_version'),
 });
 
 export const conformanceChecks = pgTable('conformance_checks', {

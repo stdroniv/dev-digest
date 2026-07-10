@@ -2,7 +2,7 @@
 name: backend-onion-architecture
 description: "Enforces strict Onion (Clean/Hexagonal) Architecture on DevDigest's TypeScript backend (server/ and reviewer-core/). Use when adding or reviewing a backend module, route, service, repository, adapter, or domain rule — when deciding where business logic, DB access, validation, or external-API calls belong, or when wiring dependency injection. Enforces the inward-only dependency rule across four layers (domain → application → infrastructure → presentation), keeps Fastify/Drizzle/Zod/OpenAI out of the domain core, puts repository interfaces in the domain and Drizzle implementations in infrastructure, maps DB rows to domain entities and entities to DTOs, keeps reviewer-core pure, and ships a dependency-cruiser rule to block inner→outer imports in CI. Trigger terms: onion architecture, clean architecture, hexagonal, ports and adapters, domain layer, application service, use case, repository pattern, dependency inversion, dependency rule, where does this code go, server module, reviewer-core, backend architecture."
 metadata:
-  version: 1.0.0
+  version: 1.2.0
   tags: architecture, backend, onion, clean-architecture, hexagonal, ddd, fastify, drizzle, zod, typescript, dependency-injection
   references:
     onion-clean-hexagonal:
@@ -128,7 +128,11 @@ See [references/dependency-injection.md](references/dependency-injection.md).
 
 ## Pre-commit checklist
 
-1. Does any **inner** file import `drizzle-orm`, `fastify`, `zod`, or an SDK? → move it outward.
+1. Does any **inner** file import `drizzle-orm`, `fastify`, `zod`, or an SDK — **including a
+   type-only `import type`** (e.g. a domain type defined as `InferSelectModel<typeof table>` or
+   `typeof table.$inferSelect`)? → move it outward; declare an **independent** domain type and let
+   the repository `toDomain()`-map onto it. A type alias is erased at runtime, so `depcruise`
+   may miss it — but it still binds the core to the DB shape, so catch it in review.
 2. Does a **route handler** touch the DB / Drizzle? → push it into a service + repository.
 3. Does a repository **return a Drizzle row** outward? → add a `toDomain()` / DTO mapper.
 4. Does a domain entity hold **only data** with logic elsewhere? → fold the invariant into the

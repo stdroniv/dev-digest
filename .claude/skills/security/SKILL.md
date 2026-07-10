@@ -193,6 +193,7 @@ Scan for these patterns in all code and config:
 | Slack Token | `xox[bpsa]-[0-9a-zA-Z-]+` |
 
 **Never commit**: `.env`, `.env.local`, `.env.production`, `logs/`, `uploads/`
+- DevDigest-specific: secrets live in `~/.devdigest/secrets.json` (mode `0600`) — never in git, the DB, or `AppConfig`.
 
 ---
 

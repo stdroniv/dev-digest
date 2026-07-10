@@ -62,6 +62,28 @@ The most common diagram type. Use for workflows, decision trees, and process flo
 | `[(text)]` | Cylinder | Database, storage |
 | `[[text]]` | Subroutine | External process |
 
+### Escaping & Quoting Special Characters in Labels
+
+Node-shape delimiters (`[]`, `()`, `{}`) and edge-label delimiters (`|...|`) are also **reserved Mermaid syntax**. If a label's text needs to *contain* one of those characters — or a literal double quote — you must quote it correctly; you cannot backslash-escape it.
+
+**Rule 1 — wrap the label in double quotes.** This tells the parser to treat everything inside as literal text instead of shape/edge syntax:
+
+```
+D["Filter | dedupe files"]
+B["Detect language (TS/JS only)"]
+A -- "Error: reason" --> B
+```
+
+Do **not** reword the label to dodge the character (e.g. turning `Filter | dedupe files` into `Filter and dedupe files`) — that silently changes the content. Quoting is always the correct fix.
+
+**Rule 2 — a literal double quote inside an already-quoted label needs the HTML entity `#quot;` (not `\"`, not `&quot;`).** Backslash-escaping is not part of Mermaid's grammar and will either break parsing or render the backslash literally:
+
+```
+K -- "Error: #quot;invalid schema#quot;" --> C
+```
+
+Other characters that conflict with Mermaid syntax can use the same numeric entity-code mechanism (e.g. `#35;` for a literal `#`). This applies to node labels, edge labels, and labels in every diagram type (sequence, state, class, ER) — not just flowcharts.
+
 ### Arrow Types
 
 | Syntax | Style |

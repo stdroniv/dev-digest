@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { Verdict, Finding } from './findings.js';
+import { Verdict, Finding, Severity, FindingCategory } from './findings.js';
 import { EvalRun, EvalOwnerKind, Conformance } from './knowledge.js';
 
 /**
@@ -244,3 +244,74 @@ export const HookScanResult = z.object({
   findings: z.array(Finding),
 });
 export type HookScanResult = z.infer<typeof HookScanResult>;
+
+// ===========================================================================
+// Eval — run grouping, comparison & promotion (L06 Eval Pipeline foundation)
+// ===========================================================================
+
+/**
+ * One expected finding inside a `must_find` case's `expected_output`. A case's
+ * `expected_output` is either `[]` (`must_not_flag`) or an array of these.
+ */
+export const EvalExpectedFinding = z.object({
+  file: z.string(),
+  start_line: z.number().int(),
+  end_line: z.number().int(),
+  severity: Severity.nullish(),
+  category: FindingCategory.nullish(),
+  title: z.string().nullish(),
+});
+export type EvalExpectedFinding = z.infer<typeof EvalExpectedFinding>;
+
+/**
+ * One run of an agent version against its whole eval case set — the
+ * SET-LEVEL aggregate (derived from the latest per-case `eval_runs` rows
+ * sharing a `run_group_id`), attributed to the `agent_versions` snapshot
+ * that produced it.
+ */
+export const EvalRunGroup = z.object({
+  id: z.string(),
+  run_group_id: z.string(),
+  agent_id: z.string(),
+  agent_version: z.number().int().nullable(),
+  ran_at: z.string(),
+  recall: z.number(),
+  precision: z.number(),
+  citation_accuracy: z.number(),
+  traces_passed: z.number().int(),
+  traces_total: z.number().int(),
+  cost_usd: z.number().nullable(),
+});
+export type EvalRunGroup = z.infer<typeof EvalRunGroup>;
+
+/** `old -> new` + delta for one numeric metric between two run groups. */
+export const EvalMetricDelta = z.object({
+  old: z.number(),
+  new: z.number(),
+  delta: z.number(),
+});
+export type EvalMetricDelta = z.infer<typeof EvalMetricDelta>;
+
+/**
+ * Read-only side-by-side comparison of two run groups: `old -> new` + delta
+ * per metric (incl. cost, reported not judged), the diff of the two
+ * `agent_versions` system prompts, and which of the two is newer (the only
+ * thing `POST /agents/:id/eval-promote` may act on).
+ */
+export const EvalComparison = z.object({
+  old_run: EvalRunGroup,
+  new_run: EvalRunGroup,
+  recall: EvalMetricDelta,
+  precision: EvalMetricDelta,
+  citation_accuracy: EvalMetricDelta,
+  cost_usd: EvalMetricDelta,
+  system_prompt_diff: z.string(),
+  newer_version: z.number().int().nullable(),
+});
+export type EvalComparison = z.infer<typeof EvalComparison>;
+
+/** Request body for `POST /agents/:id/eval-promote` — promote a version to active. */
+export const EvalPromoteInput = z.object({
+  version: z.number().int(),
+});
+export type EvalPromoteInput = z.infer<typeof EvalPromoteInput>;

@@ -93,7 +93,7 @@ repo's own findings contract models (`TrifectaComponent`). Keep it front of mind
 
 | Sev bias | Category | Diff smells to grep/trace in DevDigest |
 |---|---|---|
-| **High** | **A01 Broken Access Control** (now includes **SSRF**) | Fastify route with no auth `preHandler`; IDOR — `db.query.prs.findFirst({ where: eq(prs.id, params.id) })` with no `userId`/ownership clause; **SSRF**: `fetch()`/import of a user-supplied URL when ingesting GitHub repos/PRs with no host allowlist. |
+| **High** | **A01 Broken Access Control** (now includes **SSRF**) | IDOR — `db.query.prs.findFirst({ where: eq(prs.id, params.id) })` with no `workspaceId`/ownership clause (DevDigest's actual tenancy boundary — see note below, this is NOT the same as "no auth `preHandler`"); **SSRF**: `fetch()`/import of a user-supplied URL when ingesting GitHub repos/PRs with no host allowlist. |
 | **High** | **A05 Injection** | Raw Drizzle `sql\`… ${userInput} …\`` instead of parameter binding; path traversal in the repo indexer — `path.join(base, params.path)` with no `resolve` + prefix check; `exec`/`spawn` on a branch name / SHA; React XSS via `dangerouslySetInnerHTML={{ __html: diffOrLlmText }}`. |
 | **High** | **A04 Cryptographic Failures** | Secret hardcoded in source instead of `~/.devdigest/secrets.json`; `OPENAI_*`/`GITHUB_TOKEN` in a log, error object, or response (`console.log(.*token`, `reply.send(.*secret`); JWT verified with `algorithms:['none']`. |
 | **High** | **A07 Authentication Failures** | Token in a query param (leaks to logs) vs `Authorization` header; missing GitHub webhook signature verification; `jwt.decode()` where `jwt.verify()` is required. |
@@ -123,6 +123,19 @@ the route's Zod `body`/`params` schema, parameterized Drizzle queries);
 `NODE_ENV`-gated dev-only code; vendored copies (`*/src/vendor/**` is generated);
 and pure style/naming. **Golden rule:** `fetch(process.env.URL)` = safe;
 `fetch(req.query.url)` = vulnerable. Always ask *"can an attacker control this?"*
+
+**A route with no `preHandler`/session/JWT auth guard, by itself, is NOT a
+finding here.** Root `INSIGHTS.md` documents DevDigest's actual threat model:
+"local-first, single-user, bound to localhost, with no auth on routes" — every
+route resolves tenancy via `getContext()` (`LocalNoAuthProvider`: always the
+default workspace + system user), and that is the accepted, existing pattern
+across the whole codebase, not a gap this diff introduced. Before flagging
+"missing authentication," check whether the route you're looking at follows
+the *exact same* `getContext()`-only pattern as its neighbors in the same
+module — if so, it crosses no new trust boundary and is out of scope. The
+real tenancy boundary in this app is **workspace-scoped queries** (a
+`workspaceId` clause on the DB read/write) — flag it as A01/IDOR only if a
+query is missing that clause, not because the route lacks a `preHandler`.
 
 ## Severity rubric (impact × exploitability)
 

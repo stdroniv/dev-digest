@@ -1,0 +1,61 @@
+{
+  "skill_name": "client-server-communication",
+  "notes": [
+    "files/review-comments/*.ts, files/digest-exports/*.ts, and files/pr-run-events/*.ts are synthetic fixtures written to look like plausible DevDigest client/server modules, but they intentionally seed client-server-communication (REST wire-contract) violations for grading. They are not real product code and are not wired into any package.json/tsconfig — do not 'fix' them in place; they exist to be reviewed.",
+    "files/review-comments/*.ts is the easy/obvious fixture: one server route file with several clear-cut, unambiguous violations, plus one client hook with a matching violation.",
+    "files/digest-exports/*.ts is the hard precision-trap fixture: routes.ts mixes 4 subtle violations into an otherwise reasonable-looking module (offset pagination with no envelope, a cacheable response missing Cache-Control/ETag, an inconsistent bare-string error next to a correct envelope error handler, and a retryable creation POST with no idempotency key), while api-client.ts is fully correct (schema-parses every response, normalizes errors, never casts) and the module's DELETE handler and central error handler are already correctly designed — a strict reviewer must not flag any of those.",
+    "files/pr-run-events/*.ts is the uncommon-scenario fixture: an SSE endpoint that gets the basic push-not-poll shape right (this must not be flagged) but mishandles partial-failure/reconnection semantics — no terminal/error SSE event, no per-event id for Last-Event-ID resumption, and a client hook with no onerror handling — which a generic REST checklist review would likely miss."
+  ],
+  "evals": [
+    {
+      "id": 0,
+      "prompt": "We're about to merge server/src/modules/review-comments/routes.ts and client/src/lib/hooks/reviewComments.ts. Review the client-server contract before it lands — point out anything that violates our REST wire-boundary conventions (status codes, URL/resource naming, idempotency, error format, response parsing) and say what the correct fix looks like.",
+      "expected_output": "A review that identifies each contract violation below, explains which rule/status-code it breaks, and states the concrete fix (correct status code, method, URL shape, or parsing change) rather than a vague 'this looks off'.",
+      "files": [
+        "evals/files/review-comments/routes.ts",
+        "evals/files/review-comments/reviewComments.ts"
+      ],
+      "expectations": [
+        "F1: Flags POST /getReviewComments as a verb-in-URL / RPC-style endpoint instead of a noun resource (should be GET /workspaces/:workspaceId/review-comments)",
+        "F2: Flags the blank-body validation failure returning `200 { ok: false, reason }` instead of a 4xx (400/422) — a 2xx tells the client/caches the request succeeded when it didn't",
+        "F3: Flags the catch block returning `(err as Error).stack` in the 500 response body as leaking internals to the client",
+        "F4: Flags the PUT .../increment-vote endpoint as violating PUT's idempotency contract — repeated identical calls change the result (a counter bump), so it isn't safe to blindly retry; should be POST, or modeled as a PUT that sets an absolute value",
+        "F5: Flags the client hook parsing the response with a raw `as ReviewCommentRecord[]` cast instead of validating it against a shared Zod schema before trusting it"
+      ]
+    },
+    {
+      "id": 1,
+      "prompt": "We're about to merge server/src/modules/digest-exports/ (routes.ts, api-client.ts, useExportStatus.ts). Review the client-server contract before it lands — point out anything that violates our REST wire-boundary conventions, say what the correct fix looks like, and call out anything that's already correctly designed so we don't churn it needlessly.",
+      "expected_output": "A review that identifies each contract violation below, explains the fix, and does NOT flag api-client.ts, the DELETE handler, or digestExportsErrorHandler — all three are intentionally correct.",
+      "files": [
+        "evals/files/digest-exports/routes.ts",
+        "evals/files/digest-exports/api-client.ts",
+        "evals/files/digest-exports/useExportStatus.ts"
+      ],
+      "expectations": [
+        "F1: Flags GET /workspaces/:workspaceId/exports for using offset pagination (page/limit) with no next-cursor and returning a bare array with no pagination envelope, rather than cursor/keyset pagination with a consistent items+cursor shape",
+        "F2: Flags GET /workspaces/:workspaceId/exports/:exportId for not setting Cache-Control/ETag despite the code comment stating the completed export is immutable and 'safe to cache indefinitely' — a real caching opportunity being left unimplemented",
+        "F3: Flags the 404 branch of GET .../exports/:exportId returning a bare string (`reply.code(404).send('export not found')`) as inconsistent with the module's own envelope error shape used by digestExportsErrorHandler elsewhere",
+        "F4: Flags POST /workspaces/:workspaceId/exports (a retryable resource-creating write) for accepting no Idempotency-Key header, risking duplicate export jobs on client retry after a network blip",
+        "F5: Flags useExportStatus.ts's setTimeout(tick, 750) as busy-polling a status endpoint instead of using server push (SSE), per DevDigest's own live-update pattern",
+        "F6 (precision check): Does not flag api-client.ts — it already validates every response against a Zod schema, normalizes errors into ApiError, and correctly treats 204 as bodiless",
+        "F7 (precision check): Does not flag the DELETE handler or digestExportsErrorHandler as violations — DELETE already returns 204 idempotently on both first and repeat calls, and the error handler already uses one consistent envelope shape without leaking internals"
+      ]
+    },
+    {
+      "id": 2,
+      "prompt": "We're about to merge server/src/modules/pr-run-events/ (events.ts, an SSE endpoint) and the client/src/lib/hooks/useRunEvents.ts hook that consumes it. Review the client-server contract before it lands, with particular attention to what happens when the stream fails partway through or the client reconnects — say what the correct fix looks like, and call out anything that's already correctly designed.",
+      "expected_output": "A review that identifies the streaming-specific contract gaps below and explains the fix, while confirming that using SSE (push, not polling) and the Content-Type/event framing are already correct and should not be churned.",
+      "files": [
+        "evals/files/pr-run-events/events.ts",
+        "evals/files/pr-run-events/useRunEvents.ts"
+      ],
+      "expectations": [
+        "F1: Flags that on an error inside the generator, the handler silently returns/stops emitting instead of sending a distinguishable terminal SSE event (e.g. a named `error` or `done` event) — the client has no way to tell a clean finish from a dropped/crashed stream",
+        "F2: Flags the missing per-event `id:` field in the SSE payload, which would let a reconnecting EventSource resume via `Last-Event-ID` instead of silently missing or re-requesting the whole history",
+        "F3: Flags useRunEvents.ts for only handling `onmessage` with no `onerror` handler, so the client has no observable signal (loading/error state) when the underlying connection drops or the server reports failure",
+        "F4 (precision check): Does not flag the choice of SSE itself, or the fact that the endpoint pushes events instead of polling — that part of the design already matches DevDigest's own live-update pattern and should not be flagged as a violation"
+      ]
+    }
+  ]
+}

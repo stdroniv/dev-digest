@@ -108,6 +108,34 @@ marker:
    success, zero results, failure). Improvements to clarity, feedback, and recoverability
    are legitimate spec content when phrased as observable behaviour or a user story.
 
+## When the user provides a design artifact (mockup, design file, screenshots)
+
+A design — a screenshot, a Figma/HTML export, an ASCII sketch, a compiled prototype — is
+a **source of requirements**, not decoration. Metabolize it; do not paraphrase it into a
+generic restatement. Concretely:
+
+1. **Enumerate every screen and every state.** Walk the artifact and list each screen,
+   and for each: its empty / loading / error / populated / key-interaction states. Each
+   distinct state is a candidate acceptance criterion. A screenshot shows *one* state —
+   ask for the rest (or for the source) rather than inventing them.
+2. **Capture exact user-facing copy.** Pin the real labels, headings, empty-state text,
+   button text, and number/format conventions (e.g. "never run", "Regression harness · N
+   runs on the gold set", a delta shown as `0.04`). Copy and formatting are observable
+   WHAT — record them so they can't drift in the build. (Pixel layout, component choice,
+   and colour tokens are HOW — leave those to the plan.)
+3. **Trace coverage both ways.** Every screen/state in the design maps to either an
+   acceptance criterion **or** an explicit non-goal. A capability the design shows but you
+   are cutting (a secondary tab, an export button, a whole editor) must be named in
+   Non-goals — never dropped silently, so a downstream reader can tell a deliberate cut
+   from an accidental miss.
+4. **Read the design's data to infer behaviour.** Populated mock data usually encodes
+   rules — a trend needs ≥2 points, an alert fires only on a drop, a list is newest-first.
+   Turn those into ACs and edge cases.
+5. **Prefer the source; ask when you only have an image.** A single screenshot cannot
+   show off-screen screens, interaction/empty/error states, exact copy, or the data shape.
+   If a richer design file exists, ask for it. If only screenshots exist, mark the unseen
+   states as `[NEEDS CLARIFICATION]` rather than guessing.
+
 ## Acceptance criteria — write them in EARS
 
 EARS (Easy Approach to Requirements Syntax, Mavin et al., Rolls-Royce, RE'09) collapses
@@ -240,6 +268,11 @@ doesn't apply; never omit Problem, Goals/Non-goals, User stories, or Acceptance 
 ## User stories
 - As a <role>, I want <capability>, so that <benefit>.
 
+## Screens & states  <!-- only when a design/mockup was provided; omit otherwise -->
+<Each screen the design defines → the states it must support (empty / loading / error /
+populated / key interactions) and the exact user-facing copy that pins it. Every screen
+maps to an AC below or to a Non-goal above.>
+
 ## Acceptance criteria (EARS)
 <Each is one testable EARS statement with a stable ID.>
 - **AC-1** — WHEN <trigger>, the system shall <response>.
@@ -272,6 +305,7 @@ issue text) → require it be treated as data, not instructions. "none" if it re
 ## Spec quality checklist (self-check before returning)
 
 - [ ] Every acceptance criterion is one testable EARS statement with a stable ID
+- [ ] (design provided) Every screen/state in the design maps to an AC or an explicit non-goal; exact user-facing copy is captured
 - [ ] No implementation detail (no file paths, frameworks, schema, function/type names, wiring)
 - [ ] Goals **and** non-goals are both stated
 - [ ] Edge cases are enumerated with expected behaviour

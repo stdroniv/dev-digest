@@ -1,0 +1,64 @@
+{
+  "skill_name": "typescript-expert",
+  "notes": [
+    "All files under evals/files/**/*.ts are synthetic fixtures styled to look like plausible reviewer-core / server TypeScript modules, but they intentionally seed type-safety and type-level-programming issues for grading. They are not real product code and are not wired into any package.json/tsconfig/build - do not 'fix' them in place; they exist to be reviewed.",
+    "evals/files/any-laden-classifier/classify-finding.ts is the clear-cut case: an `any`-typed function, an unvalidated `as` cast on parsed JSON, and a switch over a discriminated union missing one arm with no `never`-exhaustiveness check.",
+    "evals/files/finding-normalizer-mixed-violations/{ids.ts,normalizer.ts} is the hard precision-trap case: 4 subtle violations (branded-type constructor that doesn't validate, a generic constraint too loose to catch a non-string id, an unvalidated `as` cast on JSON.parse, and a switch with an `any`-cast fallback instead of a `never` check) mixed with 2 correctly-typed pieces (a validating UserId constructor, and a minimal correctly-constrained `firstOf<T>` generic) that must NOT be flagged.",
+    "evals/files/distributive-conditional-and-barrel-cycle/** is the uncommon-scenario case: events.ts contains a conditional type that unintentionally distributes over a union (EventHandler<T> vs the correct non-distributive NonDistributiveHandler<T> shown right below it for contrast; `dispatch`'s single-variant-handler assignment is confirmed via `tsc --strict` to type-check with zero errors), and findings/index.ts + reviewers/index.ts form a genuine barrel-to-barrel circular re-export (each imports the other's index.ts, not a concrete leaf file) that isn't visible from either file's direct imports alone."
+  ],
+  "evals": [
+    {
+      "id": 0,
+      "name": "any-laden-classifier",
+      "prompt": "Review evals/files/any-laden-classifier/classify-finding.ts before it lands in reviewer-core. Focus on type safety: call out anywhere the types are lying to us or don't actually protect against bad data, and say concretely how to fix each one (what type/generic/check to use instead).",
+      "expected_output": "A review that flags each type-safety issue below, explains concretely why it's unsafe, and proposes a specific fix (a generic signature, a validation step, or an exhaustiveness check) rather than a vague 'add types' comment.",
+      "files": [
+        "evals/files/any-laden-classifier/classify-finding.ts"
+      ],
+      "expectations": [
+        "F1: Flags `classifyFinding(finding: any): any` as unsafe and proposes a concrete fix (e.g. a generic `<T extends ReviewFinding>` or typing both the parameter and return as `ReviewFinding & { priority: number }`) instead of `any`",
+        "F2: Flags `parseLlmResponse` casting `JSON.parse(rawJson) as ReviewFinding[]` as an unvalidated type assertion - the parsed value could have any shape at runtime and nothing checks it actually matches `ReviewFinding[]` - and suggests runtime validation (e.g. a Zod schema/parse or manual shape check) before trusting the cast",
+        "F3: Flags `severityLabel`'s switch statement as non-exhaustive: it has no case for `'nit'` and there is no `default` branch calling an `assertNever`/exhaustiveness helper, so a missing case silently returns `undefined` instead of failing to compile",
+        "F4 (precision check): Does not raise a type-safety complaint about `sortByPriority` - its `rank` object plus indexing is correctly typed and requires no change"
+      ]
+    },
+    {
+      "id": 1,
+      "name": "finding-normalizer-mixed-violations",
+      "prompt": "Review evals/files/finding-normalizer-mixed-violations/ids.ts and normalizer.ts before they land. Focus on type safety and type-level correctness - flag anywhere a type looks safe but isn't actually enforcing what it claims to, and call out anything that's already correctly typed so we don't churn it needlessly.",
+      "expected_output": "A review that identifies each of the 4 subtle violations below with a concrete fix, and explicitly does NOT flag the 2 correctly-typed pieces (toUserId, firstOf).",
+      "files": [
+        "evals/files/finding-normalizer-mixed-violations/ids.ts",
+        "evals/files/finding-normalizer-mixed-violations/normalizer.ts"
+      ],
+      "expectations": [
+        "F1: Flags `toFindingId` as a branded-type constructor that performs no validation before casting - any string (including empty/malformed input) becomes a 'valid' FindingId, so the brand provides no real safety guarantee, and suggests adding a validation check (mirroring toUserId's pattern)",
+        "F2: Flags `pickIds<T extends { id: unknown }>` as a generic constraint that is too loose - the `id` field can be any type (object, function, number), not necessarily a string/valid identifier, and the `unknown[]` return type just defers the problem to every caller instead of catching it here; proposes narrowing the constraint (e.g. `{ id: string }`) or a stricter return type",
+        "F3: Flags `loadConfig` casting `JSON.parse(raw) as AppConfig` as an unvalidated assertion with no runtime check that the parsed object actually has `maxFindingsPerFile`/`suppressedRules` in the right shape",
+        "F4: Flags `renderFinding`'s `default` branch casting `finding as any` instead of using a `never`-typed exhaustiveness check (e.g. `assertNever(finding)`), meaning a new `NormalizedFinding` variant added later would silently fall into this branch instead of failing to compile",
+        "F5 (precision check): Does not flag `toUserId` - it validates the input against USER_ID_PATTERN before branding, which is the correct pattern",
+        "F6 (precision check): Does not flag `firstOf<T>(items: readonly T[]): T | undefined` - it is a minimal, correctly constrained generic with nothing to improve"
+      ]
+    },
+    {
+      "id": 2,
+      "name": "distributive-conditional-and-barrel-cycle",
+      "prompt": "Review evals/files/distributive-conditional-and-barrel-cycle/ (events.ts, findings/index.ts, findings/finding.ts, reviewers/index.ts, reviewers/reviewer.ts) for type-level correctness and module-structure issues before it lands. Look specifically for anything subtle in how the conditional types or the module/barrel structure behave, not just surface style issues.",
+      "expected_output": "A review that identifies the unintended distributive-conditional-type bug in events.ts and the barrel-to-barrel circular re-export between findings/index.ts and reviewers/index.ts, explains the concrete runtime/compile-time consequence of each, and does not flag the NonDistributiveHandler/safeDispatch pair as broken.",
+      "files": [
+        "evals/files/distributive-conditional-and-barrel-cycle/events.ts",
+        "evals/files/distributive-conditional-and-barrel-cycle/findings/index.ts",
+        "evals/files/distributive-conditional-and-barrel-cycle/findings/finding.ts",
+        "evals/files/distributive-conditional-and-barrel-cycle/reviewers/index.ts",
+        "evals/files/distributive-conditional-and-barrel-cycle/reviewers/reviewer.ts"
+      ],
+      "expectations": [
+        "F1: Flags `EventHandler<T> = T extends ReviewEvent ? (event: T) => void : never` as a conditional type over a bare (non-tuple-wrapped) generic that distributes over the ReviewEvent union, so `EventHandler<ReviewEvent>` resolves to a union of three separate single-variant handler types rather than one function accepting the whole union",
+        "F2: Explains the concrete consequence - `dispatch` type-checks cleanly (verified with `tsc --strict`, zero errors) even though its parameter type only truly matches the `'finding-added'` shape, because a value only needs to satisfy one arm of the resulting union, silently allowing a single-variant handler to stand in for a full ReviewEvent dispatcher with no compiler complaint about `'finding-resolved'`/`'review-completed'` never being handled",
+        "F3: Identifies the fix pattern already present in the same file (wrapping in a tuple, `[T] extends [ReviewEvent]`) as the correct non-distributive approach, or independently proposes the same tuple-wrapping fix",
+        "F4: Flags the circular re-export between findings/index.ts (re-exporting `summarizeForReviewer` from reviewers/index.ts) and reviewers/index.ts (re-exporting `Finding` from findings/index.ts) as a genuine barrel-to-barrel module cycle - both barrels import from each other's index.ts, not from a concrete leaf file - and notes it degrades isolated-module resolution / incremental build performance and risks 'used before its declaration' style circular-type errors",
+        "F5 (precision check): Does not describe `NonDistributiveHandler`/`safeDispatch` as broken - this pair is the correctly-written, non-distributive version shown for contrast"
+      ]
+    }
+  ]
+}

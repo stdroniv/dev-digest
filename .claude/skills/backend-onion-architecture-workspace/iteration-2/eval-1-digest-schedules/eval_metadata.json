@@ -1,0 +1,16 @@
+{
+  "eval_id": 1,
+  "eval_name": "digest-schedules-architecture-review",
+  "prompt": "We're about to merge server/src/modules/digest-schedules/ (repository.ts, service.ts, routes.ts, helpers.ts, github-client.ts). Review it for backend architecture issues before it lands — point out anything that violates our onion/clean architecture conventions, say specifically where the code should actually live instead, and call out any file that's already correctly layered so we don't churn it needlessly.",
+  "assertions": [
+    "F1: Flags routes.ts's /preview handler importing drizzle-orm/db schema and querying the DB directly (presentation touching infrastructure), bypassing the service/repository",
+    "F2: Flags routes.ts's assertValidCronOverride (cron parsing + 'no more often than every 5 minutes' rule) as business/domain logic embedded in the route handler",
+    "F3: Flags helpers.ts (meant to be the domain layer) importing Drizzle's InferSelectModel/schema types directly, coupling domain code to the infrastructure row shape",
+    "F4: Flags helpers.ts's shouldSkipDueToRateLimit constructing and calling the GithubClient infrastructure adapter directly from the domain layer (domain depending on an outer layer)",
+    "F5: Flags service.ts importing and instantiating WorkspaceRepository directly instead of going through a WorkspaceService/port — an application-layer service reaching across module boundaries into another module's infrastructure",
+    "F6: Flags service.ts's runDueSchedules building a raw fetch() call to the GitHub API with process.env.GITHUB_TOKEN inline instead of using the existing GithubClient adapter",
+    "F7: Flags the module-level mutable rateLimitCache in service.ts as ad-hoc shared state that bypasses the DI container and will leak/collide across requests or tests",
+    "F8: Flags repository.ts's computeNextRunAt/claimDueSchedules embedding timezone-aware scheduling and failure-threshold business rules in the infrastructure layer, and its query methods returning raw Drizzle rows outward with no row->entity/DTO mapping",
+    "F9 (precision check): Does not raise a layering complaint about github-client.ts itself — it is a correctly scoped, single-responsibility infrastructure adapter"
+  ]
+}

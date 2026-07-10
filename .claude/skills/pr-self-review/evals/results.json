@@ -1,0 +1,70 @@
+{
+  "skill_name": "pr-self-review",
+  "trials_per_eval": 5,
+  "run_date": "2026-07-05",
+  "evals": [
+    {
+      "id": 0,
+      "name": "critical-and-warning-mix",
+      "expectations": [
+        {"id": "F1", "text": "Flags the SQL injection in routes.ts's search handler as CRITICAL/security", "passed": 5, "failed": 0, "pass_rate": 1.0,
+         "diagnosis": "PASS", "diagnosis_reason": "All 5 trials named the sql.raw() string interpolation as a CRITICAL, security-category injection finding, citing the exact lines.", "failure_example": ""},
+        {"id": "F2", "text": "Flags service.ts's per-row author lookup as WARNING (N+1), not CRITICAL", "passed": 5, "failed": 0, "pass_rate": 1.0,
+         "diagnosis": "PASS", "diagnosis_reason": "All 5 trials tagged the loop as WARNING/perf, matching severity.md's own N+1 example.", "failure_example": ""},
+        {"id": "F3", "text": "Raises no finding against mapper.ts", "passed": 5, "failed": 0, "pass_rate": 1.0,
+         "diagnosis": "PASS", "diagnosis_reason": "Every trial explicitly stated mapper.ts had no findings, matching the clean-file control.", "failure_example": ""},
+        {"id": "F4", "text": "Final verdict is BLOCKED with critical count >= 1", "passed": 5, "failed": 0, "pass_rate": 1.0,
+         "diagnosis": "PASS", "diagnosis_reason": "All 5 trials returned BLOCKED. All 5 additionally (and correctly) flagged a second CRITICAL: the same search handler also bypasses the service/repository layer by calling app.container.db directly from the route (an onion-architecture 'presentation touching infrastructure' violation), which is a legitimate second angle on the same line, not a fixture defect.", "failure_example": ""},
+        {"id": "F5", "text": "Critical count in the rollup line matches the number of CRITICAL findings listed", "passed": 5, "failed": 0, "pass_rate": 1.0,
+         "diagnosis": "PASS", "diagnosis_reason": "All 5 trials' rollup lines (e.g. '5 findings · 2 critical · 2 warning · 1 suggestion') were internally consistent with their findings list.", "failure_example": ""}
+      ]
+    },
+    {
+      "id": 1,
+      "name": "authz-precision-trap",
+      "expectations": [
+        {"id": "F1", "text": "Flags the DELETE /notifications/:notificationId handler as CRITICAL for missing workspace ownership check", "passed": 5, "failed": 0, "pass_rate": 1.0,
+         "diagnosis": "PASS", "diagnosis_reason": "All 5 trials identified the IDOR/broken-access-control gap, quoted the route's own rationalizing comment, and named the concrete fix (scope by workspaceId).", "failure_example": ""},
+        {"id": "F2", "text": "Does not raise a CRITICAL or WARNING finding against service.ts", "passed": 2, "failed": 3, "pass_rate": 0.4,
+         "diagnosis": "FIXTURE_ISSUE (fixed)", "diagnosis_reason": "The fixture's service.ts constructed `new NotificationsRepository(container.db)` inline in its constructor -- the exact same DI-bypass pattern deliberately seeded as a WARNING in eval 0's service.ts. 3/5 trials (correctly, per backend-onion-architecture's DI/composition-root rule) flagged this as a WARNING on service.ts, which the eval's own notes wrongly described as fully clean. This was a fixture-authoring mistake, not a skill gap. FIXED: service.ts now resolves the repository via a `container.notificationsRepo` getter (matching the real Container class's `get reviewRepo()`/`get agentsRepo()` composition-root convention) instead of constructing it with `new` in the constructor. Spot-check (2 independent re-run trials, general-purpose subagents): 2/2 raised no CRITICAL/WARNING against service.ts.", "failure_example": "af8752b7143cadfe9: '🟡 Service bypasses the composition root — repository constructed with `new` instead of injected (warning, bug) — server/src/modules/notifications/service.ts:8-10'"},
+        {"id": "F3", "text": "Does not raise a CRITICAL or WARNING finding against notifications.ts (the client hook); a defensible secondary SUGGESTION is acceptable", "passed": 4, "failed": 1, "pass_rate": 0.8,
+         "diagnosis": "FIXTURE_ISSUE (fixed)", "diagnosis_reason": "1/5 trials added a SUGGESTION noting the hook's `workspaceId` param is now misleading given the backend's unscoped delete -- a reasonable secondary observation tied to the real CRITICAL, not a fabricated defect. The expectation's 'no finding at all' wording was stricter than warranted. FIXED: evals.json's F3 now explicitly tolerates a defensible secondary SUGGESTION as long as no CRITICAL/WARNING is raised against the hook. Spot-check (2 independent re-run trials): both produced exactly a SUGGESTION-level, non-blocking note on the hook, satisfying the reworded expectation.", "failure_example": "a8818f770acf49aa1: '🔵 useDeleteNotification hook signature implies workspace-scoped deletion it doesn't perform (suggestion, style) — client/src/lib/hooks/notifications.ts:30-38'"},
+        {"id": "F4", "text": "Does not describe the GET or POST/read routes as missing authorization", "passed": 5, "failed": 0, "pass_rate": 1.0,
+         "diagnosis": "PASS", "diagnosis_reason": "All 5 trials singled out only the DELETE route and explicitly contrasted it with the correctly-scoped GET/POST siblings.", "failure_example": ""},
+        {"id": "F5", "text": "Verdict is BLOCKED and both a backend and a frontend skill are invoked/mentioned given the cross-cutting diff", "passed": 5, "failed": 0, "pass_rate": 1.0,
+         "diagnosis": "PASS", "diagnosis_reason": "All 5 trials explicitly listed routing to backend-onion-architecture/fastify-best-practices/security AND ui-frontend-architecture/react-best-practices/next-best-practices, and returned BLOCKED.", "failure_example": ""}
+      ]
+    },
+    {
+      "id": 2,
+      "name": "test-only-diff",
+      "expectations": [
+        {"id": "F1", "text": "Flags service.test.ts's markRead test for its weak/incomplete assertion", "passed": 5, "failed": 0, "pass_rate": 1.0,
+         "diagnosis": "PASS", "diagnosis_reason": "All 5 trials flagged the `expect(result).toBeTruthy()`-only assertion as a real test gap.", "failure_example": ""},
+        {"id": "F2", "text": "Flags notifications.test.tsx's premature assertion (no waitFor/act around query settling)", "passed": 5, "failed": 0, "pass_rate": 1.0,
+         "diagnosis": "PASS", "diagnosis_reason": "All 5 trials identified the missing waitFor/findBy and explained the query was still 'pending' at assertion time.", "failure_example": ""},
+        {"id": "F3", "text": "Both test-gap findings are tagged WARNING or SUGGESTION, never CRITICAL", "passed": 5, "failed": 0, "pass_rate": 1.0,
+         "diagnosis": "PASS", "diagnosis_reason": "Every trial produced 0 CRITICAL findings across both files; the two core findings were WARNING in all 5 trials.", "failure_example": ""},
+        {"id": "F4", "text": "Final verdict is PASS (critical count 0), noting the change should not be blocked", "passed": 5, "failed": 0, "pass_rate": 1.0,
+         "diagnosis": "PASS", "diagnosis_reason": "All 5 trials explicitly returned PASS and stated the WARNING/SUGGESTION findings don't trip the gate.", "failure_example": ""},
+        {"id": "F5", "text": "Does not raise ui-frontend-architecture/next-best-practices findings against the client test file beyond test-quality concerns; a non-blocking backend-onion-architecture-flavored WARNING/SUGGESTION on the server test file's DI seam is acceptable as long as verdict stays PASS", "passed": 1, "failed": 4, "pass_rate": 0.2,
+         "diagnosis": "FIXTURE_ISSUE (fixed)", "diagnosis_reason": "The fixture's test double pattern (`as never` cast + `// @ts-expect-error` private-field poke to swap in a fake repo) is precisely the kind of DI/composition-root deviation backend-onion-architecture's own dependency-injection reference calls out (ContainerOverrides is the sanctioned seam). 4/5 trials correctly cited that skill for a WARNING/SUGGESTION-level style nit on the test file. This was legitimate, non-blocking, on-topic routing behavior -- the original expectation wrongly assumed backend-onion-architecture would have nothing to say about a test file just because no production layering changed. FIXED: evals.json's F5 reworded to tolerate an on-topic, non-blocking WARNING/SUGGESTION on the server test file. Spot-check (2 independent re-run trials): both raised a non-blocking WARNING/SUGGESTION on the DI seam in service.test.ts, no CRITICAL, verdict PASS both times.", "failure_example": "a061e58c443ee0a41: '🟡 Test double bypasses the project's DI mock-injection pattern (warning, style) — backend-onion-architecture documents the sanctioned way to swap in test doubles: pass ContainerOverrides through the composition root...'"}
+      ]
+    }
+  ],
+  "summary": {
+    "total_expectations": 15,
+    "overall_pass_rate": 0.893,
+    "skill_gaps": [],
+    "fixture_issues": [
+      "eval1/F2 (fixed) - case1 service.ts unintentionally reused the DI-construction-in-constructor smell from eval0; fixture now resolves the repo via a container getter. Spot-check 2/2 passed.",
+      "eval1/F3 (fixed) - expectation too strict about zero findings on the client hook; reworded to allow a defensible secondary SUGGESTION. Spot-check 2/2 passed.",
+      "eval2/F5 (fixed) - expectation wrongly assumed backend-onion-architecture has nothing to say about a test-only diff; reworded to allow an on-topic, non-blocking WARNING/SUGGESTION on the DI-bypass test-double pattern. Spot-check 2/2 passed."
+    ],
+    "spot_check_2026_07_06": {
+      "method": "2 independent general-purpose subagents per affected eval case, re-run against corrected fixtures/expectations (not a full 5-trial rerun)",
+      "authz_precision_trap": "2/2 trials: service.ts (container getter) drew no CRITICAL/WARNING; client hook drew only a non-blocking SUGGESTION; all other expectations (F1, F4, F5) held. Result: PASS both trials.",
+      "test_only_diff": "2/2 trials: server test file's DI test-double poke drew a non-blocking WARNING/SUGGESTION from backend-onion-architecture (no CRITICAL); verdict stayed PASS both times; all other expectations (F1-F4) held. Result: PASS both trials."
+    }
+  }
+}

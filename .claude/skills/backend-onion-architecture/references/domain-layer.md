@@ -78,6 +78,13 @@ tests) never touch a database.
 
 - Importing the DB client or Drizzle schema into a domain file (see BAD example #2 in
   [examples.md](../examples.md)).
+- **Defining a domain entity/type as an alias of a Drizzle row** — `InferSelectModel<typeof table>`
+  or `typeof table.$inferSelect` — *even as a `import type`*. This is the quietest form of the same
+  leak: the DB shape becomes the domain shape, so a column rename or a `NOT NULL` change silently
+  rewrites your domain type, and nothing ever maps rows to a stable entity. The `import type` is
+  erased at compile time so `depcruise` may not flag it — but the coupling is real. Declare a
+  standalone domain type (plain `interface`/`class`, no `db/schema` import) and let the repository
+  `toDomain()`-map onto it. See BAD example #2 in [examples.md](../examples.md).
 - A `*ValidationService` that holds rules an entity should own (anemic domain).
 - A value object whose constructor accepts already-invalid state and is "validated later".
 - Putting a Zod schema on a domain type — that couples the core to a boundary library.

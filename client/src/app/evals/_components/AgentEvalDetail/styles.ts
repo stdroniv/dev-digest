@@ -1,0 +1,48 @@
+import type { CSSProperties } from "react";
+
+/** Co-located styles for AgentEvalDetail. */
+export const s = {
+  page: { padding: "24px 32px 44px", display: "flex", flexDirection: "column", gap: 24 } satisfies CSSProperties,
+  header: { display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 16 } satisfies CSSProperties,
+  headerLeft: { display: "flex", flexDirection: "column", gap: 4 } satisfies CSSProperties,
+  backRow: { display: "flex", alignItems: "center", gap: 8 } satisfies CSSProperties,
+  h1: { fontSize: 20, fontWeight: 700 } satisfies CSSProperties,
+  subtitle: { fontSize: 13.5, color: "var(--text-secondary)" } satisfies CSSProperties,
+  headerActions: { display: "flex", alignItems: "center", gap: 10 } satisfies CSSProperties,
+  alertBanner: {
+    display: "flex",
+    alignItems: "center",
+    gap: 10,
+    padding: "10px 14px",
+    borderRadius: 8,
+    border: "1px solid var(--warn)",
+    background: "var(--warn-bg, rgba(245,158,11,0.08))",
+    color: "var(--warn)",
+    fontSize: 13,
+    fontWeight: 600,
+  } satisfies CSSProperties,
+  metricsGrid: { display: "flex", gap: 12 } satisfies CSSProperties,
+  trendSection: { display: "flex", flexDirection: "column", gap: 10 } satisfies CSSProperties,
+  sectionHeading: { fontSize: 15, fontWeight: 700 } satisfies CSSProperties,
+  legend: { display: "flex", gap: 16, fontSize: 12, color: "var(--text-secondary)" } satisfies CSSProperties,
+  legendItem: { display: "flex", alignItems: "center", gap: 6 } satisfies CSSProperties,
+  legendDot: { width: 8, height: 8, borderRadius: 99, display: "inline-block" } satisfies CSSProperties,
+  runsHeader: { display: "flex", alignItems: "center", gap: 12 } satisfies CSSProperties,
+  table: { width: "100%", borderCollapse: "collapse" } satisfies CSSProperties,
+  th: {
+    textAlign: "left",
+    fontSize: 11.5,
+    fontWeight: 700,
+    color: "var(--text-muted)",
+    letterSpacing: "0.04em",
+    textTransform: "uppercase",
+    padding: "6px 10px",
+    borderBottom: "1px solid var(--border)",
+  } satisfies CSSProperties,
+  td: {
+    padding: "10px 10px",
+    fontSize: 13,
+    borderBottom: "1px solid var(--border)",
+    verticalAlign: "middle",
+  } satisfies CSSProperties,
+} as const;

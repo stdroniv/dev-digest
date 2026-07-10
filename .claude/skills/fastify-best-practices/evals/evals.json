@@ -1,0 +1,62 @@
+{
+  "skill_name": "fastify-best-practices",
+  "notes": [
+    "files/pr-comments/*.ts, files/digest-exports/*.ts and files/live-notifications/*.ts are synthetic fixtures written to look like plausible DevDigest server modules, but they intentionally seed Fastify anti-patterns for grading. They are not real product code and are not wired into any package.json/tsconfig - do not 'fix' them in place; they exist to be reviewed.",
+    "files/digest-exports/routes.ts is the precision-trap fixture: its first route (GET /workspaces/:workspaceId/digest-exports/:exportId) is intentionally clean (schema'd params+response, correct reply.notFound() early-return) so a reviewer must flag the surrounding violations in the other two routes without also flagging the clean one.",
+    "files/live-notifications/*.ts is the uncommon-scenario fixture: fastify-plugin (fp) is used to de-scope an entire feature's routes onto the root instance rather than to share a narrow decorator, an onRequest hook wraps all logic in try/catch and swallows every error silently, and the websocket route never clears its per-connection setInterval or handles 'close'/'error', leaking a timer per disconnected client.",
+    "expectations are graded by the orchestrating agent reading each of the 5 trial transcripts per eval case, not by an automated string match."
+  ],
+  "evals": [
+    {
+      "id": 0,
+      "name": "pr-comments-hang-and-unvalidated-body",
+      "prompt": "We're about to merge server/src/modules/pr-comments/ (routes.ts, service.ts) into the API. Review the Fastify route code for correctness and best-practice issues before it lands - call out anything that could hang a request, crash the process, or bypass our schema-validation conventions, and say what to change.",
+      "expected_output": "A review that identifies each issue below with enough specificity to fix it (which handler, which line/branch, why it's wrong), and does not get distracted by unrelated nitpicks.",
+      "files": [
+        "evals/files/pr-comments/routes.ts",
+        "evals/files/pr-comments/service.ts"
+      ],
+      "expectations": [
+        "F1: Flags the resolve handler reading the body via `JSON.parse((req.body as Buffer)...)` with no route `schema` at all, bypassing Fastify's built-in validation/parsing instead of declaring a body schema",
+        "F2: Flags the resolve handler's 404 branch (`reply.code(404).send(...)` with no `return`) as missing a `return` to stop processing, so execution falls through to `comment.status` on a possibly-null `comment`",
+        "F3: Flags the same missing-return issue as capable of causing a double-send / 'reply already sent' error, or an unhandled crash from accessing a property on the null `comment`",
+        "F4: Flags the 'already-resolved' branch that returns without calling `reply.send()`/returning a value the framework will serialize, i.e. a handler path that never sends a response and can hang the request",
+        "F5: Flags the reindex-context handler's use of `setImmediate` with a synchronous `throw` inside it as escaping Fastify's request/error lifecycle - the thrown error cannot be caught by Fastify's error handling and will surface as an unhandled exception rather than a proper error response"
+      ]
+    },
+    {
+      "id": 1,
+      "name": "digest-exports-precision-trap",
+      "prompt": "We're about to merge server/src/modules/digest-exports/ (routes.ts, service.ts) into the API. Review it for Fastify best-practice violations before it lands - point out schema/validation gaps, error-handling problems, and anything that breaks our request lifecycle conventions. Also call out any route that's already correct so we don't churn it needlessly.",
+      "expected_output": "A review that identifies each violation below, explains why it's wrong per Fastify conventions, and explicitly does NOT flag the GET /:exportId route, which is correctly schema'd and handled.",
+      "files": [
+        "evals/files/digest-exports/routes.ts",
+        "evals/files/digest-exports/service.ts"
+      ],
+      "expectations": [
+        "F1: Flags the `requireWorkspaceAccess` preHandler sending a 403 (`reply.code(403).send(...)`) without a `return`, so the handler keeps running for an unauthorized/forbidden caller",
+        "F2: Flags the POST /digest-exports route for having no `schema.body` at all, casting `req.body as CreateExportBody` with no runtime validation",
+        "F3: Flags the POST route's catch block returning the raw `error.message` and `error.stack` to the client unconditionally, leaking internal error details regardless of environment",
+        "F4: Flags the GET (list) /digest-exports route for having no response schema, missing out on fast-json-stringify serialization (or otherwise notes the missing response schema as a validation/consistency gap)",
+        "F5 (precision check): Does not raise a correctness complaint about the GET /:exportId route - it already has params+response schemas and correctly uses `reply.notFound()` with an early return"
+      ]
+    },
+    {
+      "id": 2,
+      "name": "live-notifications-encapsulation-and-cleanup",
+      "prompt": "We're about to merge server/src/modules/live-notifications/ (plugin.ts, routes.ts) - a WebSocket feed for workspace digest-run status. Review it for Fastify architectural and lifecycle issues: plugin encapsulation, hook behavior, and websocket connection handling. Call out anything uncommon or easy to miss, not just the obvious stuff.",
+      "expected_output": "A review that identifies each issue below and explains the concrete risk (leaked encapsulation, silently swallowed errors, leaked resources on disconnect).",
+      "files": [
+        "evals/files/live-notifications/plugin.ts",
+        "evals/files/live-notifications/routes.ts"
+      ],
+      "expectations": [
+        "F1: Flags the plugin's comment/rationale for wrapping it in `fp()`/fastify-plugin as a misleading or factually incorrect explanation of what `fp()` does - it does NOT need to flag the `fp()` wrap itself as broken or as encapsulation-breaking, because the nested `fastify.register(liveNotificationsRoutes, {...})` call re-establishes its own encapsulation boundary regardless of the outer `fp()` wrap, so the pattern is mechanically sound even though the comment describing it is wrong",
+        "F2: Flags the `onRequest` hook's try/catch as silently swallowing every error (including real, unexpected ones) with no rethrow and no error-level log, so failures never propagate and never surface to the caller or to error tracking",
+        "F3: Flags the websocket handler's `setInterval` for the heartbeat as never cleared - there is no `socket.on('close', ...)` (or 'error') handler calling `clearInterval`, so each disconnected client leaks a running timer",
+        "F4: Flags the complete absence of `close`/`error` listeners on the websocket connection as missing cleanup for a long-lived connection (contrast with the heartbeat/graceful-shutdown patterns that track and clear per-connection state)",
+        "F5: Flags `JSON.parse(raw.toString())` in the `message` handler as unguarded - a malformed client message will throw synchronously inside the websocket message callback instead of being caught and turned into a structured error reply"
+      ]
+    }
+  ]
+}

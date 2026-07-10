@@ -3,9 +3,9 @@ name: ship-feature
 description: "Run the full DevDigest feature-delivery pipeline end-to-end by orchestrating the project's subagents. Use whenever the user invokes `/ship-feature`, or asks to 'ship a feature', 'build this end to end', 'run the full agent pipeline', 'take this from spec to merge-ready', or hands over a sizable feature request they want implemented with spec + planning + tests + review (not just a quick edit). It sequences researcher → spec-creator (spec approval gate) → implementation-plan → spec-conformance (plan⊨spec check) → [plan approval] → implementer(s) → test-writer, then runs architecture-reviewer + security-reviewer + plan-verifier in parallel, loops blocking findings back to the implementer until the change is clean, and optionally finishes with doc-writer. Use it even when the user just describes a substantial feature and wants it done 'properly' — orchestrating the agents in the right order, in parallel where safe, with the approval gates and the review loop, is the whole value. For a one-line quick fix a single agent is enough; this is for multi-step features worth the full pipeline."
 allowed-tools: Task, Read, Grep, Glob, Bash
 metadata:
-  version: 1.4.0
+  version: 1.4.1
   tags: pipeline, orchestration, subagents, feature-delivery, spec-creator, implementation-plan, spec-conformance, implementer, reviewers, definition-of-done
-  updated: 2026-07-01
+  updated: 2026-07-11
 ---
 
 # Ship Feature — pipeline orchestrator
@@ -306,7 +306,16 @@ turns and *zero wasted runs*. The rules that matter most:
 - **Split a big implementation by layer** when it spans **>1 package**, **~15+ files**, or
   an expected **~150+ turns** — the file/turn threshold applies *within* a single package
   too (split a big client-only build by sub-layer: foundation → components → wiring). Keep a
-  single run below that threshold. In multi-agent mode this is Step 5's fan-out.
+  single run below that threshold. In multi-agent mode this is Step 5's fan-out. **Phases
+  sharing a wire-contract *file* are not an exception:** thread that hook/route/type
+  signature forward and split anyway — a real run kept one 337-turn / ~$54 implementer as a
+  single agent *just because* its phases shared a hooks file, when threading the contract
+  would have been far cheaper.
+- **Tier exploration cheaply — never let it inherit your model.** Spawn the tiered
+  `researcher` (Sonnet), not the built-in `Explore`/`claude` subagent, which runs at *your*
+  tier: exploring while on Opus makes Opus explorers (a real run paid ~$9 for three broad
+  sweeps Sonnet/Haiku would have done for ~$1–2). Pass an explicit `model: haiku` for a
+  reasoning-light sweep.
 - **Sequence the two clarify gates so the user is never asked the same thing twice** —
   the spec settles WHAT (Step 2), the plan asks only HOW (Step 3). Resolve any
   `implementation-plan` question the spec already answers from the spec, not the user.

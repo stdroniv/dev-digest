@@ -1,0 +1,33 @@
+{
+  "eval_id": 0,
+  "eval_name": "webhooks-module-architecture-review",
+  "prompt": "We're about to merge server/src/modules/webhooks/ (repository.ts, service.ts, routes.ts). Review it for backend architecture issues before it lands — point out anything that violates our onion/clean architecture conventions and say specifically where the code should actually live instead.",
+  "seeded_findings": [
+    {
+      "id": "F1",
+      "description": "routes.ts (presentation layer) imports drizzle-orm and the db schema directly and runs SELECT/INSERT queries against webhook_endpoints, bypassing WebhooksRepository entirely.",
+      "location": "routes.ts, POST /workspaces/:workspaceId/webhooks handler"
+    },
+    {
+      "id": "F2",
+      "description": "The duplicate-endpoint-URL check ('existing.some(e => e.url === url)') is business/validation logic living in the route handler instead of a service/use-case.",
+      "location": "routes.ts, POST /workspaces/:workspaceId/webhooks handler"
+    },
+    {
+      "id": "F3",
+      "description": "WebhooksRepository.claimDueRetries embeds a domain rule (exponential backoff calculation, MAX_ATTEMPTS cutoff) inside the repository/infrastructure layer instead of a domain/application rule the repository merely persists.",
+      "location": "repository.ts, claimDueRetries()"
+    },
+    {
+      "id": "F4",
+      "description": "Repository methods (listEndpoints, recordDelivery, claimDueRetries) return raw Drizzle rows straight out of the infrastructure layer with no row->entity/DTO mapping, so Drizzle's shape leaks into the service and route layers.",
+      "location": "repository.ts, all public methods"
+    },
+    {
+      "id": "F5",
+      "description": "service.ts constructs a concrete 'new OpenAI(...)' client directly at module scope instead of obtaining an LLM provider through the DI container/port (container.llm(...)), bypassing the composition root.",
+      "location": "service.ts, top-level `const openai = new OpenAI(...)` and summarize()"
+    }
+  ],
+  "assertions": []
+}

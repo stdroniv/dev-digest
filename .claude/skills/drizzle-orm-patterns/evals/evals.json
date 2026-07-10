@@ -1,0 +1,58 @@
+{
+  "skill_name": "drizzle-orm-patterns",
+  "notes": [
+    "files/digest-runs, files/invites, and files/comment-threads are synthetic fixtures written to look like plausible DevDigest modules, but they intentionally seed Drizzle ORM anti-patterns for grading. They are not real product code and are not wired into any package.json/tsconfig — do not 'fix' them in place; they exist to be reviewed.",
+    "files/digest-runs/*.ts is the clear-cut fixture: an N+1 query loop that should use a relational `with` query, and a two-step write (mark run complete, then insert a notification) that is not wrapped in a transaction, so a failure on the second step leaves the run marked completed with no notification.",
+    "files/invites/*.ts is the harder fixture: it mixes 4 subtle violations (unchunked 5,000-row batch insert, `.returning()` called on a MySQL insert which MySQL does not support, a member-listing query that forgets to filter out soft-deleted rows, and a foreign-key `.references()` call that passes the table binding directly instead of an arrow function) with 2 correctly-written pieces (`getInvitesPage`'s limit/offset pagination and `revokeInvite`'s use of `db.transaction` for its two related writes) that must NOT be flagged — a precision/false-positive trap.",
+    "files/comment-threads/* is the uncommon-scenario fixture: a self-referencing adjacency-list `comments` table missing the `(): AnyPgColumn =>` return-type annotation the skill's own self-referential example uses, a raw SQL migration that adds a NOT NULL column with no default to a comment on a table noted as ~42M rows in production (unsafe to run online), and a `users.email` unique index that doesn't account for soft-deleted rows, so a genuinely new signup with a previously-deleted user's email would collide with the unique constraint."
+  ],
+  "evals": [
+    {
+      "id": 0,
+      "prompt": "We're about to merge the digest-runs module (evals/files/digest-runs/schema.ts and service.ts). Review the Drizzle usage for correctness and performance issues before it lands — point out anything that violates Drizzle ORM best practices and say specifically what to change.",
+      "expected_output": "A review that flags listRunsWithFindings' per-row query loop as an N+1 pattern and recommends a `db.query.digestRuns.findMany({ with: { findings: true } })` relational query instead (which requires defining relations() between digestRuns and digestFindings), and flags completeRun's two sequential writes (update digestRuns, then insert digestNotifications) as a multi-step operation that must succeed together but isn't wrapped in `db.transaction()`, risking a completed run with no notification if the insert fails.",
+      "files": [
+        "evals/files/digest-runs/schema.ts",
+        "evals/files/digest-runs/service.ts"
+      ],
+      "expectations": [
+        "F1: Flags listRunsWithFindings' per-run loop (querying digestFindings once per run inside a for-loop) as an N+1 query pattern",
+        "F2: Recommends replacing the loop with a relational `db.query...findMany({ with: { findings: true } })` query (and notes relations() must be defined between digestRuns and digestFindings for this to work, since schema.ts currently has none)",
+        "F3: Flags completeRun's update-then-insert (marking the run completed, then inserting the notification) as two dependent writes that are not wrapped in a `db.transaction()`, so a failure on the insert leaves the run marked completed with no notification row"
+      ]
+    },
+    {
+      "id": 1,
+      "prompt": "We're about to merge the invites module for our MySQL self-hosted deployment (evals/files/invites/schema.ts and service.ts). Review the Drizzle usage for correctness issues before it lands — point out anything that's wrong or risky, and call out anything that's already correct so we don't churn it needlessly.",
+      "expected_output": "A review that flags createInvitesBatch's unchunked bulk insert, its use of `.returning()` on a MySQL insert (MySQL/mysql2 does not support `.returning()`), listActiveMembers' missing soft-delete filter, and the invitedBy foreign key's `.references(users.id)` call (should be `.references(() => users.id)`) — and does NOT flag getInvitesPage's pagination or revokeInvite's transaction, which are both correctly written.",
+      "files": [
+        "evals/files/invites/schema.ts",
+        "evals/files/invites/service.ts"
+      ],
+      "expectations": [
+        "F1: Flags createInvitesBatch inserting the full emails array (up to 5,000 rows per the docstring) in a single `.values(rows)` call with no chunking, per the 'chunk large batch inserts' guidance",
+        "F2: Flags createInvitesBatch's `.returning()` on the MySQL `invites` insert as unsupported/incorrect for the MySQL dialect",
+        "F3: Flags listActiveMembers querying `users` by workspaceId only, with no `isNull(users.deletedAt)` filter, so soft-deleted members leak into the settings page's member table",
+        "F4: Flags invites.invitedBy's `references(users.id)` in schema.ts as passing the table binding directly instead of the required arrow function `() => users.id`, risking circular-dependency issues",
+        "F5 (precision check): Does not raise a correctness complaint about getInvitesPage's limit/offset pagination — it is correctly written",
+        "F6 (precision check): Does not raise a correctness complaint about revokeInvite's use of db.transaction wrapping its update + audit-log insert — it is correctly written"
+      ]
+    },
+    {
+      "id": 2,
+      "prompt": "We're about to merge the comment-threads module: a self-referencing comments schema (evals/files/comment-threads/schema.ts), its repository (evals/files/comment-threads/repository.ts), and a pending migration (evals/files/comment-threads/migrations/0007_add_moderation_status.sql). Review all three for Drizzle-specific issues before this lands.",
+      "expected_output": "A review that flags comments.parentId's self-reference for missing the `(): AnyPgColumn =>` return-type annotation the skill's own self-referential pattern requires, flags the migration for adding a NOT NULL column with no DEFAULT to a table noted as ~42M rows (unsafe to run online — will fail or lock on existing rows), and flags users.email's unique index for not accounting for soft-deleted rows, which will collide when a new signup reuses a previously-deleted user's email.",
+      "files": [
+        "evals/files/comment-threads/schema.ts",
+        "evals/files/comment-threads/repository.ts",
+        "evals/files/comment-threads/migrations/0007_add_moderation_status.sql"
+      ],
+      "expectations": [
+        "F1: Flags comments.parentId's self-referencing `.references(() => comments.id)` for missing the explicit `(): AnyPgColumn =>` return type needed for a self-referential FK (per the skill's own self-referential relation pattern)",
+        "F2: Flags migration 0007's `ALTER TABLE comments ADD COLUMN moderation_status TEXT NOT NULL` (no DEFAULT) as unsafe to run online against a table noted as ~42M rows, and recommends adding it nullable/with a default (or backfilling) instead",
+        "F3: Flags users_email_idx (unique index on users.email) for not excluding soft-deleted rows, so a new signup reusing a previously soft-deleted user's email would violate the unique constraint",
+        "F4 (precision check): Does not raise a complaint about listActiveUsers' use of `isNull(t.users.deletedAt)` — it is the correct soft-delete filtering pattern"
+      ]
+    }
+  ]
+}

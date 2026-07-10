@@ -30,6 +30,44 @@ await db
   .where(eq(users.id, id));
 ```
 
+### Soft Delete + Unique Constraints
+
+A plain `.unique()` column or `uniqueIndex()` on a table that also supports soft
+delete has a hidden bug: the constraint applies across *all* rows, including
+soft-deleted ones. If `email` is unique and a user is soft-deleted (their row
+kept for history), no genuinely new person can ever sign up with that same
+email — the insert collides with the deleted row's constraint, even though
+that row is no longer "active." The same trap applies to any unique column on
+a soft-deletable table (usernames, slugs, external IDs, etc.).
+
+The fix is a **partial (conditional) unique index** scoped to only the
+non-deleted rows, so the constraint stops applying once a row is soft-deleted:
+
+```typescript
+import { pgTable, serial, text, timestamp, uniqueIndex } from 'drizzle-orm/pg-core';
+import { sql } from 'drizzle-orm';
+
+export const users = pgTable('users', {
+  id: serial('id').primaryKey(),
+  email: text('email').notNull(),
+  deletedAt: timestamp('deleted_at'),
+}, (table) => [
+  // Unique only among active (non-deleted) rows — a soft-deleted user's
+  // email frees up for reuse by a new signup.
+  uniqueIndex('users_email_idx')
+    .on(table.email)
+    .where(sql`${table.deletedAt} IS NULL`),
+]);
+```
+
+This is different from the reactivate-or-create race condition (select, then
+insert-or-update on conflict): that pattern handles the *same* person coming
+back. A partial unique index handles the *different* person case — someone
+new who happens to want an email a departed user still holds. Reach for both
+together whenever a soft-deletable table has a unique column: `onConflictDoUpdate`
+for "is this the same entity returning," and a partial unique index for "should
+the constraint even apply to deleted rows at all."
+
 ## Upsert (Update or Insert)
 
 ```typescript

@@ -117,7 +117,11 @@ How would you like this plan executed?
   a lean, ordered sequence optimised for a single context.
 
 Recommendation: <multi-agent for anything non-trivial; single-agent for small or
-tightly-coupled work — state which and why for this feature>
+tightly-coupled work — state which and why for this feature. Phases that merely *share a
+wire-contract file* (a hooks / contracts / routes module) are still splittable: recommend
+multi-agent and thread that contract between agents rather than defaulting to one long
+single-agent context — reserve single-agent for genuinely one-context work (see root
+`CLAUDE.md` cost discipline).>
 
 ## Recommendations (optional)
 - Rec: <cleaner/safer/cheaper way to meet the same goal — suggestion only, not a
@@ -131,8 +135,10 @@ tightly-coupled work — state which and why for this feature>
 With answers in hand, load only what the requirements touch. Use the routing table
 below to decide what to read. Use `Grep`/`Glob` to locate specific symbols, routes,
 or schema before reading — read only the relevant ranges. For heavy or open-ended
-discovery, delegate to the `researcher` or `Explore` subagent so raw exploration
-stays out of your context and only the conclusion comes back.
+discovery, delegate to the **`researcher`** subagent (Sonnet-tiered) so raw exploration
+stays out of your context and only the conclusion comes back. Prefer `researcher` over the
+built-in `Explore`, which inherits *this* agent's Opus tier — an Opus explorer for a broad
+file sweep is wasteful (see root `CLAUDE.md` cost discipline).
 
 ### Step 3 — Write the plan (incrementally)
 
@@ -159,6 +165,29 @@ kind of rework):
 - **Unavailable / not-ready precondition** — a distinct state from "empty", not an error.
 Draw these from the spec's own edge-case and failure ACs; if the spec is silent on one
 that clearly applies, raise it as a HOW-level clarifying question rather than guessing.
+
+**Design-fidelity completeness (when the spec references a design/mockup).** A plan that
+points at "the design" without pinning specifics is how a build silently drifts from it —
+a row-list becomes a card-grid, colored metrics render gray, a `0.04` delta renders
+`4.00`, an empty screen never gets the data that makes it match the mock. For every screen
+the spec puts in scope:
+- **Anchor by a stable id, never an ordinal.** Reference the exact screen — its artboard
+  id / route / a quoted heading — not "design 2"; ordinal labels desync from the artifact
+  the moment it is re-ordered or re-exported.
+- **Make the visual contract measurable in the task's Acceptance.** Name the layout
+  structure (list vs grid), the exact copy strings, the colour token per element
+  (`--accent`/`--ok`/`--warn`, …), the number/delta formatting, and each empty / loading /
+  error state — so "renders the dashboard" becomes "renders one row per agent (not a
+  grid), metrics tinted accent/ok/warn, delta as a 2-dp fraction, per the `eval-dashboard`
+  screen".
+- **Extract tokens and copy once.** Pull the design's exact colour tokens and user-facing
+  strings into the plan (or an early task) so implementers don't invent them.
+- **Plan the demo data the design implies.** If the design's populated state needs data
+  the system won't have on a fresh install (run history for a trend, a regression for an
+  alert), add a seed/fixture task — otherwise the built screen can never match the design,
+  and empty-state defects (e.g. a single-point chart dividing by zero) hide until first use.
+Draw these from the spec's **Screens & states** section; if the spec is silent on a screen
+the design clearly shows, raise it as a HOW-level clarifying question rather than guessing.
 
 ## Project map — what exists (load only what is relevant)
 
@@ -285,6 +314,9 @@ to a task. Every task below should serve at least one requirement listed here.>
 - [ ] Failure & edge states are covered by owning tasks — first-ever vs. prior-artifact
       failure, partial/one-of-N failure isolation, preserve-prior-on-retry, in-progress +
       navigate-away, and unavailable-precondition (see Step 3's completeness checklist)
+- [ ] (design referenced) Every in-scope screen is anchored by a stable id with a
+      measurable visual contract (layout / copy / colour tokens / states), and demo data
+      the design implies has an owning seed/fixture task
 ```
 
 ## When you cannot produce a plan

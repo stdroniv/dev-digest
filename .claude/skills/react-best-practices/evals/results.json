@@ -1,0 +1,186 @@
+{
+  "skill_name": "react-best-practices",
+  "trials_per_eval": 5,
+  "run_date": "2026-07-05",
+  "evals": [
+    {
+      "id": 0,
+      "name": "findings-panel",
+      "expectations": [
+        {
+          "id": "F1",
+          "text": "Flags sortedFindings derived-state-via-useEffect anti-pattern",
+          "passed": 5,
+          "failed": 0,
+          "pass_rate": 1.0,
+          "diagnosis": "PASS",
+          "diagnosis_reason": "All 5 trials identified this as the CRITICAL 'Derive, Don't Store' violation and gave the useMemo/inline-compute fix.",
+          "failure_example": ""
+        },
+        {
+          "id": "F2",
+          "text": "Flags analytics useEffect stale-closure / incorrect dependency array (sortOrder read but not declared)",
+          "passed": 5,
+          "failed": 0,
+          "pass_rate": 1.0,
+          "diagnosis": "PASS",
+          "diagnosis_reason": "All 5 trials caught the deps-array/comment mismatch and the stale-sortOrder read.",
+          "failure_example": ""
+        },
+        {
+          "id": "F3",
+          "text": "Flags index-as-key on the reorderable findings list",
+          "passed": 5,
+          "failed": 0,
+          "pass_rate": 1.0,
+          "diagnosis": "PASS",
+          "diagnosis_reason": "All 5 trials flagged key={index} as CRITICAL given the list is user-sortable, and recommended finding.id.",
+          "failure_example": ""
+        },
+        {
+          "id": "F4",
+          "text": "Flags renderSortSummary as a render-factory anti-pattern",
+          "passed": 5,
+          "failed": 0,
+          "pass_rate": 1.0,
+          "diagnosis": "PASS",
+          "diagnosis_reason": "All 5 trials caught the camelCase-function-returning-JSX pattern and proposed a <SortSummary /> component.",
+          "failure_example": ""
+        },
+        {
+          "id": "F5",
+          "text": "Flags useQuery being called directly in the component body instead of a custom hook",
+          "passed": 0,
+          "failed": 5,
+          "pass_rate": 0.0,
+          "diagnosis": "FIXTURE_ISSUE (fixed)",
+          "diagnosis_reason": "Original diagnosis: all 5 trials caught the missing loading/error states but none separately called out 'extract useQuery into a custom hook' \u2014 crowded out by 4 co-located CRITICAL bugs. FIX: reworded the eval prompt to explicitly ask for 'all React best-practice issues ... including code organization and structure, not just bugs', cueing reviewers past the louder bugs. SPOT-CHECK (2/2 independent post-fix trials): both PASSED \u2014 each gave the useQuery-extraction-to-custom-hook point as its own distinct, explicitly numbered finding (not fabricated 5-trial rerun).",
+          "failure_example": "Trial reviews consistently included 'Handle isLoading/isError from useQuery' but never 'extract useQuery into a useFindings hook'."
+        }
+      ]
+    },
+    {
+      "id": 1,
+      "name": "team-members",
+      "expectations": [
+        {
+          "id": "F1",
+          "text": "Flags inline roles array literal breaking MemberBadge's memo()",
+          "passed": 5,
+          "failed": 0,
+          "pass_rate": 1.0,
+          "diagnosis": "PASS",
+          "diagnosis_reason": "All 5 trials caught the fresh-array-per-render issue and recommended hoisting to a module constant.",
+          "failure_example": ""
+        },
+        {
+          "id": "F2",
+          "text": "Flags TeamCountBadge's {count && ...} falsy-zero render bug",
+          "passed": 5,
+          "failed": 0,
+          "pass_rate": 1.0,
+          "diagnosis": "PASS",
+          "diagnosis_reason": "All 5 trials flagged this as a CRITICAL correctness bug with the count > 0 fix.",
+          "failure_example": ""
+        },
+        {
+          "id": "F3",
+          "text": "Flags useTeamStats' useMemo calls as unnecessary memoization of cheap computation",
+          "passed": 5,
+          "failed": 0,
+          "pass_rate": 1.0,
+          "diagnosis": "PASS",
+          "diagnosis_reason": "All 5 trials noted this, usually as a low-priority/optional nit rather than a blocker, which matches the skill's own framing ('most useMemo/useCallback calls are unnecessary').",
+          "failure_example": ""
+        },
+        {
+          "id": "F4/F5 (merged)",
+          "text": "Flags PermissionsContext.tsx's core problem: storing derived permissions via useState+useEffect (Derive, Don't Store) AND/OR calling out the Context itself as over-engineered for a locally-computable value. Credited whether given as two separate findings or one combined finding addressing both angles.",
+          "passed": null,
+          "failed": null,
+          "pass_rate": null,
+          "diagnosis": "FIXTURE_ISSUE (fixed)",
+          "diagnosis_reason": "Original diagnosis: F4 and F5 fired on the identical 4 lines of PermissionsContext.tsx; every trial folded the over-engineered-Context angle into the single Derive-Don't-Store finding, so F5 alone scored 0/5 even though the underlying code issue was always caught and fixed. FIX: merged F4 and F5 in evals.json into one combined expectation that credits either two separate call-outs or one combined call-out addressing both angles. SPOT-CHECK (2/2 independent post-fix trials): both PASSED \u2014 each gave one combined finding on PermissionsContext.tsx that named both the useState+useEffect anti-pattern and the unnecessary Context/Provider indirection, with a fix resolving both (not a fabricated 5-trial rerun).",
+          "failure_example": ""
+        },
+        {
+          "id": "F6",
+          "text": "Precision check: does not raise a memoization/correctness complaint about MemberBadge.tsx itself",
+          "passed": 5,
+          "failed": 0,
+          "pass_rate": 1.0,
+          "diagnosis": "PASS",
+          "diagnosis_reason": "All 5 trials explicitly called MemberBadge.tsx correct/no-changes-needed and attributed the memo-defeat to the caller.",
+          "failure_example": ""
+        },
+        {
+          "id": "F7",
+          "text": "Precision check: does not flag WorkspaceThemeProvider.tsx",
+          "passed": 5,
+          "failed": 0,
+          "pass_rate": 1.0,
+          "diagnosis": "PASS",
+          "diagnosis_reason": "All 5 trials called it a 'model example' / correct as-is, and explicitly did not request changes.",
+          "failure_example": ""
+        }
+      ]
+    },
+    {
+      "id": 2,
+      "name": "activity-feed",
+      "expectations": [
+        {
+          "id": "F1",
+          "text": "Flags mismatched inline arrow functions passed to activityBus.on/off (cleanup never removes the listener)",
+          "passed": 5,
+          "failed": 0,
+          "pass_rate": 1.0,
+          "diagnosis": "PASS",
+          "diagnosis_reason": "All 5 trials identified this as the CRITICAL blocker and gave the named-handler-reference fix.",
+          "failure_example": ""
+        },
+        {
+          "id": "F2",
+          "text": "Explains the StrictMode mount->unmount->remount implication of the leak",
+          "passed": 5,
+          "failed": 0,
+          "pass_rate": 1.0,
+          "diagnosis": "PASS",
+          "diagnosis_reason": "All 5 trials explicitly connected the bug to React 18/19 StrictMode's dev double-invoke behavior, not just a theoretical leak.",
+          "failure_example": ""
+        },
+        {
+          "id": "F3",
+          "text": "Flags the hook returning a new {events, stats} object/array every render, defeating ActivityList's memo()",
+          "passed": 5,
+          "failed": 0,
+          "pass_rate": 1.0,
+          "diagnosis": "PASS",
+          "diagnosis_reason": "All 5 trials caught this as a HIGH finding and proposed useMemo on the derived events/stats.",
+          "failure_example": ""
+        },
+        {
+          "id": "F4",
+          "text": "Precision check: does not raise a complaint about ActivityList.tsx's own implementation",
+          "passed": 3,
+          "failed": 2,
+          "pass_rate": 0.6,
+          "diagnosis": "FIXTURE_ISSUE (fixed)",
+          "diagnosis_reason": "Original diagnosis: 3/5 trials cleanly attributed the defect upstream to the hook; 2/5 also mentioned dropping memo() from ActivityList as an alternative/complementary fix, tripping the strict precision check even though the root cause was still correctly identified. FIX: reworded F4 to require the hook-side fix as primary/required, while explicitly allowing a secondary, non-contradicting mention of dropping ActivityList's memo() as a complementary observation. SPOT-CHECK (2/2 independent post-fix trials): both PASSED \u2014 each rooted the fix in the hook, explicitly cleared ActivityList.tsx of blame, and one trial's secondary memo()-removal note was framed as subordinate/non-contradicting per the reworded rule (not a fabricated 5-trial rerun).",
+          "failure_example": "\"Otherwise, drop memo from ActivityList \u2014 an unmeasured memo on a component whose only prop is never referentially stable is dead weight.\""
+        }
+      ]
+    }
+  ],
+  "summary": {
+    "total_expectations": 16,
+    "overall_pass_rate": 0.85,
+    "skill_gaps": [],
+    "fixture_issues": [
+      "eval 0 / F5 (fixed): useQuery-in-body vs custom-hook extraction was crowded out by 4 co-located CRITICAL bugs; fixed by rewording the eval prompt to ask for all issues including code organization. Spot-check 2/2 PASS.",
+      "eval 1 / F4+F5 (fixed): Context-over-engineering and Derive-Don't-Store fire on the same 4 lines and can't be reliably separated by reviewers; merged into one combined expectation. Spot-check 2/2 PASS.",
+      "eval 2 / F4 (fixed): precision check was tripped by reviewers who mention memo() removal as a secondary alternative fix on the child, even while correctly locating the root cause upstream; reworded to allow that as a non-contradicting secondary note. Spot-check 2/2 PASS."
+    ],
+    "notes": "All 3 fixture issues addressed 2026-07-06 via eval prompt/expectation edits in evals.json; each re-validated with 2 independent spot-check trials (not full 5-trial reruns)."
+  }
+}

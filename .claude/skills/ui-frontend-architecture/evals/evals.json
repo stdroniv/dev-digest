@@ -1,0 +1,60 @@
+{
+  "skill_name": "ui-frontend-architecture",
+  "notes": [
+    "files/cross-route-deep-import/*, files/notifications-panel/**/*, and files/barrel-cycle/**/* are synthetic fixtures written to look like plausible DevDigest client/ files, but they intentionally seed frontend architecture violations for grading. They are not real product code and are not wired into any package.json/tsconfig — do not 'fix' them in place; they exist to be reviewed. Each file's leading comment states the conceptual client/src/... path it represents, since the files are physically stored under evals/files/ for isolation.",
+    "files/cross-route-deep-import/ is the clear-cut case: two independent single-violation files (a route deep-importing another route's private component, and a shared lib file reaching down into a feature/route) — no distractors.",
+    "files/notifications-panel/ is the harder, precision-testing case: 5 files under one route. page.tsx and NotificationBadge.tsx are intentionally correctly organized and must NOT be flagged. The other three files (NotificationsList.tsx, notification-helpers.ts, types.ts) each seed a distinct, subtler violation: a direct fetch() bypassing the lib/hooks -> lib/api.ts data layer, inline business logic (filter/sort) in the component body, a function misnamed with a `use` prefix despite calling no hooks, and a locally duplicated type that already exists in shared lib/types.ts.",
+    "files/barrel-cycle/ is the uncommon-scenario case: two route-colocated feature folders each introduce an index.ts barrel (against this repo's own no-in-folder-barrels convention) and import from each other's barrel, producing a circular dependency that is invisible from reading any single file in isolation."
+  ],
+  "evals": [
+    {
+      "id": 0,
+      "prompt": "We're about to merge two small client/ changes: client/src/app/repos/[repoId]/_components/RepoHealthCard/RepoHealthCard.tsx and client/src/lib/format-helpers.ts. Review them for frontend architecture issues before they land — point out anything that violates our folder-structure / dependency-flow conventions and say specifically where the code should actually live or how the import should be restructured instead.",
+      "expected_output": "A review that identifies both dependency-direction violations below, explains why each breaks the shared/features/app (or this repo's shared-lib/route) dependency flow, and names the concrete fix (compose at a higher level, or lift the shared piece up) rather than just saying 'this is bad'.",
+      "files": [
+        "evals/files/cross-route-deep-import/RepoHealthCard.tsx",
+        "evals/files/cross-route-deep-import/format-helpers.ts"
+      ],
+      "expectations": [
+        "F1: Flags RepoHealthCard.tsx's import of SkillBadge from '@/app/skills/_components/SkillBadge/SkillBadge' as a deep, direct import into another route/feature's private internals, violating 'features never import each other' / route isolation — and suggests either composing both at a shared/page level or lifting SkillBadge into src/components/ if it's genuinely reused",
+        "F2: Flags format-helpers.ts (shared lib/ code) importing useAgentStatusColor from '@/app/agents/_components/AgentStatusBadge/useAgentStatusColor' as an inversion of the dependency rule — shared code must not import from features/routes — and says the color logic should move into shared lib/ or hooks/ if it needs to be reusable from shared code"
+      ]
+    },
+    {
+      "id": 1,
+      "prompt": "We're about to merge client/src/app/notifications/ (page.tsx, _components/NotificationsList/NotificationsList.tsx, _components/NotificationsList/notification-helpers.ts, _components/NotificationsList/types.ts, _components/NotificationBadge/NotificationBadge.tsx). Review it for frontend architecture issues before it lands — point out anything that violates our placement/organization conventions, say specifically where the code should actually live instead, and call out any file that's already correctly organized so we don't churn it needlessly.",
+      "expected_output": "A review that identifies each placement violation below, names the concrete fix, and does NOT flag page.tsx or NotificationBadge.tsx, which are intentionally correctly organized.",
+      "files": [
+        "evals/files/notifications-panel/page.tsx",
+        "evals/files/notifications-panel/_components/NotificationsList/NotificationsList.tsx",
+        "evals/files/notifications-panel/_components/NotificationsList/notification-helpers.ts",
+        "evals/files/notifications-panel/_components/NotificationsList/types.ts",
+        "evals/files/notifications-panel/_components/NotificationBadge/NotificationBadge.tsx"
+      ],
+      "expectations": [
+        "F1: Flags NotificationsList.tsx calling fetch() directly inside a useEffect instead of going through the lib/hooks -> lib/api.ts data-fetching layer (this repo's Data Access Layer equivalent / 'never call fetch() directly in a component' rule)",
+        "F2: Flags NotificationsList.tsx's inline filter/sort of `notifications` in the component body as business logic that belongs in a pure utility function (or a memoized hook), not computed directly in JSX/render",
+        "F3: Flags notification-helpers.ts's `useFormatTimestamp` as misnamed — it calls no React hooks, so it should be a plain function (no `use` prefix), not shaped like a hook",
+        "F4: Flags types.ts's local `Notification` interface as a duplicate of the type already defined in shared client/src/lib/types.ts, and says the component should import/derive from the one shared definition instead of redeclaring it",
+        "F5 (precision check): Does not raise an architecture complaint about page.tsx — it is a correctly-organized thin route entry that fetches via a hook and delegates to _components",
+        "F6 (precision check): Does not raise an architecture complaint about NotificationBadge.tsx — it is a correctly-organized presentational component that derives its value from a shared data hook with no inline fetch or business logic"
+      ]
+    },
+    {
+      "id": 2,
+      "prompt": "We're about to merge client/src/app/agents/_components/index.ts, client/src/app/agents/_components/AgentSkillPreview/AgentSkillPreview.tsx, client/src/app/skills/_components/index.ts, and client/src/app/skills/_components/SkillAgentUsage/SkillAgentUsage.tsx. Review this set of files for frontend architecture issues before it lands — point out anything that violates our barrel-file policy or feature/route isolation, and say specifically what's wrong and how to fix it. Don't just review each file in isolation — consider how they interact.",
+      "expected_output": "A review that identifies the barrel-file policy violation, the cross-route isolation violation, and the circular dependency the two barrels create together, naming the concrete fix for each.",
+      "files": [
+        "evals/files/barrel-cycle/agents/_components/index.ts",
+        "evals/files/barrel-cycle/agents/_components/AgentSkillPreview/AgentSkillPreview.tsx",
+        "evals/files/barrel-cycle/skills/_components/index.ts",
+        "evals/files/barrel-cycle/skills/_components/SkillAgentUsage/SkillAgentUsage.tsx"
+      ],
+      "expectations": [
+        "F1: Flags introducing index.ts barrels in agents/_components and skills/_components as against this repo's own convention (one file per component, named exports, no in-folder barrels for route-colocated features)",
+        "F2: Flags AgentSkillPreview.tsx importing SkillCard from the skills route's barrel (and/or SkillAgentUsage.tsx importing AgentCard from the agents route's barrel) as a cross-feature/route import that violates 'features never import each other' — should be composed at a shared/page level instead",
+        "F3: Identifies that the two barrel imports together form a circular dependency between the agents and skills route modules (agents/_components -> skills/_components -> agents/_components), and notes that the cycle is only visible by following both barrels, not from reading either consuming file alone"
+      ]
+    }
+  ]
+}

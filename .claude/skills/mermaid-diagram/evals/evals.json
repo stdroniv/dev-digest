@@ -1,0 +1,55 @@
+{
+  "skill_name": "mermaid-diagram",
+  "notes": [
+    "This is a GENERATION skill (produce a diagram from a description), not a code-review skill. Expectations check diagram-type choice, syntactic validity, and semantic correctness (right nodes/edges/actors), not review findings.",
+    "All eval cases carry the scenario entirely in the prompt text; no fixture files are used since there is no precedent for synthetic input files for a generation skill.",
+    "Grading requires manually reasoning through Mermaid grammar (balanced brackets/quotes, valid diagram-type keyword, correct arrow syntax per diagram type) rather than assuming any output renders."
+  ],
+  "evals": [
+    {
+      "id": 0,
+      "name": "pr-review-flow-straightforward",
+      "prompt": "Diagram DevDigest's PR review flow as a single diagram: a user imports a repo, then selects a PR, then the system runs an agent review, which produces grounded findings, which are then displayed to the user. Produce a Mermaid diagram.",
+      "expected_output": "A ```mermaid fenced diagram (flowchart or sequenceDiagram) that declares a valid Mermaid diagram-type keyword, contains all 5 named steps (import repo, select PR, run agent review, grounded findings, display) as distinct nodes/participants connected in the correct order, and has balanced brackets/quotes with no invalid syntax.",
+      "files": [],
+      "expectations": [
+        "F1: Output is wrapped in a ```mermaid fence and declares a valid diagram-type keyword appropriate to the decision guide (flowchart TD/LR or sequenceDiagram)",
+        "F2: All 5 named steps (import repo, select PR, run agent review, grounded findings, display) appear as distinct nodes or participants, not merged or omitted",
+        "F3: Edges/messages connect the steps in the stated order: import repo -> select PR -> run agent review -> grounded findings -> display",
+        "F4: Syntax is valid: brackets/parens/quotes are balanced, every arrow references a node ID or participant that was actually declared",
+        "F5: The chosen diagram type is defensible per the skill's Decision Guide (flowchart for a linear process, or sequenceDiagram if framed as actor interactions) — not an unrelated type like erDiagram or classDiagram"
+      ]
+    },
+    {
+      "id": 1,
+      "name": "pr-review-lifecycle-state-machine",
+      "prompt": "Diagram the lifecycle of a single PR review in DevDigest. A review starts in 'pending' the moment it's created. When a worker picks it up, it moves to 'running'. From 'running', an event can push it to 'succeeded' (the LLM returned grounded findings), 'failed' (the LLM call errored out or grounding validation rejected the output), or 'cancelled' (the user cancelled it mid-run). There is no fixed sequence of actor-to-actor calls to show here — just the set of statuses a review can be in and which events trigger which transition. Produce a Mermaid diagram.",
+      "expected_output": "A ```mermaid fenced `stateDiagram-v2` (the correct fit, since this is a finite set of statuses with event-triggered transitions and no actor-to-actor call sequence to show) with an initial transition from `[*]` to `pending`, a `pending --> running` transition, and three transitions out of `running` to `succeeded`, `failed`, and `cancelled` respectively, each labeled with its triggering event, with valid stateDiagram-v2 syntax throughout.",
+      "files": [],
+      "expectations": [
+        "G1: Output declares `stateDiagram-v2` rather than defaulting to `flowchart` or `sequenceDiagram` — this scenario is a finite state machine with no actor interactions or fixed call order, which the Decision Guide maps to State Diagram",
+        "G2: An explicit initial transition `[*] --> pending` (or equivalent) marks the starting state",
+        "G3: All 5 states (pending, running, succeeded, failed, cancelled) appear as distinct states, and `running` has exactly 3 outgoing transitions to succeeded/failed/cancelled (not merged or omitted)",
+        "G4: Transitions out of `running` are labeled with their triggering event (e.g. `running --> succeeded : findings returned`), not left as bare unlabeled arrows",
+        "G5: Valid stateDiagram-v2 syntax: `-->` used for transitions (not sequenceDiagram's `->>`), labels use `: text` (not `--text-->`), and no unclosed composite-state blocks"
+      ]
+    },
+    {
+      "id": 2,
+      "name": "indexing-pipeline-syntax-edge-cases",
+      "prompt": "Diagram the DevDigest repo-intel indexing pipeline as a flowchart. It has these 12 stages, each feeding into the next in order: Clone repo, Detect language (TS/JS only), Walk file tree, Filter | dedupe files, Parse file (ast-grep), Extract symbols, Build call graph, Compute embeddings, Store in pgvector, Index metadata, Validate index, Publish index-ready event. The 'Validate index' stage retries itself up to 3 times on failure (a self-loop back to itself), and if it fails permanently after those retries it takes a branch labeled Error: \"invalid schema\" that loops back to restart at 'Walk file tree'. Produce the Mermaid flowchart.",
+      "expected_output": "A ```mermaid fenced flowchart declaring `flowchart TD` or `flowchart LR` containing all 12 named stages as distinct nodes connected in sequence, with the parenthesized label ('Detect language (TS/JS only)' and 'Parse file (ast-grep)'), the pipe-containing label ('Filter | dedupe files'), and the quote-containing error label (Error: \"invalid schema\") all safely quoted/escaped so they don't break Mermaid's node/edge parsing, plus an explicit self-loop edge on 'Validate index' and an explicit cycle edge back to 'Walk file tree'.",
+      "files": [],
+      "expectations": [
+        "F1: Output is wrapped in a ```mermaid fence declaring `flowchart TD` or `flowchart LR` (or equivalent TB/RL/BT)",
+        "F2: All 12 named stages appear as distinct, separately-declared nodes (not merged, renamed beyond recognition, or dropped)",
+        "F3: The label containing a pipe character ('Filter | dedupe files') is wrapped in quotes (e.g. `id[\"Filter | dedupe files\"]`) so the `|` is not misparsed as edge-label delimiter syntax",
+        "F4: Labels containing parentheses ('Detect language (TS/JS only)', 'Parse file (ast-grep)') are wrapped in quotes inside their node shape brackets so the parens are not misparsed as nested node-shape syntax",
+        "F5: 'Validate index' has an explicit self-loop edge (an arrow from its node ID back to itself, e.g. `validateIndex --> validateIndex`) representing the up-to-3 retries, not silently omitted",
+        "F6: There is an explicit cycle edge from the permanent-failure branch back to 'Walk file tree', forming a real cycle in the graph rather than a dead-end",
+        "F7: The quote-containing error label (Error: \"invalid schema\") has its inner double quotes escaped or represented safely (e.g. `#quot;` or single-quoting the outer label) so the node/edge label does not terminate early",
+        "F8: Overall syntax is valid: every bracket/paren/quote opened is closed, and every edge references a node ID that was actually declared"
+      ]
+    }
+  ]
+}

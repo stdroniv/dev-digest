@@ -66,6 +66,37 @@ export class DrizzleReviewRepository implements IReviewRepository {
 }
 ```
 
+**❌ BAD — the *quiet* form: a domain type aliased to a Drizzle row (`import type` looks harmless)**
+
+```typescript
+// domain/review/review.ts
+import type { InferSelectModel } from 'drizzle-orm';    // drizzle-orm in the core 🚫
+import type { reviews } from '../../db/schema.js';       // db/schema in the core 🚫
+
+// The DB shape is now the domain shape — rename a column and this type mutates under you.
+export type Review = InferSelectModel<typeof reviews>;   // no mapping seam, ever
+```
+
+**✅ GOOD — a standalone domain type; the row shape is mapped to it in infrastructure**
+
+```typescript
+// domain/review/review.ts  (no db/schema, no drizzle-orm — not even a type import)
+export interface Review {
+  readonly id: string;
+  readonly title: string;
+  readonly status: ReviewStatus;
+}
+
+// infrastructure/review/drizzle-review.repository.ts
+function toDomain(row: typeof t.reviews.$inferSelect): Review {
+  return { id: row.id, title: row.title, status: row.status as ReviewStatus };
+}
+```
+
+> Note: this is distinct from example #3 below. #3 is a Drizzle row escaping **outward at runtime**
+> from a repository; this is the domain **type itself** being *defined* from the DB schema. Both
+> couple the core to Postgres — the first at the value boundary, this one at the type boundary.
+
 ---
 
 ## 3. Leaking a Drizzle row outward

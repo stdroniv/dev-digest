@@ -61,3 +61,5 @@ flowchart LR
 - The indexer → [`../server/src/modules/repo-intel/README.md`](../server/src/modules/repo-intel/README.md)
 - Agent prompts → [`agent-prompts/README.md`](agent-prompts/README.md)
 - Testing & CI → [`../TESTING.md`](../TESTING.md)
+- Regression-testing a reviewer agent (eval cases, runs, comparison, promote) →
+  [`eval-pipeline.md`](eval-pipeline.md)

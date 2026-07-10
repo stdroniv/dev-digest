@@ -17,11 +17,12 @@ import {
   type Severity,
   type Category,
 } from "@devdigest/ui";
-import type { FindingRecord, FindingActionKind } from "@devdigest/shared";
+import type { EvalCase, FindingRecord, FindingActionKind } from "@devdigest/shared";
 import { SEV_COLOR, SEV_COLOR_FALLBACK } from "./constants";
 import { lineLabel } from "./helpers";
 import { githubPrFileUrl } from "@/lib/github-urls";
-import { useCreateCaseFromFinding } from "@/lib/hooks/evals";
+import { useFindingEvalCasePreview } from "@/lib/hooks/evals";
+import { CaseEditorModal } from "@/components/evals/CaseEditorModal";
 import { notify } from "@/lib/toast";
 import { s } from "./styles";
 
@@ -58,115 +59,145 @@ export function FindingCard({
   const muted = accepted || dismissed;
   const hasDecision = accepted || dismissed;
 
-  const createCase = useCreateCaseFromFinding();
-  // The server is the source of truth for idempotency across sessions/reloads
-  // (AC-5): `already_added` on the mutation result is a real cross-session
-  // signal, not a client-only session guard. `caseAdded` mirrors that the
-  // finding now has a case (freshly created or pre-existing); `wasAlreadyAdded`
-  // remembers WHICH of the two it was, so the button label can distinguish
-  // "Added" (this click created it) from "Already added" (it already existed).
-  const [caseAdded, setCaseAdded] = React.useState(false);
-  const [wasAlreadyAdded, setWasAlreadyAdded] = React.useState(false);
+  // Gap 2 — "Turn into eval case" opens a pre-filled, reviewable modal instead
+  // of directly saving. The preview is fetched ONLY once the user opens it
+  // (`enabled: evalModalOpen`) — an eager per-card GET + `loadDiff` on every
+  // render would be wasteful (client/INSIGHTS.md gotcha). `already_added` on
+  // the fetched preview is the real cross-session idempotency signal (AC-5) —
+  // not a client-only session guard — so re-clicking the same finding always
+  // routes back through the server.
+  const [evalModalOpen, setEvalModalOpen] = React.useState(false);
+  const { data: preview } = useFindingEvalCasePreview(f.id, evalModalOpen);
+  const notifiedAlreadyAddedRef = React.useRef(false);
 
-  function handleTurnIntoEvalCase() {
-    if (caseAdded) {
-      notify.info(tEvals("findingCard.alreadyAdded"));
+  React.useEffect(() => {
+    if (!evalModalOpen) {
+      notifiedAlreadyAddedRef.current = false;
       return;
     }
-    createCase.mutate(f.id, {
-      onSuccess: (data) => {
-        setCaseAdded(true);
-        setWasAlreadyAdded(data.already_added);
-        notify.success(
-          data.already_added
-            ? tEvals("findingCard.alreadyAddedConfirmation", { name: data.case.name })
-            : tEvals("findingCard.confirmation", { name: data.case.name }),
-        );
-      },
-      onError: (err) => {
-        notify.error(err instanceof Error ? err.message : "Couldn't create the eval case.");
-      },
-    });
+    if (preview?.already_added && preview.existing_case && !notifiedAlreadyAddedRef.current) {
+      notifiedAlreadyAddedRef.current = true;
+      notify.info(tEvals("findingCard.alreadyAddedConfirmation", { name: preview.existing_case.name }));
+    }
+  }, [evalModalOpen, preview, tEvals]);
+
+  function handleTurnIntoEvalCase() {
+    if (!hasDecision) return; // defense-in-depth; the button is already disabled
+    setEvalModalOpen(true);
   }
 
-  const evalButtonLabel = !caseAdded
-    ? tEvals("findingCard.turnIntoEvalCase")
-    : wasAlreadyAdded
-      ? tEvals("findingCard.alreadyAdded")
-      : tEvals("findingCard.added");
+  function closeEvalModal() {
+    setEvalModalOpen(false);
+  }
+
+  function handleSeededSaved(result: { case: EvalCase; already_added: boolean }) {
+    notify.success(
+      result.already_added
+        ? tEvals("findingCard.alreadyAddedConfirmation", { name: result.case.name })
+        : tEvals("findingCard.confirmation", { name: result.case.name }),
+    );
+  }
+
+  const caseAdded = preview?.already_added === true;
+  const evalButtonLabel = caseAdded
+    ? tEvals("findingCard.alreadyAdded")
+    : tEvals("findingCard.turnIntoEvalCase");
 
   return (
-    <div data-finding-id={f.id} style={s.card(!!focused, sevColor, muted)}>
-      <div onClick={() => setExpanded((e) => !e)} style={s.header}>
-        <div style={s.badgeWrap}>
-          <SeverityBadge severity={f.severity as Severity} compact />
-        </div>
-        <div style={s.headerMain}>
-          <div style={s.titleRow}>
-            <span style={s.title(muted, dismissed)}>{f.title}</span>
-            <CategoryTag category={f.category as Category} />
-            {accepted && <span style={s.acceptedTag}>{t("finding.accepted")}</span>}
-            {dismissed && <span style={s.dismissedTag}>{t("finding.dismissed")}</span>}
+    <>
+      <div data-finding-id={f.id} style={s.card(!!focused, sevColor, muted)}>
+        <div onClick={() => setExpanded((e) => !e)} style={s.header}>
+          <div style={s.badgeWrap}>
+            <SeverityBadge severity={f.severity as Severity} compact />
           </div>
-          <div style={s.metaRow}>
-            <MonoLink href={fileHref}>
-              {f.file}:{lineLabel(f)}
-            </MonoLink>
-            <ConfidenceNum value={f.confidence} />
-          </div>
-        </div>
-        <Icon.ChevronDown size={16} style={s.chevron(expanded)} />
-      </div>
-
-      {expanded && (
-        <div style={s.body}>
-          <div style={s.prose}>
-            <Markdown>{f.rationale}</Markdown>
-          </div>
-          {f.suggestion && (
-            <div style={s.suggestionWrap}>
-              <div style={s.suggestionLabel}>{t("finding.suggestedFix")}</div>
-              <div style={s.prose}>
-                <Markdown>{f.suggestion}</Markdown>
-              </div>
+          <div style={s.headerMain}>
+            <div style={s.titleRow}>
+              <span style={s.title(muted, dismissed)}>{f.title}</span>
+              <CategoryTag category={f.category as Category} />
+              {accepted && <span style={s.acceptedTag}>{t("finding.accepted")}</span>}
+              {dismissed && <span style={s.dismissedTag}>{t("finding.dismissed")}</span>}
             </div>
-          )}
-
-          <div style={s.actions}>
-            <Button
-              kind="secondary"
-              size="sm"
-              icon="Check"
-              disabled={pending}
-              active={accepted}
-              onClick={() => onAction?.("accept")}
-            >
-              {t("finding.accept")}
-            </Button>
-            <Button
-              kind="ghost"
-              size="sm"
-              icon="X"
-              disabled={pending}
-              active={dismissed}
-              onClick={() => onAction?.("dismiss")}
-            >
-              {t("finding.dismiss")}
-            </Button>
-            <Button
-              kind="ghost"
-              size="sm"
-              icon="FlaskConical"
-              disabled={!hasDecision || createCase.isPending}
-              active={caseAdded}
-              title={!hasDecision ? tEvals("findingCard.noDecisionTooltip") : undefined}
-              onClick={handleTurnIntoEvalCase}
-            >
-              {evalButtonLabel}
-            </Button>
+            <div style={s.metaRow}>
+              <MonoLink href={fileHref}>
+                {f.file}:{lineLabel(f)}
+              </MonoLink>
+              <ConfidenceNum value={f.confidence} />
+            </div>
           </div>
+          <Icon.ChevronDown size={16} style={s.chevron(expanded)} />
         </div>
+
+        {expanded && (
+          <div style={s.body}>
+            <div style={s.prose}>
+              <Markdown>{f.rationale}</Markdown>
+            </div>
+            {f.suggestion && (
+              <div style={s.suggestionWrap}>
+                <div style={s.suggestionLabel}>{t("finding.suggestedFix")}</div>
+                <div style={s.prose}>
+                  <Markdown>{f.suggestion}</Markdown>
+                </div>
+              </div>
+            )}
+
+            <div style={s.actions}>
+              <Button
+                kind="secondary"
+                size="sm"
+                icon="Check"
+                disabled={pending}
+                active={accepted}
+                onClick={() => onAction?.("accept")}
+              >
+                {t("finding.accept")}
+              </Button>
+              <Button
+                kind="ghost"
+                size="sm"
+                icon="X"
+                disabled={pending}
+                active={dismissed}
+                onClick={() => onAction?.("dismiss")}
+              >
+                {t("finding.dismiss")}
+              </Button>
+              <Button
+                kind="ghost"
+                size="sm"
+                icon="FlaskConical"
+                disabled={!hasDecision}
+                active={caseAdded}
+                title={!hasDecision ? tEvals("findingCard.noDecisionTooltip") : undefined}
+                onClick={handleTurnIntoEvalCase}
+              >
+                {evalButtonLabel}
+              </Button>
+            </div>
+          </div>
+        )}
+      </div>
+      {evalModalOpen && preview && (
+        preview.already_added && preview.existing_case ? (
+          <CaseEditorModal
+            mode="edit"
+            owner={{ kind: "agent", id: preview.existing_case.owner_id }}
+            evalCase={preview.existing_case}
+            lastRun={null}
+            onClose={closeEvalModal}
+          />
+        ) : (
+          <CaseEditorModal
+            mode="seeded"
+            owner={{ kind: "agent", id: preview.owner_id }}
+            evalCase={null}
+            lastRun={null}
+            seed={{ findingId: f.id, draft: preview }}
+            onSaved={handleSeededSaved}
+            onClose={closeEvalModal}
+          />
+        )
       )}
-    </div>
+    </>
   );
 }

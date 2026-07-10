@@ -11,6 +11,7 @@ import type {
   EvalCase,
   EvalComparison,
   EvalDashboard,
+  EvalExpectedFinding,
   EvalRunGroup,
   EvalRunRecord,
 } from "@devdigest/shared";
@@ -21,7 +22,52 @@ export const evalKeys = {
   runs: (agentId: string | null | undefined) => ["eval-runs", agentId] as const,
   agentDashboard: (agentId: string | null | undefined) => ["agent-eval-dashboard", agentId] as const,
   dashboard: () => ["eval-dashboard"] as const,
+  // R-G1 (skill Evals tab) — skill-keyed counterparts. No cross-owner
+  // "skillDashboard()" (A3): the cross-owner `/eval-dashboard` stays
+  // agent-only, so there is nothing analogous to `evalKeys.dashboard()` here.
+  skillCases: (skillId: string | null | undefined) => ["skill-eval-cases", skillId] as const,
+  skillRuns: (skillId: string | null | undefined) => ["skill-eval-runs", skillId] as const,
+  skillDashboard: (skillId: string | null | undefined) => ["skill-eval-dashboard", skillId] as const,
 };
+
+/** The owner an eval case/run belongs to (T13) — threaded through the
+ *  generalized mutation hooks so they can derive both the create route
+ *  (`/agents/:id/...` vs `/skills/:id/...`) and which cache keys to
+ *  invalidate. Update/delete/run-single still hit the owner-AGNOSTIC
+ *  `/eval-cases/:id...` routes — only the invalidation target switches. */
+export type EvalOwner = { kind: "agent"; id: string } | { kind: "skill"; id: string };
+
+function ownerCasesRoute(owner: EvalOwner): string {
+  return owner.kind === "agent" ? `/agents/${owner.id}/eval-cases` : `/skills/${owner.id}/eval-cases`;
+}
+
+/** Invalidate an owner's case list + its own dashboard (NOT run history —
+ *  callers that also affect runs use {@link invalidateOwnerRuns} instead). */
+function invalidateOwnerCases(qc: ReturnType<typeof useQueryClient>, owner: EvalOwner): void {
+  if (owner.kind === "agent") {
+    qc.invalidateQueries({ queryKey: evalKeys.cases(owner.id) });
+    qc.invalidateQueries({ queryKey: evalKeys.agentDashboard(owner.id) });
+  } else {
+    qc.invalidateQueries({ queryKey: evalKeys.skillCases(owner.id) });
+    qc.invalidateQueries({ queryKey: evalKeys.skillDashboard(owner.id) });
+  }
+}
+
+/** Invalidate everything a RUN can affect: cases (a run can be the first
+ *  signal a case exists), run history, the owner's dashboard, and — agents
+ *  only — the cross-agent dashboard (A3: no skill equivalent). */
+function invalidateOwnerRuns(qc: ReturnType<typeof useQueryClient>, owner: EvalOwner): void {
+  if (owner.kind === "agent") {
+    qc.invalidateQueries({ queryKey: evalKeys.cases(owner.id) });
+    qc.invalidateQueries({ queryKey: evalKeys.runs(owner.id) });
+    qc.invalidateQueries({ queryKey: evalKeys.agentDashboard(owner.id) });
+    qc.invalidateQueries({ queryKey: evalKeys.dashboard() });
+  } else {
+    qc.invalidateQueries({ queryKey: evalKeys.skillCases(owner.id) });
+    qc.invalidateQueries({ queryKey: evalKeys.skillRuns(owner.id) });
+    qc.invalidateQueries({ queryKey: evalKeys.skillDashboard(owner.id) });
+  }
+}
 
 // ===========================================================================
 // Cases
@@ -36,6 +82,15 @@ export function useAgentEvalCases(agentId: string | null | undefined) {
   });
 }
 
+/** Every eval case owned by a skill (R-G1-3). */
+export function useSkillEvalCases(skillId: string | null | undefined) {
+  return useQuery({
+    queryKey: evalKeys.skillCases(skillId),
+    queryFn: () => api.get<EvalCase[]>(`/skills/${skillId}/eval-cases`),
+    enabled: !!skillId,
+  });
+}
+
 /** Server response of `POST /findings/:id/eval-case` — 201 on first create, 200
  *  when the finding already has a case (idempotent, AC-5): `already_added` is
  *  the real cross-session signal (not a client-only session guard). */
@@ -44,23 +99,63 @@ export interface CreateCaseFromFindingResult {
   already_added: boolean;
 }
 
+/**
+ * Non-saving preview of "Turn into eval case" (Gap 2, T4) — mirrors the
+ * server's documented `FindingEvalCasePreview` interface
+ * (`server/src/modules/eval/service.ts`) field-for-field, per
+ * `client/INSIGHTS.md:135` ("hand-diff every new/changed hook's local type
+ * against the server route/service.ts shapes — `tsc` cannot catch a lying
+ * annotation").
+ */
+export interface FindingEvalCasePreview {
+  name: string;
+  input_diff: string;
+  input_meta: unknown;
+  expected_output: EvalExpectedFinding[];
+  owner_id: string;
+  already_added: boolean;
+  existing_case?: EvalCase;
+}
+
+/** GET /findings/:id/eval-case/preview (Gap 2, T4) — no DB write. Gated by
+ *  `enabled` so a finding card never eagerly fetches until the user opens it
+ *  (avoids a `loadDiff` per finding card on mount). */
+export function useFindingEvalCasePreview(findingId: string | null | undefined, enabled: boolean) {
+  return useQuery({
+    queryKey: ["finding-eval-case-preview", findingId],
+    queryFn: () => api.get<FindingEvalCasePreview>(`/findings/${findingId}/eval-case/preview`),
+    enabled: !!findingId && enabled,
+  });
+}
+
+export interface CreateCaseFromFindingInput {
+  findingId: string;
+  /** Optional edits (Gap 2, A2) applied over the frozen draft before insert —
+   *  the frozen `input_diff` is never an accepted override (R-G2-3). */
+  name?: string;
+  expected_output?: unknown;
+}
+
 /** Turn an accepted/dismissed finding into a frozen eval case (AC-1..AC-5). */
 export function useCreateCaseFromFinding() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (findingId: string) =>
-      api.post<CreateCaseFromFindingResult>(`/findings/${findingId}/eval-case`),
-    onSuccess: (data) => {
+    mutationFn: ({ findingId, ...edits }: CreateCaseFromFindingInput) =>
+      api.post<CreateCaseFromFindingResult>(`/findings/${findingId}/eval-case`, edits),
+    onSuccess: (data, variables) => {
       qc.invalidateQueries({ queryKey: evalKeys.cases(data.case.owner_id) });
       qc.invalidateQueries({ queryKey: evalKeys.agentDashboard(data.case.owner_id) });
       qc.invalidateQueries({ queryKey: evalKeys.dashboard() });
+      // Re-clicking the SAME finding right after a save must see
+      // `already_added:true` immediately (R-G2-4), not just after a reload.
+      qc.invalidateQueries({ queryKey: ["finding-eval-case-preview", variables.findingId] });
     },
   });
 }
 
-/** Author a brand-new eval case from scratch (AC-22). Owner is resolved from the route. */
+/** Author a brand-new eval case from scratch (AC-22, R-G1-3 skill parity). */
 export interface CreateCaseInput {
-  agentId: string;
+  owner: EvalOwner;
   name: string;
   input_diff?: string;
   input_files?: unknown;
@@ -72,19 +167,17 @@ export interface CreateCaseInput {
 export function useCreateCase() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: ({ agentId, ...body }: CreateCaseInput) =>
-      api.post<EvalCase>(`/agents/${agentId}/eval-cases`, body),
-    onSuccess: (_data, { agentId }) => {
-      qc.invalidateQueries({ queryKey: evalKeys.cases(agentId) });
-      qc.invalidateQueries({ queryKey: evalKeys.agentDashboard(agentId) });
-    },
+    mutationFn: ({ owner, ...body }: CreateCaseInput) => api.post<EvalCase>(ownerCasesRoute(owner), body),
+    onSuccess: (_data, { owner }) => invalidateOwnerCases(qc, owner),
   });
 }
 
-/** Rename + edit a case's expected output (AC-23). */
+/** Rename + edit a case's expected output (AC-23). Hits the owner-AGNOSTIC
+ *  `/eval-cases/:id` route regardless of owner kind — only the invalidation
+ *  target depends on `owner`. */
 export interface UpdateCaseInput {
   id: string;
-  agentId: string;
+  owner: EvalOwner;
   patch: Partial<
     Pick<EvalCase, "name" | "input_diff" | "input_files" | "input_meta" | "expected_output" | "notes">
   >;
@@ -94,27 +187,21 @@ export function useUpdateCase() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: ({ id, patch }: UpdateCaseInput) => api.put<EvalCase>(`/eval-cases/${id}`, patch),
-    onSuccess: (_data, { agentId }) => {
-      qc.invalidateQueries({ queryKey: evalKeys.cases(agentId) });
-      qc.invalidateQueries({ queryKey: evalKeys.agentDashboard(agentId) });
-    },
+    onSuccess: (_data, { owner }) => invalidateOwnerCases(qc, owner),
   });
 }
 
 /** Delete a case from the live set; prior run history is retained (AC-24). */
 export interface DeleteCaseInput {
   id: string;
-  agentId: string;
+  owner: EvalOwner;
 }
 
 export function useDeleteCase() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: ({ id }: DeleteCaseInput) => api.del<{ ok: boolean }>(`/eval-cases/${id}`),
-    onSuccess: (_data, { agentId }) => {
-      qc.invalidateQueries({ queryKey: evalKeys.cases(agentId) });
-      qc.invalidateQueries({ queryKey: evalKeys.agentDashboard(agentId) });
-    },
+    onSuccess: (_data, { owner }) => invalidateOwnerCases(qc, owner),
   });
 }
 
@@ -136,10 +223,26 @@ export function useRunAllEvals() {
   });
 }
 
-/** Run a single case — one per-case record, aggregate re-derives from latest rows (AC-25). */
+/** Skill-keyed "run all evals" (R-G1-4). `agent_id`/`agent_version` on the
+ *  response are reused fields carrying the SKILL's id/version. */
+export function useRunAllSkillEvals() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (skillId: string) => api.post<EvalRunGroup>(`/skills/${skillId}/eval-runs`),
+    onSuccess: (data) => {
+      qc.invalidateQueries({ queryKey: evalKeys.skillCases(data.agent_id) });
+      qc.invalidateQueries({ queryKey: evalKeys.skillRuns(data.agent_id) });
+      qc.invalidateQueries({ queryKey: evalKeys.skillDashboard(data.agent_id) });
+    },
+  });
+}
+
+/** Run a single case — one per-case record, aggregate re-derives from latest
+ *  rows (AC-25). Works for either owner kind (T8e removed the pre-refactor
+ *  "agent-owned only" guard server-side). */
 export interface RunSingleCaseInput {
   caseId: string;
-  agentId: string;
+  owner: EvalOwner;
 }
 
 /** Server response of `POST /eval-cases/:id/eval-runs` — the persisted run
@@ -155,12 +258,7 @@ export function useRunSingleCase() {
   return useMutation({
     mutationFn: ({ caseId }: RunSingleCaseInput) =>
       api.post<RunSingleCaseResult>(`/eval-cases/${caseId}/eval-runs`),
-    onSuccess: (_data, { agentId }) => {
-      qc.invalidateQueries({ queryKey: evalKeys.cases(agentId) });
-      qc.invalidateQueries({ queryKey: evalKeys.runs(agentId) });
-      qc.invalidateQueries({ queryKey: evalKeys.agentDashboard(agentId) });
-      qc.invalidateQueries({ queryKey: evalKeys.dashboard() });
-    },
+    onSuccess: (_data, { owner }) => invalidateOwnerRuns(qc, owner),
   });
 }
 
@@ -204,12 +302,30 @@ export function useAgentEvalRuns(agentId: string | null | undefined) {
   });
 }
 
+/** Skill-keyed run history, newest-first (R-G1-4). */
+export function useSkillEvalRuns(skillId: string | null | undefined) {
+  return useQuery({
+    queryKey: evalKeys.skillRuns(skillId),
+    queryFn: () => api.get<EvalRunGroup[]>(`/skills/${skillId}/eval-runs`),
+    enabled: !!skillId,
+  });
+}
+
 /** One agent's current metrics + delta + trend (AC-8/AC-14/AC-28). */
 export function useAgentEvalDashboard(agentId: string | null | undefined) {
   return useQuery({
     queryKey: evalKeys.agentDashboard(agentId),
     queryFn: () => api.get<EvalDashboard>(`/agents/${agentId}/eval-dashboard`),
     enabled: !!agentId,
+  });
+}
+
+/** One skill's current metrics + delta + trend (R-G1-5). */
+export function useSkillEvalDashboard(skillId: string | null | undefined) {
+  return useQuery({
+    queryKey: evalKeys.skillDashboard(skillId),
+    queryFn: () => api.get<EvalDashboard>(`/skills/${skillId}/eval-dashboard`),
+    enabled: !!skillId,
   });
 }
 

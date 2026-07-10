@@ -1,18 +1,35 @@
-/* Eval case editor modal (SPEC-04, T16). Authors a brand-new case from
-   scratch (AC-22) or edits an existing one — rename + expected-output JSON
-   edit, blocking Save while the JSON is invalid, with a "finding skeleton"
-   affordance (AC-23). Delete removes the case from the live set; prior run
-   history is retained server-side (AC-24). The frozen input (diff/files/PR
-   meta) is only editable while authoring a new case — once a case exists it
-   is a snapshot (client/CLAUDE.md "the case is a snapshot" edge case) and is
-   shown read-only here. */
+/* Eval case editor modal (SPEC-04, T16; lifted + generalized in T5). Shared by
+   the agent Evals tab, the (future) skill Evals tab, and the repo/PR
+   FindingCard. Three modes:
+   - "new"    — author a brand-new case from scratch (AC-22): diff/files/PR
+                meta are editable.
+   - "edit"   — edit an existing case: rename + expected-output JSON edit
+                only; the frozen input is read-only (the case is a snapshot —
+                client/CLAUDE.md edge case).
+   - "seeded" — Gap 2's "Turn into eval case": pre-filled from a NON-SAVING
+                preview of a frozen finding draft (`seed.draft`). The frozen
+                diff/files/PR-meta are read-only (R-G2-3 — must not
+                user-rewrite the freeze guarantee), but name + expected-output
+                stay editable before the first Save, which goes through
+                `useCreateCaseFromFinding` (the finding route owns AC-5
+                idempotency), not `useCreateCase`.
+   Every mode shares the same JSON-validation + finding-skeleton affordance
+   (AC-23), blocking Save while the expected-output JSON is invalid. */
 "use client";
 
 import React from "react";
 import { useTranslations } from "next-intl";
 import { Button, Modal, FormField, TextInput, Textarea, Toggle, Tabs, Badge } from "@devdigest/ui";
 import type { EvalCase, EvalRunRecord } from "@devdigest/shared";
-import { useCreateCase, useUpdateCase, useDeleteCase, useRunSingleCase } from "@/lib/hooks/evals";
+import {
+  useCreateCase,
+  useUpdateCase,
+  useDeleteCase,
+  useRunSingleCase,
+  useCreateCaseFromFinding,
+  type EvalOwner,
+  type FindingEvalCasePreview,
+} from "@/lib/hooks/evals";
 import { s } from "./styles";
 
 type InputTab = "diff" | "files" | "prMeta";
@@ -45,15 +62,29 @@ function tryParseJson(text: string): { ok: true; value: unknown } | { ok: false 
 
 export function CaseEditorModal({
   mode,
-  agentId,
+  owner,
   evalCase,
   lastRun,
+  seed,
+  onSaved,
   onClose,
 }: {
-  mode: "new" | "edit";
-  agentId: string;
+  mode: "new" | "edit" | "seeded";
+  /** The case's owner (agent or skill) — threaded into the generalized
+   *  create/update/delete/run-single hooks (T13/T14). Seeded mode always
+   *  saves via the finding route with `owner.kind === "agent"` (only agents
+   *  have findings to freeze from). */
+  owner: EvalOwner;
   evalCase: EvalCase | null;
   lastRun: EvalRunRecord | null;
+  /** Gap 2 seeded mode: the finding this case is frozen from + its non-saving
+   *  preview draft. Required when `mode === "seeded"`. */
+  seed?: { findingId: string; draft: FindingEvalCasePreview };
+  /** Fired after a successful SEEDED-mode save (only) with the finding
+   *  route's `{ case, already_added }` response — lets the caller (e.g.
+   *  `FindingCard`) show the "Added"/"Already added" confirmation without
+   *  this component needing to know about toasts. */
+  onSaved?: (result: { case: EvalCase; already_added: boolean }) => void;
   onClose: () => void;
 }) {
   const t = useTranslations("evals");
@@ -61,13 +92,18 @@ export function CaseEditorModal({
   const update = useUpdateCase();
   const del = useDeleteCase();
   const runCase = useRunSingleCase();
+  const createFromFinding = useCreateCaseFromFinding();
 
-  const [name, setName] = React.useState(evalCase?.name ?? "");
-  const [diff, setDiff] = React.useState(evalCase?.input_diff ?? "");
+  const seededDraft = mode === "seeded" ? seed?.draft : undefined;
+
+  const [name, setName] = React.useState(evalCase?.name ?? seededDraft?.name ?? "");
+  const [diff, setDiff] = React.useState(evalCase?.input_diff ?? seededDraft?.input_diff ?? "");
   const [filesText, setFilesText] = React.useState(stringifyPretty(evalCase?.input_files, ""));
-  const [metaText, setMetaText] = React.useState(stringifyPretty(evalCase?.input_meta, ""));
+  const [metaText, setMetaText] = React.useState(
+    stringifyPretty(evalCase?.input_meta ?? seededDraft?.input_meta, ""),
+  );
   const [expectedText, setExpectedText] = React.useState(
-    stringifyPretty(evalCase?.expected_output ?? [], "[]"),
+    stringifyPretty(evalCase?.expected_output ?? seededDraft?.expected_output ?? [], "[]"),
   );
   const [runOnSave, setRunOnSave] = React.useState(false);
   const [inputTab, setInputTab] = React.useState<InputTab>("diff");
@@ -75,7 +111,7 @@ export function CaseEditorModal({
   const expectedParsed = tryParseJson(expectedText);
   const isValidJson = expectedParsed.ok;
 
-  const isSaving = create.isPending || update.isPending;
+  const isSaving = create.isPending || update.isPending || createFromFinding.isPending;
 
   const insertSkeleton = () => {
     const parsed = tryParseJson(expectedText);
@@ -92,7 +128,7 @@ export function CaseEditorModal({
       const filesParsed = filesText.trim() ? tryParseJson(filesText) : { ok: true as const, value: undefined };
       const metaParsed = metaText.trim() ? tryParseJson(metaText) : { ok: true as const, value: undefined };
       const created = await create.mutateAsync({
-        agentId,
+        owner,
         name: name.trim() || t("caseEditor.namePlaceholder"),
         input_diff: diff,
         input_files: filesParsed.ok ? filesParsed.value : undefined,
@@ -100,16 +136,26 @@ export function CaseEditorModal({
         expected_output,
       });
       savedId = created.id;
+    } else if (mode === "seeded" && seed) {
+      // Save on the finding route (A2) — it owns AC-5 idempotency + the
+      // finding→case link; the frozen `input_diff` is never sent (R-G2-3).
+      const created = await createFromFinding.mutateAsync({
+        findingId: seed.findingId,
+        name: name.trim() || t("caseEditor.namePlaceholder"),
+        expected_output,
+      });
+      savedId = created.case.id;
+      onSaved?.(created);
     } else if (evalCase) {
       await update.mutateAsync({
         id: evalCase.id,
-        agentId,
+        owner,
         patch: { name, expected_output },
       });
     }
 
     if (runOnSave && savedId) {
-      runCase.mutate({ caseId: savedId, agentId });
+      runCase.mutate({ caseId: savedId, owner });
     }
     onClose();
   };
@@ -117,13 +163,13 @@ export function CaseEditorModal({
   const removeCase = () => {
     if (!evalCase) return;
     if (window.confirm(`Delete eval case "${evalCase.name}"? This cannot be undone.`)) {
-      del.mutate({ id: evalCase.id, agentId }, { onSuccess: onClose });
+      del.mutate({ id: evalCase.id, owner }, { onSuccess: onClose });
     }
   };
 
   const runNow = () => {
     if (!evalCase) return;
-    runCase.mutate({ caseId: evalCase.id, agentId });
+    runCase.mutate({ caseId: evalCase.id, owner });
   };
 
   const expectedCount = React.useMemo(() => {
@@ -134,7 +180,13 @@ export function CaseEditorModal({
   return (
     <Modal
       width={880}
-      title={mode === "new" ? t("caseEditor.titleNew") : t("caseEditor.titleEdit", { name: evalCase?.name ?? "" })}
+      title={
+        mode === "new"
+          ? t("caseEditor.titleNew")
+          : mode === "seeded"
+            ? t("caseEditor.titleSeeded")
+            : t("caseEditor.titleEdit", { name: evalCase?.name ?? "" })
+      }
       subtitle="simulate a PR and assert the expected output"
       onClose={onClose}
       footer={

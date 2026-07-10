@@ -117,7 +117,11 @@ How would you like this plan executed?
   a lean, ordered sequence optimised for a single context.
 
 Recommendation: <multi-agent for anything non-trivial; single-agent for small or
-tightly-coupled work — state which and why for this feature>
+tightly-coupled work — state which and why for this feature. Phases that merely *share a
+wire-contract file* (a hooks / contracts / routes module) are still splittable: recommend
+multi-agent and thread that contract between agents rather than defaulting to one long
+single-agent context — reserve single-agent for genuinely one-context work (see root
+`CLAUDE.md` cost discipline).>
 
 ## Recommendations (optional)
 - Rec: <cleaner/safer/cheaper way to meet the same goal — suggestion only, not a
@@ -131,8 +135,10 @@ tightly-coupled work — state which and why for this feature>
 With answers in hand, load only what the requirements touch. Use the routing table
 below to decide what to read. Use `Grep`/`Glob` to locate specific symbols, routes,
 or schema before reading — read only the relevant ranges. For heavy or open-ended
-discovery, delegate to the `researcher` or `Explore` subagent so raw exploration
-stays out of your context and only the conclusion comes back.
+discovery, delegate to the **`researcher`** subagent (Sonnet-tiered) so raw exploration
+stays out of your context and only the conclusion comes back. Prefer `researcher` over the
+built-in `Explore`, which inherits *this* agent's Opus tier — an Opus explorer for a broad
+file sweep is wasteful (see root `CLAUDE.md` cost discipline).
 
 ### Step 3 — Write the plan (incrementally)
 

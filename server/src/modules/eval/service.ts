@@ -23,7 +23,8 @@ import { parseUnifiedDiff } from '../../adapters/git/diff-parser.js';
 import { loadDiff } from '../reviews/diff-loader.js';
 import { resolveFeatureModelWithFallback } from '../settings/feature-models.js';
 import { toAgentDto } from '../agents/helpers.js';
-import type { AgentRow } from '../../db/rows.js';
+import { GENERAL_REVIEWER_PROMPT } from '../../platform/reviewer-prompts.js';
+import type { AgentRow, SkillRow } from '../../db/rows.js';
 import {
   aggregate,
   computeCitationAccuracy,
@@ -194,6 +195,51 @@ export type CreateFromFindingResult =
   | { status: 'no_decision' }
   | { status: 'not_found' };
 
+/** Optional user edits (Gap 2, T1/A2) applied over the frozen draft before
+ *  insert. The frozen `input_diff` is NOT overridable here (R-G2-3 — the
+ *  freeze guarantee of AC-1/AC-2 must not be user-rewritable). */
+export interface FindingCaseEdits {
+  name?: string;
+  expected_output?: unknown;
+}
+
+/** The freeze-derived draft for a finding — shared by the preview (no insert)
+ *  and create (insert) paths so they can never drift from each other. */
+interface CaseDraft {
+  name: string;
+  input_diff: string;
+  input_meta: unknown;
+  expected_output: EvalExpectedFinding[];
+}
+
+type BuildCaseDraftResult =
+  | { status: 'ok'; agentId: string; draft: CaseDraft; existing?: EvalCase }
+  | { status: 'no_decision' }
+  | { status: 'not_found' };
+
+/**
+ * Non-saving preview of "Turn into eval case" (Gap 2, T1) — documented for the
+ * client hooks to conform to (`client/INSIGHTS.md:135` convention, same as
+ * `CrossAgentDashboard`/`RunAllAgentsResult` below). `already_added`/
+ * `existing_case` surface AC-5's cross-session idempotency signal so the
+ * client can open the EXISTING case in edit mode instead of minting a
+ * duplicate (R-G2-4).
+ */
+export interface FindingEvalCasePreview {
+  name: string;
+  input_diff: string;
+  input_meta: unknown;
+  expected_output: EvalExpectedFinding[];
+  owner_id: string;
+  already_added: boolean;
+  existing_case?: EvalCase;
+}
+
+export type PreviewCaseFromFindingResult =
+  | { status: 'ok'; preview: FindingEvalCasePreview }
+  | { status: 'no_decision' }
+  | { status: 'not_found' };
+
 export interface AuthorCaseInput {
   name: string;
   input_diff?: string;
@@ -235,13 +281,29 @@ export class EvalService {
     return this.container.agentsRepo;
   }
 
+  private get skillsRepo() {
+    return this.container.skillsRepo;
+  }
+
   private get reviewRepo() {
     return this.container.reviewRepo;
   }
 
-  // ---- create-from-finding (AC-1..AC-5) ------------------------------------
+  // ---- create-from-finding (AC-1..AC-5, Gap-2 preview T1) ------------------
 
-  async createCaseFromFinding(workspaceId: string, findingId: string): Promise<CreateFromFindingResult> {
+  /**
+   * Shared freeze-derivation for the finding→case flow. Loads the finding
+   * context, checks the decision precondition, and — for a NOT-yet-frozen
+   * finding — resolves the diff + derives the draft's `name`/`expected_output`/
+   * `input_meta`. When a case already exists for this finding, its OWN
+   * (possibly user-edited since creation) fields are reused instead of being
+   * recomputed, so a re-open/preview reflects what was actually saved rather
+   * than clobbering an edit with a fresh recompute.
+   */
+  private async buildCaseDraftFromFinding(
+    workspaceId: string,
+    findingId: string,
+  ): Promise<BuildCaseDraftResult> {
     const ctx = await this.reviewRepo.findingContext(findingId);
     if (!ctx) return { status: 'not_found' };
     const { finding, review, pull } = ctx;
@@ -256,7 +318,19 @@ export class EvalService {
     // so re-clicking after a delete surfaces "already added" rather than
     // silently minting a duplicate.
     const existing = await this.repo.findByFindingId(workspaceId, review.agentId, findingId);
-    if (existing) return { status: 'already_exists', case: toEvalCaseDto(existing) };
+    if (existing) {
+      return {
+        status: 'ok',
+        agentId: review.agentId,
+        draft: {
+          name: existing.name,
+          input_diff: existing.inputDiff ?? '',
+          input_meta: existing.inputMeta,
+          expected_output: parseExpected(existing),
+        },
+        existing: toEvalCaseDto(existing),
+      };
+    }
 
     const repoRow = await this.reviewRepo.getRepo(pull.repoId);
     if (!repoRow) return { status: 'not_found' };
@@ -283,35 +357,105 @@ export class EvalService {
 
     const name = finding.title ? `From finding: ${finding.title}` : `From finding ${finding.id}`;
 
+    return {
+      status: 'ok',
+      agentId: review.agentId,
+      draft: {
+        name,
+        // Frozen input is DATA, never instructions (spec §Untrusted inputs) —
+        // stored verbatim and only ever re-parsed (`parseUnifiedDiff`) or
+        // scanned for citation lines, never interpolated into a prompt as
+        // trusted text.
+        input_diff: diff.raw,
+        input_meta: {
+          source_finding_id: findingId,
+          pr_title: pull.title,
+          pr_number: pull.number,
+          pr_body: pull.body ?? null,
+        },
+        expected_output: expectedOutput,
+      },
+    };
+  }
+
+  /** Non-saving preview (Gap 2, R-G2-1/R-G2-6) — no `insertCase`/`updateCase`
+   *  call on this path. */
+  async previewCaseFromFinding(
+    workspaceId: string,
+    findingId: string,
+  ): Promise<PreviewCaseFromFindingResult> {
+    const result = await this.buildCaseDraftFromFinding(workspaceId, findingId);
+    if (result.status !== 'ok') return result;
+    return {
+      status: 'ok',
+      preview: {
+        ...result.draft,
+        owner_id: result.agentId,
+        already_added: result.existing != null,
+        ...(result.existing ? { existing_case: result.existing } : {}),
+      },
+    };
+  }
+
+  async createCaseFromFinding(
+    workspaceId: string,
+    findingId: string,
+    edits?: FindingCaseEdits,
+  ): Promise<CreateFromFindingResult> {
+    const result = await this.buildCaseDraftFromFinding(workspaceId, findingId);
+    if (result.status === 'not_found') return { status: 'not_found' };
+    if (result.status === 'no_decision') return { status: 'no_decision' };
+    if (result.existing) return { status: 'already_exists', case: result.existing };
+
+    const { draft } = result;
     const row = await this.repo.insertCase({
       workspaceId,
       ownerKind: 'agent',
-      ownerId: review.agentId,
-      name,
-      // Frozen input is DATA, never instructions (spec §Untrusted inputs) —
-      // stored verbatim and only ever re-parsed (`parseUnifiedDiff`) or
-      // scanned for citation lines, never interpolated into a prompt as
-      // trusted text.
-      inputDiff: diff.raw,
-      inputMeta: {
-        source_finding_id: findingId,
-        pr_title: pull.title,
-        pr_number: pull.number,
-        pr_body: pull.body ?? null,
-      },
-      expectedOutput,
+      ownerId: result.agentId,
+      name: edits?.name ?? draft.name,
+      inputDiff: draft.input_diff,
+      inputMeta: draft.input_meta,
+      expectedOutput: edits?.expected_output ?? draft.expected_output,
       notes: null,
     });
     return { status: 'created', case: toEvalCaseDto(row) };
   }
 
-  // ---- case management (AC-6, AC-22, AC-23, AC-24) -------------------------
+  // ---- case management (AC-6, AC-22, AC-23, AC-24; R-G1-3 skill parity) ----
+
+  private async listCasesForOwnerDto(
+    workspaceId: string,
+    ownerKind: EvalOwnerKind,
+    ownerId: string,
+  ): Promise<EvalCase[]> {
+    const rows = await this.repo.listCasesForOwner(workspaceId, ownerKind, ownerId);
+    return rows.map(toEvalCaseDto);
+  }
+
+  private async authorCaseForOwner(
+    workspaceId: string,
+    ownerKind: EvalOwnerKind,
+    ownerId: string,
+    input: AuthorCaseInput,
+  ): Promise<EvalCase> {
+    const row = await this.repo.insertCase({
+      workspaceId,
+      ownerKind,
+      ownerId,
+      name: input.name,
+      inputDiff: input.input_diff ?? '',
+      inputFiles: input.input_files,
+      inputMeta: input.input_meta,
+      expectedOutput: input.expected_output ?? [],
+      notes: input.notes ?? null,
+    });
+    return toEvalCaseDto(row);
+  }
 
   async listCases(workspaceId: string, agentId: string): Promise<EvalCase[] | undefined> {
     const agent = await this.agentsRepo.getById(workspaceId, agentId);
     if (!agent) return undefined;
-    const rows = await this.repo.listCasesForOwner(workspaceId, 'agent', agentId);
-    return rows.map(toEvalCaseDto);
+    return this.listCasesForOwnerDto(workspaceId, 'agent', agentId);
   }
 
   async authorCase(
@@ -321,18 +465,26 @@ export class EvalService {
   ): Promise<EvalCase | undefined> {
     const agent = await this.agentsRepo.getById(workspaceId, agentId);
     if (!agent) return undefined;
-    const row = await this.repo.insertCase({
-      workspaceId,
-      ownerKind: 'agent',
-      ownerId: agentId,
-      name: input.name,
-      inputDiff: input.input_diff ?? '',
-      inputFiles: input.input_files,
-      inputMeta: input.input_meta,
-      expectedOutput: input.expected_output ?? [],
-      notes: input.notes ?? null,
-    });
-    return toEvalCaseDto(row);
+    return this.authorCaseForOwner(workspaceId, 'agent', agentId, input);
+  }
+
+  /** Skill-keyed case list (R-G1-3) — `undefined` when the skill isn't in this
+   *  workspace; the route translates that to 404. */
+  async listSkillCases(workspaceId: string, skillId: string): Promise<EvalCase[] | undefined> {
+    const skill = await this.skillsRepo.getById(workspaceId, skillId);
+    if (!skill) return undefined;
+    return this.listCasesForOwnerDto(workspaceId, 'skill', skillId);
+  }
+
+  /** Skill-keyed author-from-scratch (R-G1-3). */
+  async authorSkillCase(
+    workspaceId: string,
+    skillId: string,
+    input: AuthorCaseInput,
+  ): Promise<EvalCase | undefined> {
+    const skill = await this.skillsRepo.getById(workspaceId, skillId);
+    if (!skill) return undefined;
+    return this.authorCaseForOwner(workspaceId, 'skill', skillId, input);
   }
 
   async updateCase(
@@ -353,44 +505,41 @@ export class EvalService {
     return this.repo.deleteCase(workspaceId, caseId);
   }
 
-  // ---- run orchestration (AC-9, AC-10, AC-25, AC-26) -----------------------
+  // ---- run orchestration (AC-9, AC-10, AC-25, AC-26; R-G1-2/4 skill parity) -
 
   /**
-   * Run one case: rebuild the `UnifiedDiff` from the frozen `input_diff`,
-   * execute the agent's CURRENT config through the real `reviewPullRequest`
-   * (or the injected `llmOverride` — T5), score via the pure scorer (T3), and
-   * persist ONE per-case row tagged with `runGroupId` + `agentVersion`.
+   * Config an owner (agent or skill) contributes to a case run — resolved
+   * ONCE per {@link runCaseWithConfig} call so the agent path stays
+   * byte-identical to the pre-refactor `runCase` (same `resolveFeatureModelWithFallback`
+   * call shape, same session-id format).
    */
-  private async runCase(
-    agent: AgentRow,
+  private async runCaseWithConfig(
     caseRow: EvalCaseRow,
     runGroupId: string,
     opts: RunOptions,
-    workspaceId: string,
+    cfg: {
+      systemPrompt: string;
+      skills?: string[];
+      provider: Provider;
+      model: string;
+      strategy?: ReviewStrategy;
+      ownerVersion: number | null;
+      sessionLabel: string;
+    },
   ): Promise<EvalRunRow> {
     const start = Date.now();
     const diff = parseUnifiedDiff(caseRow.inputDiff ?? '');
-
-    // Resolve the 'eval_runner' feature-model slot via three-tier policy:
-    // workspace override → the agent's own {provider, model} as the caller-
-    // supplied reachable model → registry default. With no override this is
-    // byte-identical to running the agent's own configured model (R1a).
-    const resolved = await resolveFeatureModelWithFallback(
-      this.container,
-      workspaceId,
-      'eval_runner',
-      { provider: agent.provider as Provider, model: agent.model },
-    );
-    const llm = opts.llmOverride ?? (await this.container.llm(resolved.provider));
+    const llm = opts.llmOverride ?? (await this.container.llm(cfg.provider));
 
     const outcome = await reviewPullRequest({
-      systemPrompt: agent.systemPrompt,
-      model: resolved.model,
+      systemPrompt: cfg.systemPrompt,
+      model: cfg.model,
       diff,
       llm,
-      strategy: (agent.strategy as ReviewStrategy) ?? undefined,
+      strategy: cfg.strategy,
+      ...(cfg.skills?.length ? { skills: cfg.skills } : {}),
       task: `Eval case: ${caseRow.name}`,
-      sessionId: `eval:${agent.id}:${caseRow.id}`,
+      sessionId: `${cfg.sessionLabel}:${caseRow.id}`,
     });
 
     const expected = parseExpected(caseRow);
@@ -414,34 +563,140 @@ export class EvalService {
       durationMs: Date.now() - start,
       costUsd: outcome.costUsd,
       runGroupId,
-      agentVersion: agent.version,
+      agentVersion: cfg.ownerVersion,
     });
   }
 
-  /** "Run all evals" for an agent (AC-9): every LIVE case, one shared
-   *  run_group_id, attributed to the agent's CURRENT version (AC-10: identical
+  /**
+   * Run one case against an AGENT's CURRENT config through the real
+   * `reviewPullRequest` (or the injected `llmOverride` — T5), score via the
+   * pure scorer (T3), and persist ONE per-case row tagged with `runGroupId` +
+   * `agentVersion`. Byte-identical to the pre-refactor `runCase`: no skills
+   * injected, same `eval_runner` resolution with the agent's reachable model.
+   */
+  private async runCase(
+    agent: AgentRow,
+    caseRow: EvalCaseRow,
+    runGroupId: string,
+    opts: RunOptions,
+    workspaceId: string,
+  ): Promise<EvalRunRow> {
+    // Resolve the 'eval_runner' feature-model slot via three-tier policy:
+    // workspace override → the agent's own {provider, model} as the caller-
+    // supplied reachable model → registry default. With no override this is
+    // byte-identical to running the agent's own configured model (R1a).
+    const resolved = await resolveFeatureModelWithFallback(
+      this.container,
+      workspaceId,
+      'eval_runner',
+      { provider: agent.provider as Provider, model: agent.model },
+    );
+    return this.runCaseWithConfig(caseRow, runGroupId, opts, {
+      systemPrompt: agent.systemPrompt,
+      provider: resolved.provider,
+      model: resolved.model,
+      strategy: (agent.strategy as ReviewStrategy) ?? undefined,
+      ownerVersion: agent.version,
+      sessionLabel: `eval:${agent.id}`,
+    });
+  }
+
+  /**
+   * Run one case against a SKILL (A1 — resolved with ZERO reviewer-core
+   * change): a general reviewer system prompt PLUS the skill's CURRENT body
+   * injected via reviewer-core's existing `skills` slot — data, not a role
+   * prompt, exactly as `run-executor.ts` injects an agent's enabled skills
+   * into a real review. No reachable model to fall back to (skills carry no
+   * provider/model), so `eval_runner` resolves workspace override → registry
+   * default.
+   */
+  private async runSkillCase(
+    skill: SkillRow,
+    caseRow: EvalCaseRow,
+    runGroupId: string,
+    opts: RunOptions,
+    workspaceId: string,
+  ): Promise<EvalRunRow> {
+    const resolved = await resolveFeatureModelWithFallback(this.container, workspaceId, 'eval_runner');
+    return this.runCaseWithConfig(caseRow, runGroupId, opts, {
+      systemPrompt: GENERAL_REVIEWER_PROMPT,
+      skills: [skill.body],
+      provider: resolved.provider,
+      model: resolved.model,
+      ownerVersion: skill.version,
+      sessionLabel: `eval:${skill.id}`,
+    });
+  }
+
+  /** Owner-generic "run all evals": every LIVE case for `ownerId`, one shared
+   *  run_group_id, attributed to the owner's CURRENT version (AC-10: identical
    *  case inputs are used regardless of which version runs — only the config
-   *  varies). Empty set → defined aggregate, never throws (AC-20). */
+   *  varies). Empty set → defined aggregate, never throws (AC-20/R-G1-7).
+   *  `undefined` when the owner isn't in this workspace. */
+  private async runAllForOwner(
+    workspaceId: string,
+    ownerKind: EvalOwnerKind,
+    ownerId: string,
+    opts: RunOptions = {},
+  ): Promise<EvalRunGroup | undefined> {
+    let ownerVersion: number | null;
+    let runOneCase: (caseRow: EvalCaseRow, runGroupId: string) => Promise<EvalRunRow>;
+
+    if (ownerKind === 'agent') {
+      const agent = await this.agentsRepo.getById(workspaceId, ownerId);
+      if (!agent) return undefined;
+      ownerVersion = agent.version;
+      runOneCase = (c, runGroupId) => this.runCase(agent, c, runGroupId, opts, workspaceId);
+    } else {
+      const skill = await this.skillsRepo.getById(workspaceId, ownerId);
+      if (!skill) return undefined;
+      // Mirror production review composition (`run-executor.ts` filters to
+      // `skill.enabled` before injecting a body into a live LLM call) — a
+      // disabled (e.g. freshly-imported, unvetted) skill's body must never
+      // reach the LLM provider via the eval run path either.
+      if (!skill.enabled) {
+        throw new ValidationError('Skill is disabled — enable it to run evals.');
+      }
+      ownerVersion = skill.version;
+      runOneCase = (c, runGroupId) => this.runSkillCase(skill, c, runGroupId, opts, workspaceId);
+    }
+
+    const cases = await this.repo.listCasesForOwner(workspaceId, ownerKind, ownerId);
+    const runGroupId = randomUUID();
+    const rows: EvalRunRow[] = [];
+    for (const c of cases) {
+      rows.push(await runOneCase(c, runGroupId));
+    }
+    const ranAt = rows.reduce((max, r) => (r.ranAt > max ? r.ranAt : max), new Date());
+    return toRunGroupDto(ownerId, { runGroupId, agentVersion: ownerVersion, ranAt, rows });
+  }
+
   async runAllForAgent(
     workspaceId: string,
     agentId: string,
     opts: RunOptions = {},
   ): Promise<EvalRunGroup> {
-    const agent = await this.agentsRepo.getById(workspaceId, agentId);
-    if (!agent) throw new NotFoundError('Agent not found');
-    const cases = await this.repo.listCasesForOwner(workspaceId, 'agent', agentId);
-    const runGroupId = randomUUID();
-    const rows: EvalRunRow[] = [];
-    for (const c of cases) {
-      rows.push(await this.runCase(agent, c, runGroupId, opts, workspaceId));
-    }
-    const ranAt = rows.reduce((max, r) => (r.ranAt > max ? r.ranAt : max), new Date());
-    return toRunGroupDto(agentId, { runGroupId, agentVersion: agent.version, ranAt, rows });
+    const result = await this.runAllForOwner(workspaceId, 'agent', agentId, opts);
+    if (!result) throw new NotFoundError('Agent not found');
+    return result;
+  }
+
+  /** Skill-keyed "run all evals" (R-G1-4). `undefined` when the skill isn't in
+   *  this workspace; the route translates that to 404. */
+  async runAllForSkill(
+    workspaceId: string,
+    skillId: string,
+    opts: RunOptions = {},
+  ): Promise<EvalRunGroup | undefined> {
+    return this.runAllForOwner(workspaceId, 'skill', skillId, opts);
   }
 
   /** Run a single case (AC-25) — persists exactly one per-case row like a full
-   *  run; the agent's derived aggregate re-reads the LATEST row per case, so
-   *  this single run immediately updates it. */
+   *  run; the owner's derived aggregate re-reads the LATEST row per case, so
+   *  this single run immediately updates it. Branches on the case's OWN
+   *  `ownerKind` (agent or skill) — this is where the pre-refactor "only
+   *  agent-owned cases can be run" guard used to sit; skill cases now run the
+   *  same way agent cases do (T8e). */
   async runSingleCase(
     workspaceId: string,
     caseId: string,
@@ -449,13 +704,21 @@ export class EvalService {
   ): Promise<{ run: EvalRunRecord; case: EvalCase } | undefined> {
     const caseRow = await this.repo.getCase(workspaceId, caseId);
     if (!caseRow) return undefined;
-    if (caseRow.ownerKind !== 'agent') {
-      throw new ValidationError('Only agent-owned eval cases can be run (skill eval cases are out of scope)');
-    }
-    const agent = await this.agentsRepo.getById(workspaceId, caseRow.ownerId);
-    if (!agent) throw new NotFoundError('Owning agent not found');
+
     const runGroupId = randomUUID();
-    const run = await this.runCase(agent, caseRow, runGroupId, opts, workspaceId);
+    let run: EvalRunRow;
+    if (caseRow.ownerKind === 'agent') {
+      const agent = await this.agentsRepo.getById(workspaceId, caseRow.ownerId);
+      if (!agent) throw new NotFoundError('Owning agent not found');
+      run = await this.runCase(agent, caseRow, runGroupId, opts, workspaceId);
+    } else {
+      const skill = await this.skillsRepo.getById(workspaceId, caseRow.ownerId);
+      if (!skill) throw new NotFoundError('Owning skill not found');
+      if (!skill.enabled) {
+        throw new ValidationError('Skill is disabled — enable it to run evals.');
+      }
+      run = await this.runSkillCase(skill, caseRow, runGroupId, opts, workspaceId);
+    }
     return { run: toRunRecordDto(run, caseRow.name), case: toEvalCaseDto(caseRow) };
   }
 
@@ -480,24 +743,41 @@ export class EvalService {
     return results;
   }
 
-  // ---- history + dashboard (AC-8, AC-14, AC-15, AC-17, AC-28) --------------
+  // ---- history + dashboard (AC-8, AC-14, AC-15, AC-17, AC-28; R-G1-5) ------
+
+  private async runHistoryForOwner(
+    workspaceId: string,
+    ownerKind: EvalOwnerKind,
+    ownerId: string,
+  ): Promise<EvalRunGroup[]> {
+    const groups = await this.repo.listRunGroups(workspaceId, ownerKind, ownerId);
+    return groups.map((g) => toRunGroupDto(ownerId, g));
+  }
 
   async runHistory(workspaceId: string, agentId: string): Promise<EvalRunGroup[] | undefined> {
     const agent = await this.agentsRepo.getById(workspaceId, agentId);
     if (!agent) return undefined;
-    const groups = await this.repo.listRunGroups(workspaceId, 'agent', agentId);
-    return groups.map((g) => toRunGroupDto(agentId, g));
+    return this.runHistoryForOwner(workspaceId, 'agent', agentId);
   }
 
-  async agentDashboard(workspaceId: string, agentId: string): Promise<EvalDashboard | undefined> {
-    const agent = await this.agentsRepo.getById(workspaceId, agentId);
-    if (!agent) return undefined;
+  /** Skill-keyed run history (R-G1-4). `undefined` when the skill isn't in
+   *  this workspace; the route translates that to 404. */
+  async skillRunHistory(workspaceId: string, skillId: string): Promise<EvalRunGroup[] | undefined> {
+    const skill = await this.skillsRepo.getById(workspaceId, skillId);
+    if (!skill) return undefined;
+    return this.runHistoryForOwner(workspaceId, 'skill', skillId);
+  }
 
-    const cases = await this.repo.listCasesForOwner(workspaceId, 'agent', agentId);
-    const latest = await this.repo.latestRunsForOwner(workspaceId, 'agent', agentId);
+  private async ownerDashboard(
+    workspaceId: string,
+    ownerKind: EvalOwnerKind,
+    ownerId: string,
+  ): Promise<EvalDashboard> {
+    const cases = await this.repo.listCasesForOwner(workspaceId, ownerKind, ownerId);
+    const latest = await this.repo.latestRunsForOwner(workspaceId, ownerKind, ownerId);
     const current = aggregate(latest.map(toPerCaseScore));
 
-    const groups = await this.repo.listRunGroups(workspaceId, 'agent', agentId); // newest-first
+    const groups = await this.repo.listRunGroups(workspaceId, ownerKind, ownerId); // newest-first
     const trend: EvalTrendPoint[] = [...groups].reverse().map((g) => {
       const agg = aggregate(g.rows.map(toPerCaseScore));
       return {
@@ -528,8 +808,8 @@ export class EvalService {
       .map((r) => toRunRecordDto(r, r.caseName));
 
     return {
-      owner_kind: 'agent',
-      owner_id: agentId,
+      owner_kind: ownerKind,
+      owner_id: ownerId,
       cases_total: cases.length,
       current: {
         recall: current.recall,
@@ -544,6 +824,23 @@ export class EvalService {
       recent_runs: recentRuns,
       alert: buildAlert(delta, previous !== undefined),
     };
+  }
+
+  async agentDashboard(workspaceId: string, agentId: string): Promise<EvalDashboard | undefined> {
+    const agent = await this.agentsRepo.getById(workspaceId, agentId);
+    if (!agent) return undefined;
+    return this.ownerDashboard(workspaceId, 'agent', agentId);
+  }
+
+  /** Skill-keyed dashboard metrics + delta vs previous run (R-G1-5).
+   *  `undefined` when the skill isn't in this workspace; the route translates
+   *  that to 404. Degraded inputs (zero cases, no runs) score without
+   *  throwing/NaN — same `aggregate`/`ownerDashboard` machinery as agents
+   *  (R-G1-7). */
+  async skillDashboard(workspaceId: string, skillId: string): Promise<EvalDashboard | undefined> {
+    const skill = await this.skillsRepo.getById(workspaceId, skillId);
+    if (!skill) return undefined;
+    return this.ownerDashboard(workspaceId, 'skill', skillId);
   }
 
   /** Cross-agent dashboard (AC-17): each agent's latest metrics + a recent

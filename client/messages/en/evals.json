@@ -36,8 +36,14 @@
     "deltaDown": "↓ {value}",
     "deltaFlat": "—"
   },
+  "evalsTabSkill": {
+    "metricsSubtitle": "Recall / Precision / Citation accuracy over this skill's eval cases",
+    "emptyCases": "No eval cases yet. Create one to assert this skill's expected findings on a sample diff.",
+    "disabledTooltip": "This skill is disabled — enable it first to run evals."
+  },
   "caseEditor": {
     "titleNew": "New eval case",
+    "titleSeeded": "Turn into eval case",
     "titleEdit": "Eval case · {name}",
     "nameLabel": "Name",
     "namePlaceholder": "stripe-key-leak",

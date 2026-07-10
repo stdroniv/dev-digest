@@ -23,7 +23,6 @@ import { taskLine } from './helpers.js';
 import { loadDiff } from './diff-loader.js';
 import { IntentService } from './intent.service.js';
 import { BriefService } from './brief.service.js';
-import { SkillsRepository } from '../skills/repository.js';
 import { DocumentsService } from '../documents/service.js';
 import { computeEffectiveDocuments } from './effective-documents.js';
 
@@ -305,7 +304,7 @@ export class ReviewRunExecutor {
       // agent's clone. A missing attached path is recorded in
       // `documents_unavailable` and logged via `runLog.info` (never `error`,
       // per server/INSIGHTS — a missing doc must never fail the run — AC-24).
-      const skillsRepo = new SkillsRepository(this.container.db);
+      const skillsRepo = this.container.skillsRepo;
       const agentDocs = await this.agents.linkedDocuments(agent.id, repo.id);
       const enabledSkillDocs = await Promise.all(
         linkedSkills

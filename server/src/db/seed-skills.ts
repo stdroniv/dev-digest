@@ -152,6 +152,205 @@ existing HTTP endpoint that a current client depends on:
 Additive changes (a new optional field, a brand-new route) are NOT breaking — do not
 flag them. Internal refactors that leave the wire shape identical are NOT breaking.`,
   },
+  // ---- API Contract Reviewer's four granular skills (docs/agent-prompts/skills/*).
+  // Bodies mirror those docs verbatim; each is directive with a good/bad example so
+  // the model has a concrete decision boundary. Seeded ENABLED so their eval cases
+  // (`seed-evals-skills.ts`) can actually run (a disabled skill's body never reaches
+  // the LLM, incl. the eval run path). Keep the two in sync when you edit a prompt.
+  {
+    name: 'breaking-change',
+    description: 'Flags backward-incompatible changes to a public HTTP contract an existing client depends on.',
+    type: 'convention',
+    source: 'manual',
+    enabled: true,
+    body: `# breaking-change
+
+Flag any change that removes or alters a part of a PUBLIC HTTP contract an existing
+client already depends on. A break is anything that makes a request that worked
+before this PR now fail, or makes a response the client parsed before now parse
+differently. Cite the exact \`file:line\` and name the field/param/route that breaks.
+
+A change is breaking when it does ANY of these to an EXISTING route:
+- removes or renames a route path, method, or \`:param\`;
+- removes, renames, or retypes a request or response field;
+- makes a previously-optional request field required, or adds a new required field;
+- narrows an enum, tightens validation, or flips a field's nullability;
+- changes the status code a client branches on for the same logical outcome.
+
+Purely ADDITIVE changes are NOT breaking: a new optional request field, a new
+response field, a brand-new route, or an internal refactor that leaves the wire
+shape byte-identical. Do not flag those.
+
+## Bad — silently breaks every caller
+\`\`\`ts
+// route: GET /users/:id  — response field renamed
+- return { id: user.id, fullName: user.fullName };
++ return { id: user.id, name: user.fullName };   // clients reading \`fullName\` now get undefined
+\`\`\`
+\`\`\`ts
+// request body — a new REQUIRED field rejects every old client
+const Body = z.object({
+  email: z.string(),
++ tenantId: z.string(),        // old clients omit it → 422
+});
+\`\`\`
+
+## Good — additive, backward-compatible
+\`\`\`ts
+// new field is OPTIONAL → old clients keep working
+const Body = z.object({
+  email: z.string(),
++ tenantId: z.string().optional(),
+});
+\`\`\`
+\`\`\`ts
+// keep the old field, add the new one alongside it
+return { id: user.id, fullName: user.fullName, name: user.fullName };
+\`\`\`
+
+When you find a break, report it as **CRITICAL** and state the concrete caller
+request that would now fail.`,
+  },
+  {
+    name: 'response-schema',
+    description: 'Watches the SHAPE of responses — nullability flips, envelope/pagination changes, retypes.',
+    type: 'convention',
+    source: 'manual',
+    enabled: true,
+    body: `# response-schema
+
+Watch the SHAPE of responses specifically — the part clients deserialize. Compare the
+before/after of every changed response schema or returned object literal in the diff.
+A response break is invisible to the server's own tests but breaks the client's
+parsing or rendering. Cite the exact \`file:line\`.
+
+Treat each of these as a response-shape break on an existing route:
+- a field removed or renamed (the client reads \`undefined\`);
+- a field retyped (\`string\` → \`number\`, object → array, scalar → object);
+- a required field made optional/nullable, or a nullable field made required;
+- the envelope or pagination shape changed (\`{ items, nextCursor }\` →
+  \`{ data, page }\`), or a bare array wrapped/unwrapped;
+- a date/number serialization format changed (ISO string → epoch millis).
+
+Adding a NEW optional field to a response is NOT a break — skip it.
+
+## Bad — nullability flip + envelope change
+\`\`\`ts
+// was: { items: Item[]; nextCursor: string | null }
+- return { items, nextCursor };
++ return { data: items, page: { next } };   // client reads \`items\`/\`nextCursor\` → both gone
+\`\`\`
+\`\`\`ts
+// field was always present; now sometimes omitted → client must handle undefined
+- return { id, email, verifiedAt };
++ return { id, email, ...(verifiedAt ? { verifiedAt } : {}) };
+\`\`\`
+
+## Good — stable shape, additive only
+\`\`\`ts
+return { items, nextCursor, totalCount };   // new field added, old keys untouched
+\`\`\`
+
+Report a confirmed response-shape break as **CRITICAL**; a soft change with a
+plausible client migration as **WARNING**. Name the exact field and how the client
+parses it today.`,
+  },
+  {
+    name: 'semver-discipline',
+    description: 'Flags a breaking change shipped in-place on a versioned path instead of a new version.',
+    type: 'convention',
+    source: 'manual',
+    enabled: true,
+    body: `# semver-discipline
+
+Map each contract change to the version bump it demands, and flag when a breaking
+change ships WITHOUT the major bump (or new versioned path) that should carry it.
+This is the policy layer on top of \`breaking-change\`: a break is only safe when it
+rides a new version, not the existing one.
+
+Rules:
+- A backward-INCOMPATIBLE change to an existing versioned path (\`/v1/...\`) requires a
+  NEW path (\`/v2/...\`) — the \`/v1\` shape must keep working. Mutating \`/v1\` in place is
+  the violation.
+- A package/library that exports the changed contract must get a MAJOR bump in
+  \`package.json\` when the export changes incompatibly; a MINOR bump for additive-only.
+- Additive changes (new optional field, new route, new enum member that clients can
+  ignore) are MINOR — do not demand a major bump for them.
+
+## Bad — breaking change mutates the existing version
+\`\`\`ts
+// /v1/orders previously returned \`total: number\`; this retypes it in place
+- app.get('/v1/orders/:id', () => ({ total: cents }));
++ app.get('/v1/orders/:id', () => ({ total: { amount: cents, currency } }));  // /v1 contract broken
+\`\`\`
+\`\`\`jsonc
+// package.json — exported response type changed incompatibly but only a patch bump
+- "version": "2.4.1",
++ "version": "2.4.2",     // should be 3.0.0
+\`\`\`
+
+## Good — break carried on a new version, old one preserved
+\`\`\`ts
+app.get('/v1/orders/:id', () => ({ total: cents }));            // unchanged
+app.get('/v2/orders/:id', () => ({ total: { amount, currency } })); // new shape on /v2
+\`\`\`
+
+Flag an in-place break on a versioned path as **CRITICAL**, and a missing/incorrect
+version bump as **WARNING**. Name the path or package and the bump it needs.`,
+  },
+  {
+    name: 'deprecation-policy',
+    description: 'Flags silent removal of a still-public surface instead of soft-deprecating it.',
+    type: 'convention',
+    source: 'manual',
+    enabled: true,
+    body: `# deprecation-policy
+
+Prefer SOFT deprecation over silent removal. When a PR deletes a field, param, route,
+or enum value that clients may still use, the change should instead mark it deprecated
+and keep returning/accepting it for a migration window. Flag silent removals and
+point at the soft-deprecation path.
+
+What good deprecation looks like:
+- the old field/route keeps working (still returned / still accepted) during the
+  window;
+- it is annotated as deprecated — a \`@deprecated\` JSDoc tag, an \`x-deprecated\` schema
+  marker, a \`Deprecation\` / \`Sunset\` response header, or a doc note — so callers are
+  warned BEFORE it disappears;
+- a replacement is offered alongside it; removal happens in a LATER, clearly-versioned
+  release, not the same PR that introduces the replacement.
+
+A removal is acceptable without a window ONLY if the surface was never public
+(internal route, unreleased feature, or a field added earlier in the same unreleased
+version).
+
+## Bad — silent hard removal
+\`\`\`ts
+// field clients still read, deleted outright with no warning
+- return { id, email, legacyToken };
++ return { id, email };
+\`\`\`
+\`\`\`ts
+// route deleted in the same PR that adds its replacement
+- app.get('/users/:id/profile', getProfile);   // callers 404 immediately
++ app.get('/users/:id/card', getCard);
+\`\`\`
+
+## Good — deprecate, keep, then remove later
+\`\`\`ts
+/** @deprecated use \`email\`; removed in v3. Still returned through v2.x. */
+return { id, email, legacyToken };             // kept during the window
+\`\`\`
+\`\`\`ts
+reply.header('Deprecation', 'true');
+reply.header('Sunset', 'Wed, 31 Dec 2026 23:59:59 GMT');
+return getProfile();                            // old route still served, marked sunset
+\`\`\`
+
+Flag a silent removal of a still-public surface as **CRITICAL** (it is also a
+\`breaking-change\`); flag a removal that is missing only the deprecation annotation as
+**WARNING**.`,
+  },
 ];
 
 /**

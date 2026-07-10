@@ -81,6 +81,7 @@ vi.mock("@/lib/hooks/evals", () => ({
   useDeleteCase: () => ({ mutate: deleteMutate, isPending: false }),
   useCreateCase: () => ({ mutateAsync: vi.fn(), isPending: false }),
   useUpdateCase: () => ({ mutateAsync: vi.fn(), isPending: false }),
+  useCreateCaseFromFinding: () => ({ mutateAsync: vi.fn(), isPending: false }),
 }));
 
 import { EvalsTab } from "./EvalsTab";
@@ -161,7 +162,7 @@ describe("Agent EvalsTab (T15, AC-6/AC-8)", () => {
     renderWithIntl(<EvalsTab agent={AGENT} />);
     fireEvent.click(screen.getAllByLabelText("Run case")[0]!);
     expect(runOneMutate).toHaveBeenCalledWith(
-      { caseId: "c1", agentId: "ag1" },
+      { caseId: "c1", owner: { kind: "agent", id: "ag1" } },
       expect.objectContaining({ onSettled: expect.any(Function) }),
     );
   });
@@ -170,7 +171,7 @@ describe("Agent EvalsTab (T15, AC-6/AC-8)", () => {
     const confirmSpy = vi.spyOn(window, "confirm").mockReturnValue(true);
     renderWithIntl(<EvalsTab agent={AGENT} />);
     fireEvent.click(screen.getAllByLabelText("Delete")[0]!);
-    expect(deleteMutate).toHaveBeenCalledWith({ id: "c1", agentId: "ag1" });
+    expect(deleteMutate).toHaveBeenCalledWith({ id: "c1", owner: { kind: "agent", id: "ag1" } });
     confirmSpy.mockRestore();
   });
 

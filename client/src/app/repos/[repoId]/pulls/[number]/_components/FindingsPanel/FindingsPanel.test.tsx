@@ -9,11 +9,17 @@ vi.mock("../../../../../../../lib/hooks/reviews", () => ({
   useFindingAction: () => ({ mutate: vi.fn(), isPending: false }),
 }));
 
-// FindingCard (rendered by FindingsPanel) uses the eval-case mutation hook
-// (T14, "Turn into eval case"); mock it so this suite doesn't need a
-// QueryClientProvider just to satisfy that nested hook.
+// FindingCard (rendered by FindingsPanel) uses the eval-case preview/mutation
+// hooks (Gap 2, "Turn into eval case"); mock them so this suite doesn't need a
+// QueryClientProvider just to satisfy those nested hooks. The preview hook
+// stays disabled here (no test in this file opens the eval modal).
 vi.mock("../../../../../../../lib/hooks/evals", () => ({
-  useCreateCaseFromFinding: () => ({ mutate: vi.fn(), isPending: false }),
+  useFindingEvalCasePreview: () => ({ data: undefined }),
+  useCreateCaseFromFinding: () => ({ mutateAsync: vi.fn(), isPending: false }),
+  useCreateCase: () => ({ mutateAsync: vi.fn(), isPending: false }),
+  useUpdateCase: () => ({ mutateAsync: vi.fn(), isPending: false }),
+  useDeleteCase: () => ({ mutate: vi.fn(), isPending: false }),
+  useRunSingleCase: () => ({ mutate: vi.fn(), isPending: false }),
 }));
 
 import { FindingsPanel } from "./FindingsPanel";

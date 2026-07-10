@@ -3,15 +3,16 @@ import { createDb, type Db } from './client.js';
 import * as t from './schema.js';
 import { eq, and } from 'drizzle-orm';
 import {
-  GENERAL_REVIEWER_PROMPT,
   SECURITY_REVIEWER_PROMPT,
   PERFORMANCE_REVIEWER_PROMPT,
   TEST_QUALITY_REVIEWER_PROMPT,
   API_CONTRACT_REVIEWER_PROMPT,
 } from './seed-prompts.js';
+import { GENERAL_REVIEWER_PROMPT } from '../platform/reviewer-prompts.js';
 import { DEMO_SKILLS, AGENT_SKILL_LINKS, STATS_DEMO_REVIEWS } from './seed-skills.js';
 import { seedEvalCases } from './seed-evals.js';
 import { seedHardEvalCases } from './seed-evals-hard.js';
+import { seedApiContractSkillEvalCases } from './seed-evals-skills.js';
 
 /** Default provider/model for the built-in reviewer agents. */
 const DEFAULT_PROVIDER = 'openrouter' as const;
@@ -464,6 +465,10 @@ export async function seed(
 
     // ---- Hard, real-world eval cases across all 5 reviewer agents ----
     await seedHardEvalCases(db, workspaceId, repoId);
+
+    // ---- Eval cases for the API Contract Reviewer's four granular skills
+    //      (breaking-change, response-schema, semver-discipline, deprecation-policy) ----
+    await seedApiContractSkillEvalCases(db, workspaceId);
   }
 
   return { workspaceId, userId };

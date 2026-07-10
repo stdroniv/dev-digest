@@ -203,7 +203,103 @@ function buildDiffText(file: string, startLine: number, endLine: number): string
   ].join('\n');
 }
 
-export async function seedEvalCases(db: Db, workspaceId: string, repoId: string): Promise<void> {
+/** T12 — a demo SKILL's eval cases (R-G1-1..7), both `must_find` and
+ *  `must_not_flag` represented, so a freshly seeded workspace shows a
+ *  populated Skill Evals tab (the `skill-evals` artboard's populated state).
+ *  Owns `secret-leakage-gate` (already a DEMO_SKILL, `db/seed-skills.ts`) —
+ *  its rubric is about hardcoded secrets, which matches these fixtures'
+ *  theme. Idempotent: guarded on this skill already having any eval case,
+ *  mirroring the agent-case guard below. */
+interface SkillEvalDemoCase {
+  name: string;
+  file: string;
+  startLine: number;
+  endLine: number;
+  title: string;
+  /** `true` → must_find (one expected finding); `false` → must_not_flag ([]). */
+  mustFind: boolean;
+}
+
+const SKILL_EVAL_DEMO_CASES: SkillEvalDemoCase[] = [
+  {
+    name: 'stripe-live-key-must-find',
+    file: 'src/config.ts',
+    startLine: 12,
+    endLine: 12,
+    title: 'Hardcoded Stripe secret key (sk_live_)',
+    mustFind: true,
+  },
+  {
+    name: 'service-role-key-must-find',
+    file: 'src/api/admin.ts',
+    startLine: 8,
+    endLine: 8,
+    title: 'Supabase service_role key committed in source',
+    mustFind: true,
+  },
+  {
+    name: 'placeholder-key-must-not-flag',
+    file: 'src/config.ts',
+    startLine: 40,
+    endLine: 40,
+    title: 'Placeholder/example key in a fixture — not a real secret',
+    mustFind: false,
+  },
+  {
+    name: 'env-var-reference-must-not-flag',
+    file: 'src/api/users.ts',
+    startLine: 5,
+    endLine: 5,
+    title: 'process.env reference — reads a secret, does not leak one',
+    mustFind: false,
+  },
+];
+
+async function seedSkillEvalCases(db: Db, workspaceId: string): Promise<void> {
+  const [skill] = await db
+    .select()
+    .from(t.skills)
+    .where(and(eq(t.skills.workspaceId, workspaceId), eq(t.skills.name, 'secret-leakage-gate')));
+  if (!skill) return;
+
+  const [existingCase] = await db
+    .select({ id: t.evalCases.id })
+    .from(t.evalCases)
+    .where(
+      and(
+        eq(t.evalCases.workspaceId, workspaceId),
+        eq(t.evalCases.ownerKind, 'skill'),
+        eq(t.evalCases.ownerId, skill.id),
+      ),
+    );
+  if (existingCase) return; // idempotent — already seeded
+
+  await db.insert(t.evalCases).values(
+    SKILL_EVAL_DEMO_CASES.map((c) => ({
+      workspaceId,
+      ownerKind: 'skill' as const,
+      ownerId: skill.id,
+      name: c.name,
+      inputDiff: buildDiffText(c.file, c.startLine, c.endLine),
+      inputMeta: { title: c.title },
+      expectedOutput: c.mustFind
+        ? [
+            {
+              file: c.file,
+              start_line: c.startLine,
+              end_line: c.endLine,
+              severity: 'CRITICAL',
+              category: 'security',
+              title: c.title,
+            },
+          ]
+        : [],
+      notes: null,
+    })),
+  );
+}
+
+async function seedAgentEvalCases(db: Db, workspaceId: string, repoId: string): Promise<void> {
   const [agent] = await db
     .select()
     .from(t.agents)
@@ -318,6 +414,15 @@ export async function seedEvalCases(db: Db, workspaceId: string, repoId: string)
   }
 
   await seedEvalRuns(db, agent, caseRows);
+}
+
+/** Entry point called from `db/seed.ts` (gated by `includeEvalFixtures`) — the
+ *  demo agent's cases/runs (AC-7) plus the demo skill's cases (T12, R-G1-1..7).
+ *  Each half is independently idempotent, so re-running `pnpm db:seed` is a
+ *  no-op regardless of which half already ran. */
+export async function seedEvalCases(db: Db, workspaceId: string, repoId: string): Promise<void> {
+  await seedAgentEvalCases(db, workspaceId, repoId);
+  await seedSkillEvalCases(db, workspaceId);
 }
 
 /**

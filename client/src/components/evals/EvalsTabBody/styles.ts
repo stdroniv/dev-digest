@@ -1,6 +1,7 @@
 import type { CSSProperties } from "react";
 
-/** Co-located styles for EvalsTab. */
+/** Co-located styles for `EvalsTabBody` — moved verbatim from the agent
+ *  Evals tab's `styles.ts` (de-dup fix: shared by the agent AND skill tabs). */
 export const s = {
   wrap: { display: "flex", flexDirection: "column", gap: 24, maxWidth: 960 } satisfies CSSProperties,
   header: { display: "flex", alignItems: "center", justifyContent: "space-between" } satisfies CSSProperties,
@@ -27,4 +28,5 @@ export const s = {
   rowSummary: { fontSize: 12.5, color: "var(--text-secondary)", display: "flex", alignItems: "center", gap: 8 } satisfies CSSProperties,
   rowStatus: { display: "flex", alignItems: "center", gap: 6, fontSize: 12, color: "var(--text-muted)" } satisfies CSSProperties,
   rowActions: { display: "flex", alignItems: "center", gap: 4 } satisfies CSSProperties,
+  runDisabledWrap: { display: "inline-flex" } satisfies CSSProperties,
 } as const;

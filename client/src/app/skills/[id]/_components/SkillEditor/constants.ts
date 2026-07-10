@@ -9,8 +9,8 @@ export interface SkillEditorTab {
 }
 
 /**
- * Skill editor tabs. Config + Preview + Context + Stats + Versions; the Evals
- * tab in the design is a later lesson (no eval data yet).
+ * Skill editor tabs. Config + Preview + Context + Stats + Versions + Evals
+ * (Gap 1 — mirrors the agent editor's Evals tab, skill-keyed).
  */
 export const TABS: readonly SkillEditorTab[] = [
   { key: "config", labelKey: "tabs.config", icon: "Settings" },
@@ -18,6 +18,7 @@ export const TABS: readonly SkillEditorTab[] = [
   { key: "context", labelKey: "tabs.context", icon: "FileText" },
   { key: "stats", labelKey: "tabs.stats", icon: "BarChart" },
   { key: "versions", labelKey: "tabs.versions", icon: "History" },
+  { key: "evals", labelKey: "tabs.evals", icon: "FlaskConical" },
 ];
 
 export const VALID_SKILL_TABS = TABS.map((t) => t.key);

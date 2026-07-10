@@ -64,11 +64,11 @@ describe("useCreateCaseFromFinding — cross-surface invalidation", () => {
     qc.setQueryData(evalKeys.dashboard(), {});
 
     const { result } = renderHook(() => useCreateCaseFromFinding(), { wrapper: wrapper(qc) });
-    result.current.mutate("finding-1");
+    result.current.mutate({ findingId: "finding-1" });
 
     await waitFor(() => expect(result.current.isSuccess).toBe(true));
 
-    expect(apiPost).toHaveBeenCalledWith("/findings/finding-1/eval-case");
+    expect(apiPost).toHaveBeenCalledWith("/findings/finding-1/eval-case", {});
     expect(qc.getQueryState(evalKeys.cases("ag1"))?.isInvalidated).toBe(true);
     expect(qc.getQueryState(evalKeys.agentDashboard("ag1"))?.isInvalidated).toBe(true);
     expect(qc.getQueryState(evalKeys.dashboard())?.isInvalidated).toBe(true);

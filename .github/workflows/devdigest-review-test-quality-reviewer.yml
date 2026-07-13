@@ -9,7 +9,7 @@ name: DevDigest Review (test-quality-reviewer)
 
 on:
   pull_request:
-    types: [opened, synchronize, reopened]
+    types: [opened, synchronize]
 
 # Least privilege: read the diff, post a review/comment on the PR. Nothing else.
 permissions:
@@ -37,9 +37,17 @@ jobs:
           ref: ${{ github.event.pull_request.base.sha }}
 
       # Runs the review engine bundled at .devdigest/runner.mjs — the same
-      # engine (grounding gate included) that powers local reviews.
+      # engine (grounding gate included) that powers local reviews. Guarded on
+      # the file's presence: the PR that FIRST commits .devdigest/runner.mjs is
+      # checked out (above) at its own base sha, which never has that file
+      # yet — this exits 0 with a notice instead of crashing on that one PR.
       - name: Run DevDigest review
-        run: node .devdigest/runner.mjs --slug=test-quality-reviewer --post-as=pr_comment
+        run: |
+          if [ ! -f .devdigest/runner.mjs ]; then
+            echo "::notice::.devdigest/runner.mjs isn't on the base branch yet — expected for the PR that first adds it. The review activates once this PR merges."
+            exit 0
+          fi
+          node .devdigest/runner.mjs --slug=test-quality-reviewer --post-as=pr_comment
         env:
           # Repo secret, referenced only — never embedded in this file. Empty
           # on fork PRs, in which case the runner skips the review without

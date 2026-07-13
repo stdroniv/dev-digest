@@ -85,4 +85,4 @@ skills:
   - pr-quality-rubric
 strategy: single-pass
 ci_fail_on: critical
-workflow_version: 2
+workflow_version: 3

@@ -52,7 +52,7 @@ jobs:
           cache: pnpm
           cache-dependency-path: server/pnpm-lock.yaml
 
-      - run: pnpm install --frozen-lockfile
+      - run: pnpm install --frozen-lockfile || pnpm install --frozen-lockfile
 
       # The server type-checks reviewer-core's RAW source: tsconfig aliases
       # @devdigest/reviewer-core → ../reviewer-core/src, and platform/structured.ts
@@ -84,7 +84,7 @@ jobs:
           cache: pnpm
           cache-dependency-path: server/pnpm-lock.yaml
 
-      - run: pnpm install --frozen-lockfile
+      - run: pnpm install --frozen-lockfile || pnpm install --frozen-lockfile
 
       # The unit tests load server src, which imports @devdigest/reviewer-core
       # (../reviewer-core/src) → which imports `openai`/`zod`. Install reviewer-core's

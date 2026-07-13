@@ -53,6 +53,7 @@ function run(o: Partial<RunSummary>): RunSummary {
     blockers: null,
     cost_usd: null,
     findings_counts: null,
+    source: "local",
     ...o,
   };
 }

@@ -10,3 +10,4 @@ export * from "./use-path-shas";
 export * from "./brief";
 export * from "./blast";
 export * from "./evals";
+export * from "./ci";

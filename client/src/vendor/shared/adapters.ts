@@ -126,6 +126,42 @@ export interface OpenPrPayload {
   body: string;
 }
 
+/** One GitHub Actions run's metadata, as surfaced by `listWorkflowRuns` (AC-30/32/34). */
+export interface WorkflowRunMeta {
+  id: string;
+  status: 'queued' | 'in_progress' | 'completed';
+  conclusion:
+    | 'success'
+    | 'failure'
+    | 'cancelled'
+    | 'skipped'
+    | 'timed_out'
+    | 'action_required'
+    | 'neutral'
+    | 'stale'
+    | null;
+  headBranch: string;
+  headSha: string;
+  createdAt: string;
+  /** Outbound link to the run's Actions job page (the CI Runs page Trace link). */
+  htmlUrl: string;
+  /** The workflow file name (e.g. `devdigest-review-<slug>.yml`) that produced
+   *  this run — disambiguates multiple agents' workflows in the same repo (AC-16). */
+  workflowFileName: string;
+}
+
+/** Bounds for `listWorkflowRuns` — a recent window, per installed repo (AC-34). */
+export interface ListWorkflowRunsOptions {
+  /** Restrict to runs of this workflow file (e.g. `devdigest-review-<slug>.yml`). */
+  workflowFileName: string;
+  /** Restrict to a branch; omitted = all branches (PR runs target many heads). */
+  branch?: string;
+  /** ISO timestamp — only runs created at/after this time (bounds the window). */
+  since?: string;
+  /** Max runs to return (bounds the reconcile window per repo). */
+  perPage?: number;
+}
+
 export interface GitHubClient {
   listPullRequests(repo: RepoRef): Promise<PrMeta[]>;
   getPullRequest(repo: RepoRef, n: number): Promise<PrDetail>;
@@ -139,6 +175,21 @@ export interface GitHubClient {
     input: CreateReviewCommentInput,
   ): Promise<PrReviewComment>;
   openPullRequest(repo: RepoRef, payload: OpenPrPayload): Promise<{ url: string }>;
+  /**
+   * Recent Actions runs for one workflow file, bounded to `opts` (AC-30/34).
+   * Optional on the port (not yet implemented by every `GitHubClient`) — CI
+   * Actions/artifact methods land on the concrete adapters in a follow-up
+   * (server `ci` module work); callers must check for presence.
+   */
+  listWorkflowRuns?(repo: RepoRef, opts: ListWorkflowRunsOptions): Promise<WorkflowRunMeta[]>;
+  /**
+   * Download one named artifact's bytes from a run (e.g. `devdigest-result.json`).
+   * Returns `null` — never throws — when the run produced no such artifact
+   * (job failed/errored before upload); reconcile relies on `null` to record
+   * the run as Failed without fabricating findings/cost (AC-32). Optional on
+   * the port for the same reason as `listWorkflowRuns` above.
+   */
+  downloadRunArtifact?(repo: RepoRef, runId: string, name: string): Promise<Uint8Array | null>;
   getIssue(repo: RepoRef, n: number): Promise<IssueMeta>;
   /** GET /user — for "posting as @user". */
   currentLogin(): Promise<string>;

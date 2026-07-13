@@ -40,6 +40,62 @@ describe('mock adapters (no network)', () => {
   });
 });
 
+describe('MockGitHubClient — CI Actions run + artifact methods (SPEC-05 T3)', () => {
+  const repo = { owner: 'acme', name: 'widgets' };
+
+  it('listWorkflowRuns records the call and returns the fixture keyed by workflowFileName', async () => {
+    const runs = [
+      {
+        id: 'run-1',
+        status: 'completed' as const,
+        conclusion: 'success' as const,
+        headBranch: 'feat/x',
+        headSha: 'sha1',
+        createdAt: '2026-07-01T00:00:00Z',
+        htmlUrl: 'https://github.com/acme/widgets/actions/runs/1',
+        workflowFileName: 'devdigest-review-security.yml',
+      },
+    ];
+    const gh = new MockGitHubClient({ workflowRuns: { 'devdigest-review-security.yml': runs } });
+    const opts = { workflowFileName: 'devdigest-review-security.yml', since: '2026-06-25T00:00:00Z' };
+
+    const result = await gh.listWorkflowRuns(repo, opts);
+
+    expect(result).toEqual(runs);
+    expect(gh.listWorkflowRunsCalls).toHaveLength(1);
+    expect(gh.listWorkflowRunsCalls[0]).toEqual({ repo, opts });
+  });
+
+  it('listWorkflowRuns returns [] for an unconfigured workflow file (no fixture)', async () => {
+    const gh = new MockGitHubClient();
+    const result = await gh.listWorkflowRuns(repo, { workflowFileName: 'other.yml' });
+    expect(result).toEqual([]);
+  });
+
+  it('downloadRunArtifact records the call and returns the fixture bytes', async () => {
+    const bytes = new Uint8Array([1, 2, 3]);
+    const gh = new MockGitHubClient({
+      artifactContents: { 'run-1:devdigest-result.json': bytes },
+    });
+
+    const result = await gh.downloadRunArtifact(repo, 'run-1', 'devdigest-result.json');
+
+    expect(result).toBe(bytes);
+    expect(gh.downloadRunArtifactCalls).toEqual([
+      { repo, runId: 'run-1', name: 'devdigest-result.json' },
+    ]);
+  });
+
+  it('downloadRunArtifact returns null (not throw) when no artifact is configured (AC-32)', async () => {
+    const gh = new MockGitHubClient();
+    const result = await gh.downloadRunArtifact(repo, 'run-missing', 'devdigest-result.json');
+    expect(result).toBeNull();
+    expect(gh.downloadRunArtifactCalls).toEqual([
+      { repo, runId: 'run-missing', name: 'devdigest-result.json' },
+    ]);
+  });
+});
+
 describe('structured review pipeline (mock LLM → grounding)', () => {
   it('runs assemble → completeStructured(Review) → groundFindings end-to-end', async () => {
     // a fixture review where one finding is grounded and one is hallucinated

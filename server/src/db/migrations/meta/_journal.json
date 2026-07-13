@@ -141,6 +141,20 @@
       "when": 1783457473477,
       "tag": "0019_curious_supreme_intelligence",
       "breakpoints": true
+    },
+    {
+      "idx": 20,
+      "version": "7",
+      "when": 1783812123971,
+      "tag": "0020_pink_thing",
+      "breakpoints": true
+    },
+    {
+      "idx": 21,
+      "version": "7",
+      "when": 1783856301006,
+      "tag": "0021_pale_avengers",
+      "breakpoints": true
     }
   ]
 }

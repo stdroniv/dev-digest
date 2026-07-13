@@ -239,18 +239,22 @@ d('skill stats aggregation', () => {
       'Performance Reviewer',
       'Test Quality Reviewer',
     ]);
-    // 15 categorized findings, 11 accepted → 73.3%.
-    expect(stats.findings_30d).toBe(15);
+    // 15 categorized findings from the stats-demo PR, 11 accepted → 73.3%, plus
+    // 2 more (undecided) `perf` findings from Performance Reviewer's T9
+    // multi-agent-demo review (PR #482) — that agent also carries this skill,
+    // and getStats aggregates workspace-wide, not per-PR — for 17 total.
+    expect(stats.findings_30d).toBe(17);
     expect(stats.accept_rate_pct).toBe(73.3);
     expect(stats.findings_by_category).toEqual([
       { category: 'bug', count: 5 },
+      { category: 'perf', count: 5 },
       { category: 'style', count: 4 },
-      { category: 'perf', count: 3 },
       { category: 'security', count: 2 },
       { category: 'test', count: 1 },
     ]);
-    // 3 of the 6 in-window agent reviews use the rubric → 50%.
-    expect(stats.pull_frequency_pct).toBe(50);
+    // 4 of the 9 in-window agent reviews use the rubric (3 from the stats-demo
+    // PR + Performance Reviewer's T9 multi-agent-demo review) → 44.4%.
+    expect(stats.pull_frequency_pct).toBe(44.4);
     await app.close();
   });
 });

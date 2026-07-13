@@ -70,10 +70,13 @@ export async function seedMultiAgentDemo(
     .where(eq(t.multiAgentRuns.prId, prId));
   if (existing) return;
 
-  const [maRun] = await db
-    .insert(t.multiAgentRuns)
-    .values({ workspaceId, prId, ranAt: new Date(Date.now() - 2 * 60 * 60 * 1000) })
-    .returning();
+  // Backdated so the pre-existing PR #482 demo review (seeded moments ago, at
+  // effectively "now") stays the newest `agentRuns` row and keeps its
+  // accordion open-by-default in the regular Agent runs tab — these three
+  // runs are additional history, not a replacement.
+  const ranAt = new Date(Date.now() - 2 * 60 * 60 * 1000);
+
+  const [maRun] = await db.insert(t.multiAgentRuns).values({ workspaceId, prId, ranAt }).returning();
   const multiAgentRunId = maRun!.id;
 
   const runSeeds: AgentRunSeed[] = [
@@ -187,6 +190,7 @@ export async function seedMultiAgentDemo(
         agentId: run.agentId,
         prId,
         multiAgentRunId,
+        ranAt,
         provider: 'openrouter',
         model: 'deepseek/deepseek-v4-flash',
         durationMs: run.durationMs,

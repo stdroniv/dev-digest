@@ -13,14 +13,19 @@
 # Backend: OpenRouter (EVAL_BACKEND=openrouter). Content tiers hit OpenRouter natively; the tool tiers
 # run inside the Claude Agent SDK and need the bundled LiteLLM translating proxy (evals/proxy/).
 # Put the key in the repo's Actions secrets as OPENROUTER_API_KEY.
+#
+# NO `paths:` filter on `pull_request` — deliberately. The repo's `evals-gate` ruleset requires this
+# workflow's `evals-gate` job on EVERY PR into main, with no per-path exception available at the
+# ruleset level. A `paths:` filter here would stop the workflow (and `evals-gate`) from running at all
+# on a PR that touches neither `.claude/**`/`CLAUDE.md`/`evals/**`, which GitHub shows as an
+# indefinitely "Expected" required check — a permanent merge deadlock, not a slow one (hit for real by
+# an exported-agent PR that only touches `.devdigest/**`). The `detect` job's own path-based mapping
+# already decides which model-eval tiers actually run; that internal skip logic is the intended
+# mechanism, not this trigger-level filter — do not reintroduce it.
 name: evals
 
 on:
   pull_request:
-    paths:
-      - '.claude/**'
-      - 'CLAUDE.md'
-      - 'evals/**'
   workflow_dispatch:
     inputs:
       eval_model:

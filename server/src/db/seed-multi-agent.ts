@@ -71,9 +71,12 @@ export async function seedMultiAgentDemo(
   if (existing) return;
 
   // Backdated so the pre-existing PR #482 demo review (seeded moments ago, at
-  // effectively "now") stays the newest `agentRuns` row and keeps its
-  // accordion open-by-default in the regular Agent runs tab — these three
-  // runs are additional history, not a replacement.
+  // effectively "now") stays the newest run and keeps its accordion
+  // open-by-default in the regular Agent runs tab — these three runs are
+  // additional history, not a replacement. Applied to both `agentRuns.ranAt`
+  // (drives the timeline's `listRunsForPull` ordering) and `reviews.createdAt`
+  // (drives the Findings tab's `runs` ordering, which is what actually
+  // determines the default-open accordion — the two orderings are independent).
   const ranAt = new Date(Date.now() - 2 * 60 * 60 * 1000);
 
   const [maRun] = await db.insert(t.multiAgentRuns).values({ workspaceId, prId, ranAt }).returning();
@@ -219,6 +222,7 @@ export async function seedMultiAgentDemo(
         summary: run.summary,
         score: run.score,
         model: 'deepseek/deepseek-v4-flash',
+        createdAt: ranAt,
       })
       .returning({ id: t.reviews.id });
     const reviewId = review!.id;

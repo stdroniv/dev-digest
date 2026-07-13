@@ -28,6 +28,15 @@ await build({
   target: 'es2022',
   sourcemap: false,
   logLevel: 'info',
+  // Bundled CJS deps (e.g. node-fetch, pulled in transitively) call require()
+  // for Node builtins at runtime. esbuild's ESM output has no real `require`,
+  // so its own injected shim throws "Dynamic require of ... is not supported"
+  // the moment such a call actually executes — this banner defines a real one
+  // via createRequire so the shim's `typeof require !== "undefined"` check
+  // succeeds instead. No npm install needed: Node builtins resolve natively.
+  banner: {
+    js: "import { createRequire } from 'node:module'; const require = createRequire(import.meta.url);",
+  },
 });
 
 console.log('[devdigest] runner bundled -> dist/runner.mjs');

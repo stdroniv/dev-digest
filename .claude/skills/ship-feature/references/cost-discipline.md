@@ -75,3 +75,20 @@ leaner* agent turns and *zero wasted runs*:
 - **Escalate model only on purpose.** Per-agent `model:` is already tuned; override
   via the `Task` `model` param only to bump `implementer` to `opus` when the plan
   flags genuinely hard/ambiguous work — the default Sonnet handles mechanical edits.
+- **Tier EVERY dispatch — a bare `Agent`/`Task` inherits Opus.** The exploration rule above
+  is one case of a general one: `subagent_type` is what selects the tuned per-agent model, so
+  a dispatch with **no** `subagent_type` (or `general-purpose`) silently runs on the
+  orchestrator's tier — Opus on an Opus main loop. A real `/ship-feature` run dispatched its
+  Wave-4/5 client-component agents without `subagent_type: implementer`; they ran on Opus (the
+  `/cost` panel's "general-purpose" line, ~8% of usage) while the correctly-typed Waves 1–3 ran
+  Sonnet at equal quality — avoidable spend. Always: code → `subagent_type: implementer`,
+  exploration → `researcher`; then **verify with `/cost`** that the code waves landed under
+  `implementer` (Sonnet), not `general-purpose`.
+- **The Opus orchestrator is itself the single biggest line — keep it short.** `/cost` on that
+  run: **~71% of $ was Opus** and **~65% of usage sat above 150k context**, dominated by the
+  main loop's own re-billed transcript (its cache-read rivalled *all* subagents combined). So
+  when agents are available, **delegate even recovery and follow-up refactors to a fresh Sonnet
+  `implementer`** rather than doing them inline in the long Opus main loop — that run's
+  hand-done T18/T19 recovery + the three review follow-ups landed on the orchestrator and became
+  its largest cost. `/compact` mid-task and `/clear` between tasks to stop re-billing context
+  you no longer need.

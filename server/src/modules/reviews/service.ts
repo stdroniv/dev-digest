@@ -99,12 +99,21 @@ export class ReviewService {
    * (= agent_runs.id) created up-front so the SSE route can be subscribed
    * before/while the run progresses. A partial failure in one agent does not
    * abort the others.
+   *
+   * `multiAgentRunId` (optional, trailing): when the caller is the
+   * multi-agent-review module fanning out a curated agent set, every created
+   * `agent_runs` row is tagged with this id (FK → `multi_agent_runs.id`) so
+   * the grouping's `GET /multi-agent-runs/:id` can find them. `undefined` for
+   * the normal single/all-agents review path — rows stay ungrouped, exactly
+   * as before. The execution seam below (executor fire-and-forget) is
+   * untouched by this — it neither reads nor needs to know about the id.
    */
   async runReview(
     workspaceId: string,
     prId: string,
     targets: AgentRow[],
     logger?: Logger,
+    multiAgentRunId?: string,
   ): Promise<{ runs: { run_id: string; agent_id: string; agent_name: string }[]; reviews: ReviewDto[] }> {
     const pull = await this.repo.getPull(workspaceId, prId);
     if (!pull) throw new NotFoundError('Pull request not found');
@@ -123,6 +132,7 @@ export class ReviewService {
         prId,
         provider: agent.provider,
         model: agent.model,
+        multiAgentRunId: multiAgentRunId ?? null,
       });
       runs.push({ run_id: runId, agent_id: agent.id, agent_name: agent.name });
       jobs.push({ agent, runId });

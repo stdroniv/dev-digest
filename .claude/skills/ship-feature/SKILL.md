@@ -74,6 +74,12 @@ lookup and feed its answer into the spec or plan. Prefix the ask with `[code]` o
 `[web]` to force the search type. **Skip this** when the spec-creator's or the
 `implementation-plan` agent's own reading will clearly suffice — don't pad the pipeline.
 
+**Always spawn the tiered `researcher` (Sonnet) for exploration — never `Explore`,
+`general-purpose`, or a bare `Agent`/`Task` with no `subagent_type`.** Those default to the
+orchestrator's tier (usually Opus), so a cheap Sonnet lookup silently becomes an Opus one;
+pass `model: haiku` for a reasoning-light sweep. This is the same tiering rule Step 5
+applies to code work — see the cost-discipline reference.
+
 ## Step 2 — spec-creator, then STOP at the spec approval gate
 
 Spawn `spec-creator` with the (clarified) request. It emits a **Clarification response**
@@ -147,8 +153,23 @@ history): *"implement the source and run the existing checks; a `test-writer` ad
 tests."* This isn't bureaucracy — authoring tests inside the implementer's large,
 per-turn-re-billing context is what made one real run's implementer **33% of spend** while
 `test-writer` was **1%**; the split is a cost win, not overhead.
+**Watch the account session budget on a long, many-agent run.** A mid-run cap kills
+in-flight agents and dumps the recovery onto the (Opus) orchestrator — in one run the final
+wave's two agents both died on a cap, one having written nothing (pure wasted spend). When a
+run has already spawned many long agents, launch the last waves **smaller / serially or with
+a checkpoint** (glance at `/status` for remaining budget) so a cap's blast radius is one
+small piece, not a whole wave.
 
 Once approved, execute the plan:
+
+**Every code-writing dispatch MUST pass `subagent_type: implementer`** (as Step 1 requires
+`researcher` for exploration). A bare `Agent`/`Task` with no `subagent_type` silently runs
+as `general-purpose` at the orchestrator's tier — on an Opus main loop that means
+Opus-priced mechanical component builds. In one real `/ship-feature` run the Wave-4/5
+component dispatches omitted it and ran on Opus (surfacing as the `/cost` panel's
+"general-purpose" subagent line), while the correctly-typed Waves 1–3 ran Sonnet at equal
+quality — the single largest avoidable cost of that run. Verify tiering after a fan-out:
+`/cost` should show the code waves under `implementer` (Sonnet), not `general-purpose`.
 
 - **Single-agent plan** — spawn one `implementer` with the plan path (e.g. *"Execute
   docs/plans/<slug>.md"*). It writes the source and self-verifies by running

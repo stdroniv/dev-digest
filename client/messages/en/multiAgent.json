@@ -1,0 +1,84 @@
+{
+  "common": {
+    "viewTrace": "View trace",
+    "durationCost": "{seconds}s · {cost}",
+    "noHistory": "no history",
+    "selectAll": "Select all",
+    "findingsCount": "{count, plural, one {# finding} other {# findings}}"
+  },
+  "agentPicker": {
+    "header": "Pick agents to run",
+    "clear": "Clear",
+    "configureAgents": "Configure agents…",
+    "runBar": {
+      "selectAgent": "Select an agent",
+      "runOne": "Run {name}",
+      "runMany": "Run multi-agent review ({count})"
+    }
+  },
+  "configure": {
+    "crumb": "Configure run",
+    "title": "Run a Multi-Agent Review",
+    "subtitle": "Pick a pull request and choose which agents to run — compare their findings side by side.",
+    "step1Label": "Pull request",
+    "prPlaceholder": "Select a pull request…",
+    "prItem": "#{number} · {title}",
+    "step2Label": "Agents to run",
+    "clearAll": "Clear all",
+    "noPr": {
+      "title": "Pick a pull request first",
+      "body": "Choose which PR to review above, then select the agents to run on it."
+    },
+    "estimate": "≈ {seconds}s · {cost} · {count} agents",
+    "runBar": {
+      "select": "Select agents",
+      "runOne": "Run 1 agent",
+      "runMany": "Run multi-agent review ({count})"
+    }
+  },
+  "results": {
+    "crumb": "Multi-Agent Review",
+    "title": "Multi-Agent Review",
+    "configureRun": "Configure run",
+    "selectedAgents": "{count} selected agents",
+    "meta": "{count} agents · {seconds}s total · {cost}",
+    "view": {
+      "columns": "Columns",
+      "tabs": "Tabs"
+    },
+    "noAgents": {
+      "title": "No agents selected",
+      "body": "Pick at least one agent to fan out this review. Configure the run to choose agents.",
+      "cta": "Configure run"
+    },
+    "status": {
+      "running": "Running",
+      "done": "Done",
+      "failed": "Failed"
+    }
+  },
+  "columns": {
+    "noFindings": "No findings."
+  },
+  "tabs": {
+    "confidence": "Confidence",
+    "suggestedFix": "Suggested fix",
+    "noSummary": "No summary.",
+    "actions": {
+      "accept": "Accept",
+      "dismiss": "Dismiss",
+      "learn": "Learn",
+      "evalCase": "Turn into eval case"
+    },
+    "learnConfirm": "Learned from this finding.",
+    "evalCaseConfirm": "Turned into an eval case.",
+    "evalCaseNoDecision": "Accept or dismiss this finding first, then turn it into an eval case."
+  },
+  "conflicts": {
+    "title": "Where agents disagree",
+    "onlyConflicts": "Show only conflicts",
+    "shownCount": "{shown} of {total}",
+    "empty": "No conflicts — the agents agree on every flagged location.",
+    "didNotFlag": "did not flag"
+  }
+}

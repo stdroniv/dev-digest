@@ -67,6 +67,11 @@ export const Conflict = z.object({
   file: z.string(),
   line: z.number().int(),
   title: z.string(),
+  /** True when reviewing agents disagree at this location (≥1 flagged & ≥1
+   *  reviewed did NOT, OR divergent severities); false when all agreed. Computed
+   *  server-side (AC-29) so the client's "Show only conflicts" filter reads this
+   *  field instead of re-deriving the rule. */
+  is_conflict: z.boolean(),
   takes: z.array(ConflictTake),
 });
 export type Conflict = z.infer<typeof Conflict>;
@@ -84,6 +89,12 @@ export const MultiAgentRun = z.object({
   conflicts: z.array(Conflict),
 });
 export type MultiAgentRun = z.infer<typeof MultiAgentRun>;
+
+/** Body of POST /pulls/:id/multi-agent-run — the selected agent set to fan out. */
+export const MultiAgentRunRequest = z.object({
+  agent_ids: z.array(z.string().uuid()).min(1),
+});
+export type MultiAgentRunRequest = z.infer<typeof MultiAgentRunRequest>;
 
 // ---------------------------------------------------------------------------
 // Per-agent Stats (GET /agents/:id/stats)

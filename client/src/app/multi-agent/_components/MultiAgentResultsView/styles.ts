@@ -1,0 +1,67 @@
+/* Inline style tokens for the Multi-Agent Review results view (SPEC-05, T18).
+   Layout mirrors the design `ScreenMultiAgent` header + MetaRow (8bb91114),
+   with honest copy/math applied by the components that consume these. */
+import type React from "react";
+
+export const s: Record<string, React.CSSProperties> = {
+  page: { paddingBottom: 40 },
+  header: {
+    display: "flex",
+    alignItems: "center",
+    gap: 12,
+    padding: "18px 28px 4px",
+  },
+  configureBtn: {
+    display: "inline-flex",
+    alignItems: "center",
+    gap: 6,
+    padding: "5px 10px",
+    borderRadius: 7,
+    border: "1px solid var(--border)",
+    background: "var(--bg-surface)",
+    color: "var(--text-secondary)",
+    fontSize: 12,
+    fontWeight: 600,
+    cursor: "pointer",
+    textDecoration: "none",
+  },
+  title: { fontSize: 20, fontWeight: 700, letterSpacing: "-0.02em" },
+  subtle: { fontSize: 12.5, color: "var(--text-muted)" },
+  switch: {
+    marginLeft: "auto",
+    display: "flex",
+    gap: 2,
+    background: "var(--bg-surface)",
+    border: "1px solid var(--border)",
+    borderRadius: 7,
+    padding: 2,
+  },
+  switchBtn: {
+    padding: "4px 12px",
+    fontSize: 11.5,
+    fontWeight: 600,
+    borderRadius: 5,
+    border: "none",
+    cursor: "pointer",
+  },
+  switchOn: { background: "var(--bg-elevated)", color: "var(--text-primary)" },
+  switchOff: { background: "transparent", color: "var(--text-muted)" },
+  meta: {
+    display: "flex",
+    alignItems: "center",
+    gap: 12,
+    padding: "14px 28px",
+    borderBottom: "1px solid var(--border)",
+    fontSize: 12.5,
+    color: "var(--text-secondary)",
+  },
+  metaNum: { color: "var(--text-muted)" },
+  metaTitle: { fontWeight: 600, color: "var(--text-primary)" },
+  metaRight: {
+    marginLeft: "auto",
+    display: "inline-flex",
+    alignItems: "center",
+    gap: 6,
+  },
+  body: { padding: "20px 28px 0" },
+};

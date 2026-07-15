@@ -1,5 +1,5 @@
 {
-  "id": "0ce7ab3f-1c8d-4343-9bcc-ba051ee1c9aa",
+  "id": "e4bb43a6-cf35-4870-ab38-fda055203068",
   "prevId": "aa9ffcf6-8556-4ab8-b733-3a60b536f608",
   "version": "7",
   "dialect": "postgresql",
@@ -2677,26 +2677,6 @@
           "primaryKey": false,
           "notNull": true,
           "default": "now()"
-        },
-        "workflow_version": {
-          "name": "workflow_version",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": true,
-          "default": 1
-        },
-        "installed_config_hash": {
-          "name": "installed_config_hash",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "updated_at": {
-          "name": "updated_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
         }
       },
       "indexes": {},
@@ -2856,6 +2836,12 @@
         },
         "pr_id": {
           "name": "pr_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "multi_agent_run_id": {
+          "name": "multi_agent_run_id",
           "type": "uuid",
           "primaryKey": false,
           "notNull": false

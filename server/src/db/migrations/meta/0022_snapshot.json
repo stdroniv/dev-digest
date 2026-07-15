@@ -1,6 +1,6 @@
 {
-  "id": "0ce7ab3f-1c8d-4343-9bcc-ba051ee1c9aa",
-  "prevId": "aa9ffcf6-8556-4ab8-b733-3a60b536f608",
+  "id": "be4394b5-e175-40c7-aba5-10585b521e70",
+  "prevId": "9e8aea3c-9fcf-4d84-b868-de6be560492b",
   "version": "7",
   "dialect": "postgresql",
   "tables": {
@@ -2785,6 +2785,36 @@
           "type": "text",
           "primaryKey": false,
           "notNull": false
+        },
+        "critical": {
+          "name": "critical",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "warning": {
+          "name": "warning",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "suggestion": {
+          "name": "suggestion",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "duration_ms": {
+          "name": "duration_ms",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "pr_title": {
+          "name": "pr_title",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
         }
       },
       "indexes": {
@@ -2856,6 +2886,12 @@
         },
         "pr_id": {
           "name": "pr_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "multi_agent_run_id": {
+          "name": "multi_agent_run_id",
           "type": "uuid",
           "primaryKey": false,
           "notNull": false
@@ -2981,6 +3017,19 @@
           "tableTo": "pull_requests",
           "columnsFrom": [
             "pr_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "set null",
+          "onUpdate": "no action"
+        },
+        "agent_runs_multi_agent_run_id_multi_agent_runs_id_fk": {
+          "name": "agent_runs_multi_agent_run_id_multi_agent_runs_id_fk",
+          "tableFrom": "agent_runs",
+          "tableTo": "multi_agent_runs",
+          "columnsFrom": [
+            "multi_agent_run_id"
           ],
           "columnsTo": [
             "id"

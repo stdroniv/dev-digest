@@ -125,17 +125,23 @@ jobs:
   # One matrix leg per changed skill that HAS an eval suite. ADVISORY (continue-on-error): the judge
   # scores swing run-to-run on the CI model, so a failing leg posts its signal in the logs but does
   # NOT fail the workflow run or the required gate. See the evals-gate note for how to re-block them.
+  #
+  # The matrix always has >=1 leg (falls back to a single 'none' placeholder when no skill changed),
+  # with the job-level skip pushed into a per-step `if` instead of a job-level `if`. A job-level `if`
+  # short-circuits BEFORE the matrix expands, so GitHub can't resolve `${{ matrix.name }}` in `name:`
+  # and displays the raw, unexpanded template string as the job name — confusing on the PR checks
+  # list. Keeping the matrix non-empty means it always expands, so the skipped run reads as the
+  # legible `skill eval (none)` instead.
   skill-evals:
     name: skill eval (${{ matrix.name }})
     needs: detect
-    if: needs.detect.outputs.skills != '[]'
     continue-on-error: true
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
       max-parallel: 2
       matrix:
-        name: ${{ fromJSON(needs.detect.outputs.skills) }}
+        name: ${{ fromJSON(needs.detect.outputs.skills != '[]' && needs.detect.outputs.skills || '["none"]') }}
     defaults:
       run:
         working-directory: evals
@@ -143,16 +149,21 @@ jobs:
       EVAL_BACKEND: openrouter
       OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
     steps:
-      - uses: actions/checkout@v4
-      - uses: pnpm/action-setup@v4
+      - if: matrix.name != 'none'
+        uses: actions/checkout@v4
+      - if: matrix.name != 'none'
+        uses: pnpm/action-setup@v4
         with: { version: 10 }
-      - uses: actions/setup-node@v4
+      - if: matrix.name != 'none'
+        uses: actions/setup-node@v4
         with:
           node-version: 22
           cache: pnpm
           cache-dependency-path: evals/pnpm-lock.yaml
-      - run: pnpm install --frozen-lockfile
-      - run: pnpm exec vitest run skills/${{ matrix.name }}
+      - if: matrix.name != 'none'
+        run: pnpm install --frozen-lockfile
+      - if: matrix.name != 'none'
+        run: pnpm exec vitest run skills/${{ matrix.name }}
 
   # ── 4. Agent evals (tool tier — Agent SDK via the LiteLLM proxy) ────────────────────────────────
   # One matrix leg per changed agent that HAS an eval suite. Serialized (max-parallel:1) to stay under

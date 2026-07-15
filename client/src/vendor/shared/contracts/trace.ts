@@ -175,5 +175,9 @@ export const RunSummary = z.object({
   // Per-severity tally of this run's findings (computed on read from the run's
   // review). null when the run produced no review (running/failed/cancelled).
   findings_counts: SeverityCounts.nullable(),
+  // Where the run executed: a local studio run, or an ingested CI run
+  // (source='ci' on `agent_runs`, AC-42). Defaults to 'local' so existing
+  // callers/fixtures that omit it keep parsing unchanged.
+  source: z.enum(['local', 'ci']).default('local'),
 });
 export type RunSummary = z.infer<typeof RunSummary>;

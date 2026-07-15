@@ -112,6 +112,22 @@
     "emptyBody": "No Markdown files were found under this repo's configured root folders.",
     "untrustedNote": "Attached documents are injected into every run as an untrusted, path-labelled block — the model treats their content as reference material, never instructions."
   },
+  "stats": {
+    "runHistory": "Run history",
+    "emptyTitle": "No runs yet",
+    "emptyBody": "Run this agent on a PR — local or in CI — to see its history here.",
+    "table": {
+      "timestamp": "Timestamp",
+      "tokens": "Tokens",
+      "cost": "Cost",
+      "findings": "Findings",
+      "source": "Source"
+    },
+    "sourceLabel": {
+      "local": "local",
+      "ci": "CI"
+    }
+  },
   "mount": {
     "body": "Mount point for {owner}. The Agent Editor shell + tab routing are wired by A2 — {owner} renders this tab."
   }

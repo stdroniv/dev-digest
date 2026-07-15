@@ -3,9 +3,9 @@ name: ship-feature
 description: "Run the full DevDigest feature-delivery pipeline end-to-end by orchestrating the project's subagents. Use whenever the user invokes `/ship-feature`, or asks to 'ship a feature', 'build this end to end', 'run the full agent pipeline', 'take this from spec to merge-ready', or hands over a sizable feature request they want implemented with spec + planning + tests + review (not just a quick edit). It sequences researcher → spec-creator (spec approval gate) → implementation-plan → spec-conformance (plan⊨spec check) → [plan approval] → implementer(s) → test-writer, then runs architecture-reviewer + security-reviewer + plan-verifier in parallel, loops blocking findings back to the implementer until the change is clean, and optionally finishes with doc-writer. Use it even when the user just describes a substantial feature and wants it done 'properly' — orchestrating the agents in the right order, in parallel where safe, with the approval gates and the review loop, is the whole value. For a one-line quick fix a single agent is enough; this is for multi-step features worth the full pipeline."
 allowed-tools: Task, Read, Grep, Glob, Bash
 metadata:
-  version: 1.4.1
+  version: 1.5.0
   tags: pipeline, orchestration, subagents, feature-delivery, spec-creator, implementation-plan, spec-conformance, implementer, reviewers, definition-of-done
-  updated: 2026-07-11
+  updated: 2026-07-13
 ---
 
 # Ship Feature — pipeline orchestrator
@@ -145,6 +145,14 @@ external API authenticate? A cheap probe up front beats discovering a hard block
 minutes into an expensive run. Skip it when the change only touches code and tooling
 already present in the repo.
 
+**Scope the implementer to source, not tests.** The implementer writes and changes
+production **code** and self-verifies by *running* typecheck / lint / build and the
+**existing** test suite — it does **not** author new test files. `test-writer` (Step 6)
+owns all new test authoring. State this in every implementer prompt (leaf agents get no
+history): *"implement the source and run the existing checks; a `test-writer` adds the
+tests."* This isn't bureaucracy — authoring tests inside the implementer's large,
+per-turn-re-billing context is what made one real run's implementer **33% of spend** while
+`test-writer` was **1%**; the split is a cost win, not overhead.
 **Watch the account session budget on a long, many-agent run.** A mid-run cap kills
 in-flight agents and dumps the recovery onto the (Opus) orchestrator — in one run the final
 wave's two agents both died on a cap, one having written nothing (pure wasted spend). When a
@@ -164,8 +172,8 @@ quality — the single largest avoidable cost of that run. Verify tiering after 
 `/cost` should show the code waves under `implementer` (Sonnet), not `general-purpose`.
 
 - **Single-agent plan** — spawn one `implementer` with the plan path (e.g. *"Execute
-  docs/plans/<slug>.md"*). It writes the code and self-verifies with
-  typecheck / lint / test / build.
+  docs/plans/<slug>.md"*). It writes the source and self-verifies by running
+  typecheck / lint / build and the existing tests.
 - **Multi-agent plan** — fan out **one `implementer` per non-overlapping `Owned paths`
   group, in dependency order** (`reviewer-core` → `server` → `client`). Only launch
   concurrently the tasks whose `Depends-on` are already satisfied and whose owned paths
@@ -187,14 +195,20 @@ user / the `implementation-plan` agent — don't push it to guess.
 
 ## Step 6 — test-writer
 
-Spawn `test-writer` to add behavior-focused tests for the change and **run** them. It
-pastes real test output; capture that as evidence for the review stage.
+`test-writer` is the pipeline's **only** author of new test files. Spawn it to add
+behavior-focused tests for the change and **run** them; it pastes real test output, which
+you capture as evidence for the review stage.
 
-**When the implementer already wrote comprehensive, passing tests** (it self-verifies in
-Step 5), you may fold this stage away to save a full agent run — but only if you make
-plan-verifier's coverage check (Step 7) a standing instruction, so an *independent*
-"is anything untested?" pass still happens. Folding without that backstop means the
-implementer graded its own homework.
+**Don't fold this into the implementer.** Skipping a full agent run because the implementer
+"could just add the tests" looks cheaper and isn't: authoring tests inside the implementer's
+large, per-turn-re-billing context costs *more* than a fresh, lean `test-writer` (one real
+run: implementer **33%** of spend vs test-writer **1%**), and it means the implementer grades
+its own homework. Keep the stage separate.
+
+**The only case for skipping** `test-writer` is a change that genuinely needs no new tests —
+a docs-only, config, or trivial edit that adds no behavior. Even then, `plan-verifier`'s
+standing coverage check (Step 7) still runs the independent "is anything untested?" pass, so
+nothing rides on the implementer's self-verification alone.
 
 ## Step 7 — review, in parallel
 
@@ -218,8 +232,8 @@ and safe rather than leaving it to chance:
   locked decisions, scope creep — rather than an exhaustive requirement-by-requirement
   matrix; the full matrix is the parallel long-pole (it ran 2–3× the other reviewers on a
   real run), so reserve it for an explicit deep pass. And always ask it to **assess test
-  coverage and name any untested critical path** — this is what makes folding
-  `test-writer` (Step 6) safe.
+  coverage and name any untested critical path** — the independent backstop that catches
+  anything `test-writer` missed, or verifies the rare "no new tests needed" skip (Step 6).
 - **architecture-reviewer — when the diff changes structure**: new modules, moved
   boundaries, dependency direction, cross-layer wiring. Skip it for a localized change
   that touches no seams — say so in one line.
@@ -252,7 +266,10 @@ rather than blocking. Reserve blocking for harm that crosses a real boundary.
 If there are **no blocking findings**, go to Step 9. Otherwise:
 
 1. Consolidate the blocking findings into one clear list (`file:line` + what to change).
-2. Spawn `implementer` again with **only** that list as its task.
+2. Spawn the **owning writer** with **only** that list: source/behavior fixes →
+   `implementer`; a missing-tests / untested-critical-path finding (typically from
+   `plan-verifier`) → `test-writer`. Keep the Step-5/6 lane split on loop-back too — don't
+   hand a coverage gap to the implementer. (Most loop-backs are source fixes → implementer.)
 3. Re-run **only the affected reviewers** (e.g. if only security flagged, re-run
    security + plan-verifier for scope; skip architecture if untouched).
 4. Repeat.
@@ -314,9 +331,12 @@ Summarise the run so the outcome is reviewable:
 - **Respect the approval gates.** Never jump from request to plan to code without the
   user's go at the spec gate (Step 2) and the plan gate (Step 4) — those are the two
   places a wrong direction is cheap to correct.
-- **Honour each agent's read-only contract.** The reviewers and both verifiers never
-  edit; only the implementer (and test-writer) write. If a reviewer "suggests a rewrite",
-  that's a direction for the implementer, not a patch to apply yourself.
+- **Honour each agent's read-only contract, and keep the two writers in their lanes.**
+  The reviewers and both verifiers never edit. Only two agents write, and they don't
+  overlap: the **implementer** writes production **source** (and runs existing checks),
+  `test-writer` writes **test files**. Never ask the implementer to author tests or the
+  test-writer to change source. If a reviewer "suggests a rewrite", that's a direction for
+  the implementer, not a patch to apply yourself.
 
 ## Cost & robustness discipline (keep the pipeline cheap)
 

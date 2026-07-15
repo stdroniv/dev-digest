@@ -1,4 +1,5 @@
 import { Octokit } from 'octokit';
+import { unzipSync } from 'fflate';
 import type {
   GitHubClient,
   RepoRef,
@@ -11,6 +12,8 @@ import type {
   OpenPrPayload,
   CommitFilesPayload,
   IssueMeta,
+  WorkflowRunMeta,
+  ListWorkflowRunsOptions,
 } from '@devdigest/shared';
 import { withRetry, withTimeout } from '../../platform/resilience.js';
 
@@ -20,6 +23,33 @@ function mapStatus(state: string, merged: boolean | undefined): PrStatus {
   if (merged) return 'merged';
   if (state === 'closed') return 'closed';
   return 'open';
+}
+
+/** GitHub's `workflow-run.status` collapses to our 3-state union (queued/waiting/requested/pending → queued). */
+function mapRunStatus(status: string | null): WorkflowRunMeta['status'] {
+  if (status === 'completed') return 'completed';
+  if (status === 'queued' || status === 'requested' || status === 'waiting' || status === 'pending') {
+    return 'queued';
+  }
+  return 'in_progress';
+}
+
+const RUN_CONCLUSIONS = new Set<NonNullable<WorkflowRunMeta['conclusion']>>([
+  'success',
+  'failure',
+  'cancelled',
+  'skipped',
+  'timed_out',
+  'action_required',
+  'neutral',
+  'stale',
+]);
+
+function mapRunConclusion(conclusion: string | null): WorkflowRunMeta['conclusion'] {
+  if (conclusion && RUN_CONCLUSIONS.has(conclusion as NonNullable<WorkflowRunMeta['conclusion']>)) {
+    return conclusion as WorkflowRunMeta['conclusion'];
+  }
+  return null;
 }
 
 /**
@@ -342,6 +372,81 @@ export class OctokitGitHubClient implements GitHubClient {
           });
           const pr = res.data[0];
           return pr ? { url: pr.html_url } : null;
+        })(),
+        TIMEOUT,
+      ),
+    );
+  }
+
+  /**
+   * Recent Actions runs for one workflow file, bounded to `opts` (AC-30/34).
+   * `listWorkflowRunsForRepo` has no workflow-file filter param, so we filter
+   * client-side on `run.path` (the repo-relative workflow file path).
+   */
+  async listWorkflowRuns(
+    repo: RepoRef,
+    opts: ListWorkflowRunsOptions,
+  ): Promise<WorkflowRunMeta[]> {
+    return withRetry(() =>
+      withTimeout(
+        (async () => {
+          const res = await this.octokit.rest.actions.listWorkflowRunsForRepo({
+            owner: repo.owner,
+            repo: repo.name,
+            branch: opts.branch,
+            created: opts.since ? `>=${opts.since}` : undefined,
+            per_page: opts.perPage ?? 30,
+          });
+          return res.data.workflow_runs
+            .filter((run) => run.path.endsWith(`/${opts.workflowFileName}`))
+            .map((run) => ({
+              id: String(run.id),
+              status: mapRunStatus(run.status),
+              conclusion: mapRunConclusion(run.conclusion),
+              headBranch: run.head_branch ?? '',
+              headSha: run.head_sha,
+              createdAt: run.created_at,
+              htmlUrl: run.html_url,
+              workflowFileName: opts.workflowFileName,
+            }));
+        })(),
+        TIMEOUT,
+      ),
+    );
+  }
+
+  /**
+   * Download one named artifact's bytes from a run (e.g. `devdigest-result.json`).
+   * Returns `null` — never throws — when the run has no such artifact, so
+   * reconcile can record the run as Failed without fabricating findings/cost
+   * (AC-32). Artifacts download as a zip; unzipped in-adapter.
+   */
+  async downloadRunArtifact(
+    repo: RepoRef,
+    runId: string,
+    name: string,
+  ): Promise<Uint8Array | null> {
+    return withRetry(() =>
+      withTimeout(
+        (async () => {
+          const list = await this.octokit.rest.actions.listWorkflowRunArtifacts({
+            owner: repo.owner,
+            repo: repo.name,
+            run_id: Number(runId),
+            per_page: 100,
+          });
+          const artifact = list.data.artifacts.find((a) => a.name === name);
+          if (!artifact) return null;
+
+          const download = await this.octokit.rest.actions.downloadArtifact({
+            owner: repo.owner,
+            repo: repo.name,
+            artifact_id: artifact.id,
+            archive_format: 'zip',
+          });
+          const zipBytes = new Uint8Array(download.data as unknown as ArrayBuffer);
+          const entries = unzipSync(zipBytes);
+          return entries[name] ?? null;
         })(),
         TIMEOUT,
       ),

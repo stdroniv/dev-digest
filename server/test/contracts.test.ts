@@ -17,6 +17,11 @@ import {
   Settings,
   Repo,
   PrDetail,
+  AgentManifest,
+  CiResultArtifact,
+  CiInstallation,
+  CiRun,
+  CiRunStatus,
 } from '@devdigest/shared';
 
 /**
@@ -256,5 +261,160 @@ describe('platform DTOs', () => {
         commits: [],
       }),
     ).not.toThrow();
+  });
+});
+
+describe('Export-to-CI contracts (SPEC-05 T1)', () => {
+  it('AgentManifest — one contract, two consumers (AC-13)', () => {
+    const manifest = AgentManifest.parse({
+      name: 'Security Reviewer',
+      slug: 'security-reviewer',
+      provider: 'openrouter',
+      model: 'deepseek/deepseek-v4-flash',
+      system_prompt: 'You are a security-focused code reviewer.',
+      skills: ['secret-scanning', 'lethal-trifecta'],
+      strategy: 'auto',
+      ci_fail_on: 'critical',
+      workflow_version: 2,
+    });
+    expect(manifest.slug).toBe('security-reviewer');
+    expect(manifest.skills).toEqual(['secret-scanning', 'lethal-trifecta']);
+    expect(manifest.workflow_version).toBe(2);
+
+    // Defaults + null-skills normalization (YAML `skills:` with no value → null).
+    const minimal = AgentManifest.parse({
+      name: 'Minimal Agent',
+      slug: 'minimal-agent',
+      model: 'gpt-4.1',
+      system_prompt: 'Review this diff.',
+      skills: null,
+    });
+    expect(minimal.provider).toBe('openrouter');
+    expect(minimal.strategy).toBe('auto');
+    expect(minimal.ci_fail_on).toBe('critical');
+    expect(minimal.workflow_version).toBe(1);
+    expect(minimal.skills).toEqual([]);
+  });
+
+  it('CiResultArtifact — devdigest-result.json shape (AC-20/31)', () => {
+    const artifact = CiResultArtifact.parse({
+      findings_count: 3,
+      critical: 1,
+      warning: 1,
+      suggestion: 1,
+      cost_usd: 0.021,
+      duration_ms: 9400,
+      agent: 'Security Reviewer',
+      version: 'v3',
+      pr_number: 512,
+      status: 'succeeded',
+    });
+    expect(artifact.findings_count).toBe(3);
+    expect(artifact.critical).toBe(1);
+    expect(artifact.pr_number).toBe(512);
+
+    // Fork-PR / no-credentials skip artifact (AC-27) — still validates.
+    const skipped = CiResultArtifact.parse({
+      findings_count: 0,
+      cost_usd: null,
+      agent: 'Security Reviewer',
+      status: 'skipped_no_credentials',
+    });
+    expect(skipped.status).toBe('skipped_no_credentials');
+  });
+
+  it('CiRunStatus covers the full outcome matrix (AC-27/32/33)', () => {
+    expect(CiRunStatus.options).toEqual([
+      'succeeded',
+      'no_findings',
+      'failed',
+      'running',
+      'skipped_no_credentials',
+    ]);
+  });
+
+  it('CiInstallation — derived status/version/drift fields (AC-39/40)', () => {
+    const installation = CiInstallation.parse({
+      id: 'inst-1',
+      agent_id: 'agent-1',
+      repo: 'acme/payments-api',
+      target_type: 'gha',
+      target: 'gha',
+      installed_at: '2026-06-01T00:00:00.000Z',
+      workflow_version: 2,
+      status: 'succeeded',
+      last_run_at: '2026-07-01T00:00:00.000Z',
+      update_available: true,
+    });
+    expect(installation.update_available).toBe(true);
+    expect(installation.workflow_version).toBe(2);
+  });
+
+  it('CiRun — every CI Runs page column (AC-35)', () => {
+    const run = CiRun.parse({
+      id: 'run-1',
+      ci_installation_id: 'inst-1',
+      pr_number: 512,
+      pr_title: 'Add rate limiting to public API endpoints',
+      ran_at: '2026-07-01T00:00:00.000Z',
+      status: 'succeeded',
+      findings_count: 3,
+      findings_counts: { critical: 1, warning: 1, suggestion: 1 },
+      cost_usd: 0.021,
+      github_url: 'https://github.com/acme/payments-api/actions/runs/123',
+      actions_run_id: '123',
+      source: 'ci',
+      agent: 'Security Reviewer',
+      duration_s: 9.4,
+    });
+    expect(run.pr_title).toBe('Add rate limiting to public API endpoints');
+    expect(run.findings_counts).toEqual({ critical: 1, warning: 1, suggestion: 1 });
+    expect(run.actions_run_id).toBe('123');
+  });
+
+  it('RunSummary — CI-sourced run (AC-42)', () => {
+    const ciRun = RunSummary.parse({
+      run_id: 'r2',
+      agent_id: 'a1',
+      agent_name: 'Security Reviewer',
+      provider: 'openrouter',
+      model: 'deepseek/deepseek-v4-flash',
+      status: 'done',
+      error: null,
+      duration_ms: 9400,
+      tokens_in: null,
+      tokens_out: null,
+      findings_count: 3,
+      grounding: null,
+      ran_at: '2026-07-01T00:00:00.000Z',
+      score: null,
+      blockers: 1,
+      cost_usd: 0.021,
+      findings_counts: { critical: 1, warning: 1, suggestion: 1 },
+      source: 'ci',
+    });
+    expect(ciRun.source).toBe('ci');
+
+    // Defaults to 'local' when omitted, so pre-existing callers/fixtures still parse.
+    const localRun = RunSummary.parse({
+      run_id: 'r3',
+      agent_id: 'a1',
+      agent_name: 'Security Reviewer',
+      provider: 'openrouter',
+      model: 'deepseek/deepseek-v4-flash',
+      status: 'done',
+      error: null,
+      duration_ms: 1000,
+      tokens_in: null,
+      tokens_out: null,
+      findings_count: 0,
+      grounding: null,
+      ran_at: '2026-07-01T00:00:00.000Z',
+      score: null,
+      blockers: null,
+      cost_usd: null,
+      findings_counts: null,
+    });
+    expect(localRun.source).toBe('local');
   });
 });

@@ -4,6 +4,14 @@ dist/
 # (GitHub runs action.yml `main: dist/index.js` as-is, with no build step).
 !agent-runner/dist/
 !agent-runner/dist/**
+# runner/ (@devdigest/runner) — the CI agent-runner ships as a prebuilt,
+# esbuild-bundled dist/runner.mjs that the server's export bundle reads from
+# disk (AC-4); the generated workflow runs it directly with no build step.
+!runner/dist/
+!runner/dist/**
+# mcp/ is an npm package (mcp/package-lock.json is its tracked lockfile); a
+# stray pnpm-lock.yaml appears only if `pnpm install` is run there by mistake.
+mcp/pnpm-lock.yaml
 build/
 .next/
 out/

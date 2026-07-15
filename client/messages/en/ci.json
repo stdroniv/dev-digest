@@ -2,21 +2,30 @@
   "runs": {
     "emptyTitle": "No CI runs yet",
     "emptyBody": "Once you export an agent to CI, every automated review shows up here.",
+    "emptyCta": "Set up CI for an agent",
+    "errorTitle": "Couldn't load CI runs",
+    "errorBody": "Something went wrong fetching CI runs.",
     "title": "CI Runs",
     "subtitle": "Agent reviews executed inside CI · not local runs",
     "autoRefresh": "auto-refresh on",
     "refresh": "Refresh",
     "refreshing": "Refreshing…",
+    "traceLink": "Trace",
     "filters": {
       "last7Days": "Last 7 days",
+      "last30Days": "Last 30 days",
+      "allTime": "All time",
       "allAgents": "All agents",
       "allRepos": "All repos",
-      "allStatuses": "All statuses"
+      "allStatuses": "All statuses",
+      "allSources": "All sources"
     },
     "table": {
       "timestamp": "Timestamp",
       "pullRequest": "Pull request",
+      "agent": "Agent",
       "source": "Source",
+      "duration": "Duration",
       "findings": "Findings",
       "cost": "Cost",
       "status": "Status"
@@ -26,7 +35,8 @@
       "succeeded": "Succeeded",
       "noFindings": "No findings",
       "failed": "Failed",
-      "running": "Running"
+      "running": "Running",
+      "skippedNoCredentials": "Skipped — no credentials"
     }
   },
   "exportWizard": {
@@ -37,6 +47,7 @@
     "continue": "Continue",
     "install": "Install",
     "installing": "Installing…",
+    "complete": "Complete",
     "steps": {
       "target": "Target",
       "preview": "Preview",
@@ -54,9 +65,12 @@
       "cliDesc": "devdigest review --pr"
     },
     "recommended": "recommended",
+    "comingSoon": "coming soon",
     "repoLabel": "Target repository",
     "repoHint": "owner/name — the repo to add the workflow to",
     "repoPlaceholder": "acme/payments-api",
+    "repoInvalid": "Use the owner/name format, e.g. acme/payments-api — not a full URL",
+    "targetErrorTitle": "Couldn't load this repository",
     "filesToCreate": "FILES TO CREATE",
     "generating": "Generating…",
     "editable": "editable",
@@ -67,22 +81,39 @@
       "prComment": "PR comment",
       "none": "None (exit code only)"
     },
-    "blockMergeTitle": "Block merge on findings",
-    "blockMergeDesc": "Requires a GitHub App — not available with PAT in local mode",
+    "verdictLabel": "yields a verdict",
+    "blockMergeTitle": "To block merges",
+    "blockMergeDesc": "Set Fail CI on (CI tab) so the run exits non-zero, then add a required status check in the repo's GitHub branch protection. No GitHub App needed.",
     "installCardTitle": "Open a PR with these files",
+    "installedCardTitle": "PR opened",
     "installCardBody": "DevDigest opens a PR in {repo} titled “Add DevDigest CI review” with the {count} generated files.",
+    "installErrorTitle": "Couldn't open the PR",
+    "zipCardTitle": "Copy files as a zip",
+    "zipCardBody": "add them manually",
+    "docsFooterPrefix": "Need help? See the",
+    "docsFooterLink": "GitHub Action setup docs →",
     "ownerRepo": "owner/repo",
     "secretNote": "Add {key} to the repo's Actions secrets before the workflow runs."
   },
   "ciTab": {
-    "heading": "Continuous Integration",
-    "subtitle": "Run this agent automatically on pull requests in a target repo.",
-    "exportToCi": "Export to CI",
-    "publish": "Publish to CI",
-    "update": "Update CI",
-    "noRepo": "Connect a repository first",
-    "empty": "Not deployed to CI yet. Use “Publish to CI” to open a PR that adds the workflow + agent config.",
-    "installed": "installed {date}"
+    "emptyTitle": "Not in CI yet",
+    "emptyBody": "Deploy this agent to run automatically on every pull request in a repo's CI pipeline.",
+    "addToCi": "Add to CI",
+    "deploymentHeading": "CI deployment",
+    "activeInRepos": "{count, plural, one {Active in # repo} other {Active in # repos}}",
+    "updateConfig": "Update CI config",
+    "addRepository": "Add repository",
+    "failCiOnLabel": "Fail CI on",
+    "failCiOnHint": "Exit non-zero when a finding at or above this severity lands. Pair with a required status check to block merges.",
+    "failOn": {
+      "critical": "Critical",
+      "warning": "Warning +",
+      "never": "Never"
+    },
+    "workflowVersion": "v{version}",
+    "updateAvailable": "Update available",
+    "neverRun": "Never run",
+    "lastRunAgo": "{value} ago"
   },
   "publishDialog": {
     "title": "Publish to CI",

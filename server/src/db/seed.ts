@@ -10,6 +10,7 @@ import {
 } from './seed-prompts.js';
 import { GENERAL_REVIEWER_PROMPT } from '../platform/reviewer-prompts.js';
 import { DEMO_SKILLS, AGENT_SKILL_LINKS, STATS_DEMO_REVIEWS } from './seed-skills.js';
+import { seedCi } from './seed-ci.js';
 import { seedEvalCases } from './seed-evals.js';
 import { seedHardEvalCases } from './seed-evals-hard.js';
 import { seedApiContractSkillEvalCases } from './seed-evals-skills.js';
@@ -480,6 +481,9 @@ export async function seed(
       );
     }
   }
+
+  // ---- T8 — Export-to-CI demo data (installations/runs/agent_runs, AC-35/39/40/42) ----
+  await seedCi(db, workspaceId);
 
   if (opts.includeEvalFixtures) {
     // ---- L06 — eval cases for the demo Security Reviewer agent (AC-7) ----

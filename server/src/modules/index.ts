@@ -14,6 +14,7 @@ import history from './history/routes.js';
 import documents from './documents/routes.js';
 import onboarding from './onboarding/routes.js';
 import evalModule from './eval/routes.js';
+import ci from './ci/routes.js';
 import multiAgentReview from './multi-agent-review/routes.js';
 import memory from './memory/routes.js';
 
@@ -46,6 +47,7 @@ export const modules: Record<string, FastifyPluginAsync> = {
   documents,
   onboarding,
   eval: evalModule,
+  ci,
   multiAgentReview,
   memory,
 };

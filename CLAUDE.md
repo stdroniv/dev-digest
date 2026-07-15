@@ -16,7 +16,7 @@ and the LLM. This is the **course starter**; later lessons (L01–L08) add featu
 - reviewer-core: pure TS (OpenAI SDK + Zod), consumed as **source**, emits no JS
 - LLM providers: OpenAI / Anthropic / OpenRouter (OpenAI-compatible)
 
-## Layout (5 standalone packages — no monorepo workspace)
+## Layout (6 standalone packages — no monorepo workspace)
 
 | Folder | Package | Role | Port |
 |--------|---------|------|------|
@@ -25,6 +25,7 @@ and the LLM. This is the **course starter**; later lessons (L01–L08) add featu
 | `reviewer-core/` | `@devdigest/reviewer-core` | pure review engine: diff→prompt→LLM→findings | — |
 | `e2e/` | `@devdigest/e2e` | deterministic browser flows (agent-browser, no LLM) | — |
 | `mcp/` | `@devdigest/mcp` | stdio MCP server: exposes review tools to MCP clients (boots server in-process, no HTTP) | — |
+| `runner/` | `@devdigest/runner` | CI agent-runner: runs `reviewer-core` inside GitHub Actions, esbuild-bundled to a committed `dist/runner.mjs` | — |
 
 Each package has its own `package.json`/lockfile; cross-package code is shared via
 **tsconfig path aliases**, not published modules. Shared Zod contracts
@@ -73,6 +74,8 @@ Evals (run inside `evals/`): `pnpm eval:skills` · `pnpm eval:agents` · `pnpm e
 - **touching tests or CI** → read `TESTING.md`.
 - **writing browser e2e flows** → read `e2e/CLAUDE.md`.
 - **building or changing the MCP server / its tools** → read `mcp/CLAUDE.md`.
+- **building or changing the CI agent-runner (the exported GitHub Actions
+  job)** → read `runner/CLAUDE.md`.
 - **editing a reviewer agent's system prompt** → read `docs/agent-prompts/README.md`.
 - **writing a feature spec (what/why) or an implementation plan (how)** → specs live in
   `specs/` (authored by the `spec-creator` agent); plans live in `docs/plans/`.

@@ -92,6 +92,7 @@ export async function listRunsForPull(
       blockers: c ? c.critical : run.blockers,
       cost_usd: run.costUsd,
       findings_counts: c ?? null,
+      source: run.source,
     };
   });
 }

@@ -22,6 +22,8 @@ import type {
   UnifiedDiff,
   BlameLine,
   GitCommit,
+  WorkflowRunMeta,
+  ListWorkflowRunsOptions,
   CodeIndex,
   CodeMatch,
   CodeSymbol,
@@ -138,6 +140,10 @@ export interface MockGitHubOptions {
   login?: string;
   /** Existing inline review comments returned by listReviewComments. */
   comments?: PrReviewComment[];
+  /** Fixture runs returned by `listWorkflowRuns`, keyed by `workflowFileName`. */
+  workflowRuns?: Record<string, WorkflowRunMeta[]>;
+  /** Fixture artifact bytes returned by `downloadRunArtifact`, keyed by `${runId}:${name}`; absent → `null`. */
+  artifactContents?: Record<string, Uint8Array>;
 }
 
 export class MockGitHubClient implements GitHubClient {
@@ -145,6 +151,8 @@ export class MockGitHubClient implements GitHubClient {
   public openedPrs: OpenPrPayload[] = [];
   public committed: CommitFilesPayload[] = [];
   public createdComments: CreateReviewCommentInput[] = [];
+  public listWorkflowRunsCalls: { repo: RepoRef; opts: ListWorkflowRunsOptions }[] = [];
+  public downloadRunArtifactCalls: { repo: RepoRef; runId: string; name: string }[] = [];
 
   constructor(private opts: MockGitHubOptions = {}) {}
 
@@ -241,6 +249,23 @@ export class MockGitHubClient implements GitHubClient {
   async findOpenPr(_repo: RepoRef, branch: string): Promise<{ url: string } | null> {
     const pr = this.openedPrs.find((p) => p.head === branch);
     return pr ? { url: 'https://github.com/mock/mock/pull/1' } : null;
+  }
+
+  async listWorkflowRuns(
+    repo: RepoRef,
+    opts: ListWorkflowRunsOptions,
+  ): Promise<WorkflowRunMeta[]> {
+    this.listWorkflowRunsCalls.push({ repo, opts });
+    return this.opts.workflowRuns?.[opts.workflowFileName] ?? [];
+  }
+
+  async downloadRunArtifact(
+    repo: RepoRef,
+    runId: string,
+    name: string,
+  ): Promise<Uint8Array | null> {
+    this.downloadRunArtifactCalls.push({ repo, runId, name });
+    return this.opts.artifactContents?.[`${runId}:${name}`] ?? null;
   }
 
   async getIssue(_repo: RepoRef, n: number): Promise<IssueMeta> {

@@ -31,6 +31,7 @@ import { RepoIntelService } from '../modules/repo-intel/service.js';
 import { type DepGraph, DepCruiseGraph } from '../adapters/depgraph/index.js';
 import { type Tokenizer, TiktokenTokenizer } from '../adapters/tokenizer/index.js';
 import { OnboardingService } from '../modules/onboarding/service.js';
+import { CiService } from '../modules/ci/service.js';
 
 /**
  * DI container. One per app instance. Holds config, db, the JobRunner,
@@ -81,6 +82,7 @@ export class Container {
   private _tokenizer?: Tokenizer;
   private _priceBook?: PriceBook;
   private _onboarding?: OnboardingService;
+  private _ciService?: CiService;
 
   constructor(config: AppConfig, db: Db, private overrides: ContainerOverrides = {}) {
     this.config = config;
@@ -135,6 +137,11 @@ export class Container {
    */
   get onboarding(): OnboardingService {
     return (this._onboarding ??= new OnboardingService(this));
+  }
+
+  /** Export-to-CI service (SPEC-05 T6/T7) — lazy singleton, same shape as `onboarding`/`repoIntel`. */
+  get ciService(): CiService {
+    return (this._ciService ??= new CiService(this));
   }
 
   /** Import-graph builder (dependency-cruiser). T3 indexer pipeline only. */

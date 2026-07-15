@@ -50,6 +50,17 @@ describe("Sidebar repo-scoped nav gating (AC-33/AC-34/AC-35)", () => {
   });
 });
 
+describe("Sidebar GLOBAL nav entry (SPEC-05 T9: CI Runs)", () => {
+  it("shows a CI Runs item under the GLOBAL section, linking to /ci-runs, regardless of repo state", () => {
+    render(<Sidebar ctx={makeCtx({ repoId: null })} />);
+
+    expect(screen.getByText("GLOBAL")).not.toBeNull();
+    const link = screen.getByText("CI Runs").closest("a");
+    expect(link).not.toBeNull();
+    expect(link).toHaveAttribute("href", "/ci-runs");
+  });
+});
+
 describe("activeKeyFor collision resolution (T10: /tour vs the /onboarding Add-Repo wizard)", () => {
   it("resolves a repo-scoped tour route to onboarding-tour", () => {
     expect(activeKeyFor("/repos/repo-1/tour")).toBe("onboarding-tour");

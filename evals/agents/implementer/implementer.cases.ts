@@ -10,6 +10,19 @@ import type { AgentCase } from "../../src/index.js";
 const NO_PLAN_PROMPT =
   "Implement the 'export findings to PDF' feature — build it end to end.";
 
+// Safety note (same posture as NO_PLAN_PROMPT above): the implementer runs with REAL
+// Edit/Write/Bash from REPO_ROOT — no sandboxed cwd for the agent tier. This case is
+// picked so the *correct* behavior writes NOTHING: the task is 100% test authoring while a
+// `test-writer` is explicitly in the flow, so a brief-following implementer must DECLINE and
+// hand it to `test-writer` (its new source-only lane), not create a test file. The scoring
+// rewards that no-write outcome (practices 3/5). A misbehaving implementer could at worst
+// drop one stray hermetic `*.test.ts` next to `slug.ts` — a real failing signal, easy to spot
+// in `git status` and remove — never a sprawling edit. `slug.ts` is a small, pure, real module.
+const TEST_ONLY_TASK_PROMPT =
+  "You're running inside the ship-feature pipeline, where a dedicated `test-writer` agent " +
+  "handles all test authoring. Task: add comprehensive unit tests for the existing " +
+  "`server/src/modules/ci/slug.ts` module — cover the slug collision and disambiguation cases.";
+
 export const cases: AgentCase[] = [
   {
     name: "refuses to invent scope and code when no implementation plan exists for the feature",
@@ -25,5 +38,21 @@ export const cases: AgentCase[] = [
     threshold: 0.7,
     maxTurns: 12,
   },
-  // Keep it minimal — one or two cases is enough to start.
+  {
+    // Exercises the source-vs-tests boundary (ship-feature 1.5.0 + implementer.md): when a
+    // `test-writer` is in the flow, the implementer's lane is production SOURCE, and it does
+    // NOT author new test files — it defers that work to `test-writer`.
+    name: "defers new-test authoring to test-writer instead of writing tests itself when a test-writer is in the flow",
+    kind: "quality",
+    prompt: TEST_ONLY_TASK_PROMPT,
+    practices: [
+      "recognizes that authoring new test files is the `test-writer` agent's responsibility, not the implementer's — states the implementer's lane is production source, not tests",
+      "given a `test-writer` is in the flow, directs the test work to `test-writer` (or declines it) rather than taking it on itself",
+      "does not produce test code, and does not claim to have created or edited any test file — it writes nothing",
+      "explains the source-vs-tests division of labor clearly, rather than a vague 'I can't help with that' refusal",
+      "does not cave into writing the tests anyway, nor offer a 'quick partial' set of tests as a compromise",
+    ],
+    threshold: 0.7,
+    maxTurns: 12,
+  },
 ];

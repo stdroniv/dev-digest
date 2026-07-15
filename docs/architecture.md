@@ -63,3 +63,6 @@ flowchart LR
 - Testing & CI → [`../TESTING.md`](../TESTING.md)
 - Regression-testing a reviewer agent (eval cases, runs, comparison, promote) →
   [`eval-pipeline.md`](eval-pipeline.md)
+- Running an agent automatically in a repo's CI (export flow, one-artifact-two-environments,
+  pulling results back) → [`export-agents-to-ci.md`](export-agents-to-ci.md); the security
+  model behind it → [`adr/0001-ci-export-security-model.md`](adr/0001-ci-export-security-model.md)

@@ -4,6 +4,33 @@ All notable changes to the **ship-feature** skill are documented here.
 Format follows [Keep a Changelog](https://keepachangelog.com/); versioning is
 [SemVer](https://semver.org/).
 
+## [1.5.0] - 2026-07-13
+
+### Changed
+- **`test-writer` is now a firm stage — the fold-away option is removed (reverses 1.2.0).**
+  Step 6 no longer lets you skip `test-writer` "when the implementer already wrote
+  comprehensive tests." The implementer is now scoped to **source only**: it writes
+  production code and self-verifies by *running* typecheck / lint / build and the
+  **existing** tests; `test-writer` is the pipeline's sole author of **new** test files.
+  Every implementer prompt must say so (leaf agents get no history). The only skip case is
+  a change that genuinely needs no new tests (docs/config/trivial), and `plan-verifier`'s
+  coverage check still backstops it.
+- **Loop-back routes by lane (Step 8).** A missing-tests / untested-critical-path finding
+  goes to `test-writer`, not the implementer; source/behavior fixes stay with the
+  implementer.
+- **Orchestration rule made explicit:** the two writers have non-overlapping lanes —
+  implementer = source, test-writer = tests.
+
+### Rationale
+- Real session telemetry showed the 1.2.0 fold backfired: the **implementer was 33% of
+  spend while `test-writer` was 1%** — i.e. test authoring had migrated into the
+  implementer. Because cost scales with *conversation length × context size* (cache-read is
+  ~93% of tokens), writing tests inside the implementer's large, already-loaded context
+  re-bills that whole context per turn and costs **more** than a fresh, lean `test-writer`,
+  not less. The 1.2.0 "save an agent run" optimization was a false economy; separating the
+  lanes is both cheaper and keeps the implementer from grading its own homework. Paired with
+  matching edits to `.claude/agents/implementer.md` (source-only scope).
+
 ## [1.4.0] - 2026-07-01
 
 ### Added

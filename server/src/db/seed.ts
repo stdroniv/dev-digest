@@ -10,9 +10,11 @@ import {
 } from './seed-prompts.js';
 import { GENERAL_REVIEWER_PROMPT } from '../platform/reviewer-prompts.js';
 import { DEMO_SKILLS, AGENT_SKILL_LINKS, STATS_DEMO_REVIEWS } from './seed-skills.js';
+import { seedCi } from './seed-ci.js';
 import { seedEvalCases } from './seed-evals.js';
 import { seedHardEvalCases } from './seed-evals-hard.js';
 import { seedApiContractSkillEvalCases } from './seed-evals-skills.js';
+import { seedMultiAgentDemo } from './seed-multi-agent.js';
 
 /** Default provider/model for the built-in reviewer agents. */
 const DEFAULT_PROVIDER = 'openrouter' as const;
@@ -391,6 +393,27 @@ export async function seed(
       .where(and(eq(t.reviews.prId, pr!.id), eq(t.reviews.kind, 'review')));
   }
 
+  // ---- T9 — demo multi-agent run for PR #482 ----
+  // Gives the Configure page real ("no history"-free) per-agent estimates and
+  // makes `/multi-agent/runs/<id>` (Columns + Tabs + disagree section)
+  // demoable on a fresh DB. Guarded inside `seedMultiAgentDemo` on an existing
+  // `multi_agent_runs` row for this PR, so re-seeding never duplicates.
+  const [performanceAgent] = await db
+    .select()
+    .from(t.agents)
+    .where(and(eq(t.agents.workspaceId, workspaceId), eq(t.agents.name, 'Performance Reviewer')));
+  const [apiContractAgent] = await db
+    .select()
+    .from(t.agents)
+    .where(and(eq(t.agents.workspaceId, workspaceId), eq(t.agents.name, 'API Contract Reviewer')));
+  if (securityAgent && performanceAgent && apiContractAgent) {
+    await seedMultiAgentDemo(db, workspaceId, pr!.id, {
+      securityId: securityAgent.id,
+      performanceId: performanceAgent.id,
+      apiContractId: apiContractAgent.id,
+    });
+  }
+
   // ---- Skills → Stats tab demo (PR #501) ----
   // A second demo PR whose reviews are attributed to the `pr-quality-rubric`
   // agents, with categorized + decided findings, so that skill's Stats tab shows
@@ -458,6 +481,9 @@ export async function seed(
       );
     }
   }
+
+  // ---- T8 — Export-to-CI demo data (installations/runs/agent_runs, AC-35/39/40/42) ----
+  await seedCi(db, workspaceId);
 
   if (opts.includeEvalFixtures) {
     // ---- L06 — eval cases for the demo Security Reviewer agent (AC-7) ----

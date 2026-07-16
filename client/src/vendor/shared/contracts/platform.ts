@@ -181,6 +181,11 @@ export type PrStatus = z.infer<typeof PrStatus>;
 
 export const PrMeta = z.object({
   id: z.string().nullish(),
+  // Owning repo — nullish because older/other routes returning this shape
+  // (e.g. the repo-scoped pulls list) don't all populate it; only
+  // `GET /pulls/:id` does today (needed to deep-link a PR back to its repo
+  // from repo-agnostic pages like /multi-agent/runs/:id).
+  repo_id: z.string().nullish(),
   number: z.number().int(),
   title: z.string(),
   author: z.string(),

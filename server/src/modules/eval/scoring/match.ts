@@ -1,20 +1,13 @@
 import type { EvalExpectedFinding } from '@devdigest/shared';
-import { normalizePath } from './normalize.js';
+import { normalizePath, rangesOverlap } from '../../_shared/finding-match.js';
+
+export { rangesOverlap };
 
 /** A finding-shaped location — the fields the match rule actually needs. */
 export interface ScorableFinding {
   file: string;
   start_line: number;
   end_line: number;
-}
-
-/** Do two inclusive line ranges overlap? Order-tolerant (start may be > end). */
-export function rangesOverlap(a: [number, number], b: [number, number]): boolean {
-  const aLo = Math.min(a[0], a[1]);
-  const aHi = Math.max(a[0], a[1]);
-  const bLo = Math.min(b[0], b[1]);
-  const bHi = Math.max(b[0], b[1]);
-  return aLo <= bHi && bLo <= aHi;
 }
 
 /**

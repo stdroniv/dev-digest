@@ -13,14 +13,19 @@
 # Backend: OpenRouter (EVAL_BACKEND=openrouter). Content tiers hit OpenRouter natively; the tool tiers
 # run inside the Claude Agent SDK and need the bundled LiteLLM translating proxy (evals/proxy/).
 # Put the key in the repo's Actions secrets as OPENROUTER_API_KEY.
+#
+# NO `paths:` filter on `pull_request` — deliberately. The repo's `evals-gate` ruleset requires this
+# workflow's `evals-gate` job on EVERY PR into main, with no per-path exception available at the
+# ruleset level. A `paths:` filter here would stop the workflow (and `evals-gate`) from running at all
+# on a PR that touches neither `.claude/**`/`CLAUDE.md`/`evals/**`, which GitHub shows as an
+# indefinitely "Expected" required check — a permanent merge deadlock, not a slow one (hit for real by
+# an exported-agent PR that only touches `.devdigest/**`). The `detect` job's own path-based mapping
+# already decides which model-eval tiers actually run; that internal skip logic is the intended
+# mechanism, not this trigger-level filter — do not reintroduce it.
 name: evals
 
 on:
   pull_request:
-    paths:
-      - '.claude/**'
-      - 'CLAUDE.md'
-      - 'evals/**'
   workflow_dispatch:
     inputs:
       eval_model:
@@ -120,17 +125,23 @@ jobs:
   # One matrix leg per changed skill that HAS an eval suite. ADVISORY (continue-on-error): the judge
   # scores swing run-to-run on the CI model, so a failing leg posts its signal in the logs but does
   # NOT fail the workflow run or the required gate. See the evals-gate note for how to re-block them.
+  #
+  # The matrix always has >=1 leg (falls back to a single 'none' placeholder when no skill changed),
+  # with the job-level skip pushed into a per-step `if` instead of a job-level `if`. A job-level `if`
+  # short-circuits BEFORE the matrix expands, so GitHub can't resolve `${{ matrix.name }}` in `name:`
+  # and displays the raw, unexpanded template string as the job name — confusing on the PR checks
+  # list. Keeping the matrix non-empty means it always expands, so the skipped run reads as the
+  # legible `skill eval (none)` instead.
   skill-evals:
     name: skill eval (${{ matrix.name }})
     needs: detect
-    if: needs.detect.outputs.skills != '[]'
     continue-on-error: true
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
       max-parallel: 2
       matrix:
-        name: ${{ fromJSON(needs.detect.outputs.skills) }}
+        name: ${{ fromJSON(needs.detect.outputs.skills != '[]' && needs.detect.outputs.skills || '["none"]') }}
     defaults:
       run:
         working-directory: evals
@@ -138,16 +149,21 @@ jobs:
       EVAL_BACKEND: openrouter
       OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
     steps:
-      - uses: actions/checkout@v4
-      - uses: pnpm/action-setup@v4
+      - if: matrix.name != 'none'
+        uses: actions/checkout@v4
+      - if: matrix.name != 'none'
+        uses: pnpm/action-setup@v4
         with: { version: 10 }
-      - uses: actions/setup-node@v4
+      - if: matrix.name != 'none'
+        uses: actions/setup-node@v4
         with:
           node-version: 22
           cache: pnpm
           cache-dependency-path: evals/pnpm-lock.yaml
-      - run: pnpm install --frozen-lockfile
-      - run: pnpm exec vitest run skills/${{ matrix.name }}
+      - if: matrix.name != 'none'
+        run: pnpm install --frozen-lockfile
+      - if: matrix.name != 'none'
+        run: pnpm exec vitest run skills/${{ matrix.name }}
 
   # ── 4. Agent evals (tool tier — Agent SDK via the LiteLLM proxy) ────────────────────────────────
   # One matrix leg per changed agent that HAS an eval suite. Serialized (max-parallel:1) to stay under

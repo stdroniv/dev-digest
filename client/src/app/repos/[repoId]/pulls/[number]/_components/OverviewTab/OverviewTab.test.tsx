@@ -148,6 +148,7 @@ describe("OverviewTab — cost/token stats under the score", () => {
     blockers: 2,
     cost_usd: 0.014,
     findings_counts: null,
+    source: "local",
   };
 
   it("renders the run's cost and token flow under the PR score", async () => {

@@ -85,15 +85,35 @@ If it's ambiguous **which** run to review (several batches ran this session),
    python3 .claude/skills/workflow-retro/scripts/analyze_journals.py \
      "~/.claude/projects/<project-slug>/<session-id>/subagents/agent-*.jsonl" --json
    ```
-   For this repo `<project-slug>` is `-Users-dronmac-Projects-personal-dev-digest`.
+   `<project-slug>` is derived from the session's **CWD**, so it differs per checkout: the
+   main repo is `-Users-dronmac-Projects-personal-dev-digest`, but a **git-worktree session
+   lives under its own slug** (e.g. `-Users-dronmac-emdash-worktrees-<branch>`). Don't assume
+   the main slug — locate the journals with
+   `find ~/.claude/projects -maxdepth 3 -type d -name subagents -path "*<session-id>*"`.
    The main-session journal is `~/.claude/projects/<project-slug>/<session-id>.jsonl`.
    Pass `--prices prices.json` (substring-keyed per-model rates) to get $ — and
    **do not hard-code prices; confirm current per-model rates via the `claude-api`
    skill first**, they go stale.
 
-Use deep mode when the run had nested agents, when you need exact cache-creation
-vs cache-read splits, or when the in-context view is incomplete (a backgrounded
-agent whose full usage never surfaced). Otherwise the in-context view is enough.
+> **⚠️ Journals over-count — cross-check totals against `/cost`.** `analyze_journals.py`
+> sums every `usage` line in the JSONL, but one billed request emits several lines
+> (streaming start + deltas + final, each carrying cache-read), so its raw cache-read /
+> output totals run **~2–2.5× the actually-billed figures** — and adding the main-session
+> journal to the subagent total double-counts further. (Verified 2026-07-12: the script
+> reported ~332M cache-read; the `/cost` panel billed **141.6M cache-read / $107.73**.)
+> So use the deep script only for the **per-agent *relative* breakdown** — which agent +
+> model dominated, launch order, tool counts — **never** as absolute token/$ ground truth.
+> For authoritative totals + cost, read the Claude Code **`/cost`** panel (or `ccusage`):
+> it reports billed input/output/cache-read/cache-write **per model** and the real $, plus
+> the "what's contributing to your usage" tips (subagent %, per-agent-type %, >150k-context
+> %) that often name the top recommendation for you. Put the `/cost` figures in the report
+> and ledger; let the journals attribute *shares* across agents.
+
+Use deep mode (for *relative* per-agent shares — see the caveat above) when the run had
+nested agents, when you need the cache-creation vs cache-read split per agent, or when the
+in-context view is incomplete (a backgrounded agent whose full usage never surfaced).
+Otherwise the in-context view is enough. Either way, take the **absolute** totals + $ from
+`/cost`.
 
 ## What to measure
 

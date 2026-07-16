@@ -1,6 +1,6 @@
 import { z } from 'zod';
-import { Verdict, Finding, Severity, FindingCategory } from './findings.js';
-import { EvalRun, EvalOwnerKind, Conformance } from './knowledge.js';
+import { Verdict, Finding, Severity, FindingCategory, SeverityCounts } from './findings.js';
+import { EvalRun, EvalOwnerKind, Conformance, Provider, CiFailOn } from './knowledge.js';
 
 /**
  * A4 — Eval / CI / Compose / Conformance API contracts (L06).
@@ -141,6 +141,61 @@ export const CiFile = z.object({
 });
 export type CiFile = z.infer<typeof CiFile>;
 
+/**
+ * Outcome of one CI run, as surfaced to the studio (CI Runs page, agent CI tab).
+ * `succeeded` covers a clean run AND a run that found blockers on purpose (the
+ * blocked-merge state is conveyed via the verdict/CRITICAL count, not this
+ * enum — AC-33); `failed` is reserved for the runner itself failing to
+ * produce a review (missing/invalid artifact, AC-31/32); `skipped_no_credentials`
+ * is the fork-PR / no-secret path, distinct from both success and failure (AC-27).
+ */
+export const CiRunStatus = z.enum([
+  'succeeded',
+  'no_findings',
+  'failed',
+  'running',
+  'skipped_no_credentials',
+]);
+export type CiRunStatus = z.infer<typeof CiRunStatus>;
+
+/**
+ * AgentManifest — the agent contract shared by the studio and the CI runner.
+ *
+ * The studio (`CiService.agentYaml`) WRITES this shape to
+ * `.devdigest/agents/<slug>.yaml`; the agent-runner READS it. Keeping one Zod
+ * schema for both ends guarantees the formats never drift. `skills` are slugs
+ * resolved to `.devdigest/skills/<slug>.md`.
+ */
+export const AgentManifest = z.object({
+  name: z.string().min(1),
+  // Workspace-unique, filesystem/URL-safe identifier (AC-15) — keys the
+  // committed manifest/workflow filenames (`.devdigest/agents/<slug>.yaml`,
+  // `.github/workflows/devdigest-review-<slug>.yml`, AC-16) so two agents
+  // exported to the same repo never collide.
+  slug: z.string().min(1),
+  provider: Provider.default('openrouter'),
+  model: z.string().min(1),
+  system_prompt: z.string(),
+  // Tolerate both a missing key and an explicit `null` (YAML `skills:` with no
+  // value parses to null, which `.default([])` does NOT catch) — normalize both
+  // to an empty array so manifests without skills validate cleanly.
+  skills: z
+    .array(z.string())
+    .nullish()
+    .transform((v) => v ?? []),
+  strategy: z.enum(['auto', 'single-pass', 'map-reduce']).default('auto'),
+  // CI gate policy (see CiFailOn) — when the posted review should BLOCK
+  // (REQUEST_CHANGES + fail the check) vs just comment. Default: block on critical.
+  ci_fail_on: CiFailOn.default('critical'),
+  // Bumped on every re-export/config update (AC-41) so an installed repo's
+  // workflow can be compared against the agent's current config to detect
+  // drift ("update available", AC-40).
+  workflow_version: z.number().int().default(1),
+});
+export type AgentManifest = z.infer<typeof AgentManifest>;
+/** Caller-facing input type — `.default()` fields stay optional. */
+export type AgentManifestInput = z.input<typeof AgentManifest>;
+
 /** Request body for `POST /agents/:id/export-ci`. */
 export const CiExportInput = z.object({
   repo: z.string().min(1), // "owner/name"
@@ -155,13 +210,29 @@ export type CiExportInput = z.infer<typeof CiExportInput>;
 /** Caller-facing input type — `.default()` fields stay optional (web hooks). */
 export type CiExportInputBody = z.input<typeof CiExportInput>;
 
-/** A persisted CI installation (mirrors `ci_installations`). */
+/**
+ * A persisted CI installation (mirrors `ci_installations`), enriched with
+ * fields DERIVED at read time (not columns) for the agent CI tab (AC-39/40):
+ * `status`/`last_run_at` come from the installation's latest `ci_runs` row;
+ * `update_available` compares `installed_config_hash` against the agent's
+ * current config hash.
+ */
 export const CiInstallation = z.object({
   id: z.string(),
   agent_id: z.string(),
   repo: z.string(),
   target_type: CiTarget,
+  /** Same domain as `target_type` — the AC-39 "target" column (e.g. "GitHub Actions" label resolves client-side from this). */
+  target: CiTarget,
   installed_at: z.string(),
+  /** Currently-installed workflow version (AC-39/41). */
+  workflow_version: z.number().int(),
+  /** Derived from the latest `ci_runs` row for this installation; null before the first run. */
+  status: CiRunStatus.nullable(),
+  /** Derived from the latest `ci_runs` row's `ran_at`; null before the first run (AC-39). */
+  last_run_at: z.string().nullable(),
+  /** True when `installed_config_hash` differs from the agent's current config hash (AC-40). */
+  update_available: z.boolean(),
 });
 export type CiInstallation = z.infer<typeof CiInstallation>;
 
@@ -173,19 +244,27 @@ export const CiExport = z.object({
 });
 export type CiExport = z.infer<typeof CiExport>;
 
-export const CiRunStatus = z.enum(['succeeded', 'failed', 'no_findings', 'running']);
-export type CiRunStatus = z.infer<typeof CiRunStatus>;
-
-/** A CI run row (mirrors `ci_runs`) — ingested from GitHub Actions artifacts. */
+/**
+ * A CI run row (mirrors `ci_runs`) — ingested from GitHub Actions artifacts.
+ * Covers every CI Runs page column (AC-35): Timestamp = `ran_at`, Pull
+ * request = `pr_number` + `pr_title`, Agent = `agent`, Source = `source`,
+ * Duration = `duration_s`, Findings = `findings_counts` (per-severity) +
+ * `findings_count` (aggregate), Cost = `cost_usd`, Status = `status`, Trace =
+ * `github_url` (outbound link to the Actions job). `actions_run_id`
+ * identifies the source Actions run for idempotent reconcile (AC-30/34).
+ */
 export const CiRun = z.object({
   id: z.string(),
   ci_installation_id: z.string().nullable(),
   pr_number: z.number().int().nullable(),
+  pr_title: z.string().nullable(),
   ran_at: z.string().nullable(),
-  status: z.string().nullable(),
+  status: CiRunStatus.nullable(),
   findings_count: z.number().int().nullable(),
+  findings_counts: SeverityCounts.nullable(),
   cost_usd: z.number().nullable(),
   github_url: z.string().nullable(),
+  actions_run_id: z.string().nullable(),
   source: z.string().nullable(),
   agent: z.string().nullish(),
   duration_s: z.number().nullish(),
@@ -194,7 +273,11 @@ export type CiRun = z.infer<typeof CiRun>;
 
 /**
  * The artifact shape uploaded by the CI action (`devdigest-result.json`).
- * Ingested back on refresh to populate `ci_runs` (L06).
+ * Ingested back on refresh to populate `ci_runs` (L06). `status` lets the
+ * runner report the fork/no-credentials skip (AC-27) or a completed outcome
+ * without the studio inferring/fabricating it from findings alone (AC-31/33);
+ * a MISSING artifact (not this `status` field) is what drives Failed on
+ * ingest (AC-32).
  */
 export const CiResultArtifact = z.object({
   findings_count: z.number().int(),
@@ -206,6 +289,7 @@ export const CiResultArtifact = z.object({
   agent: z.string(),
   version: z.string().nullish(),
   pr_number: z.number().int().nullish(),
+  status: CiRunStatus.nullish(),
 });
 export type CiResultArtifact = z.infer<typeof CiResultArtifact>;
 
